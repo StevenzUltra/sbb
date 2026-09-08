@@ -3,7 +3,12 @@ import { getBrain, isValidBrainName } from '../registry/brains.js';
 import { writeInboxEntry } from '../registry/inbox.js';
 import { findReceipt } from '../registry/receipts.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
-import { canConnect, closeInboxes, waitingInboxPath } from '../transports/claude-uds.js';
+import {
+  canConnect,
+  closeInboxes,
+  sendToInbox as defaultSendToInbox,
+  waitingInboxPath,
+} from '../transports/claude-uds.js';
 import { splitCoordFull } from '../lib/coord.js';
 import { serverSocketPath } from '../lib/tmux.js';
 import { newMsgId, shortId } from '../lib/ids.js';
@@ -155,6 +160,10 @@ export async function run(argv, deps = {}) {
       }
     }
     const inbox = await openDeliveryInbox({ target, owner: identity.brain ?? 'user', deps });
+    // The receiving SBB inbox acks a frame that carries reply_to; wait for it so a real
+    // delivery reports `delivered via=uds-inbox` instead of queued (lifecycle.md).
+    const sendToInbox = deps.sendToInbox
+      ?? (inboxSock && inbox ? (input) => defaultSendToInbox({ ...input, inbox }) : undefined);
     try {
       const { receipt } = await deliver({
         target,
@@ -163,7 +172,7 @@ export async function run(argv, deps = {}) {
         identity,
         deps,
         send: deps.send,
-        sendToInbox: deps.sendToInbox,
+        sendToInbox,
         inboxSock,
         inbox,
       });
