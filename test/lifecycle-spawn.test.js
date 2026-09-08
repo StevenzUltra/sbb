@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { listBrains } from '../src/registry/brains.js';
 import { spawnBrain, checkQuotaFloor, quotaFloor } from '../src/lifecycle/spawn.js';
 import { createFakeTmux, typedLiterals, tmuxCommands } from './fixtures/lifecycle/fake-tmux.js';
 import { tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
@@ -199,6 +200,67 @@ test('spawnBrain: the quota floor blocks only a known shortfall', async () => {
     assert.ok(result.brain);
     assert.equal(read, false, '--force skips the quota read');
     assert.equal(result.quota, 'skipped (--force)');
+  } finally {
+    restore();
+  }
+});
+
+test('spawnBrain: codex in an untrusted cwd is blocked before any pane exists', async () => {
+  let quotaRead = false;
+  const deps = baseDeps({
+    readQuota: async () => { quotaRead = true; return []; },
+    readCodexTrust: () => ({ configPath: '/tmp/home/.ai-account-a/codex/config.toml', found: true, level: 'untrusted', trusted: false }),
+  });
+  const result = await spawnBrain(spawnInput({ cli: 'codex' }), deps);
+  assert.equal(result.blocked.reason, 'codex_untrusted_cwd');
+  assert.match(result.blocked.detail, /codex 未信任 \/tmp\/proj/);
+  assert.match(result.blocked.detail, /trust_level=untrusted/);
+  assert.match(result.blocked.detail, /手动信任/);
+  assert.equal(tmuxCommands(deps.tmuxApiRef).length, 0, 'no pane is created');
+  assert.equal(quotaRead, false, 'the trust check runs before the quota read');
+  assert.equal(deps.delivered.length, 0);
+});
+
+test('spawnBrain: codex in a trusted cwd starts and hands the brief to readiness', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    let readyInput;
+    const deps = baseDeps({
+      readCodexTrust: ({ cwd }) => {
+        assert.equal(cwd, '/tmp/proj');
+        return { configPath: '/tmp/home/.ai-account-a/codex/config.toml', found: true, level: 'trusted', trusted: true };
+      },
+      awaitReady: async (input) => { readyInput = input; return { ready: true, session: { pid: 4242 } }; },
+    });
+    const result = await spawnBrain(spawnInput({ cli: 'codex' }), deps);
+    assert.ok(result.brain, JSON.stringify(result));
+    assert.equal(result.brain.cli, 'codex');
+    assert.equal(readyInput.cli, 'codex');
+    assert.match(readyInput.brief, /你是 ios#SMS-0042/);
+    assert.match(readyInput.brief, /不要再执行 `sbb adopt`/);
+  } finally {
+    restore();
+  }
+});
+
+test('spawnBrain: a same-pane record is retired in favour of the spawn record', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    writeBrain({ id: 'SMS-0099', name: 'self-adopted', paneId: '%30', uuid: 'uuid-99' });
+    writeBrain({ id: 'SMS-0098', name: 'other-pane', paneId: '%31', uuid: 'uuid-98' });
+    const deps = baseDeps({ listBrains: () => listBrains() });
+    const result = await spawnBrain(spawnInput(), deps);
+
+    assert.deepEqual(result.retiredDuplicates, [{ id: 'SMS-0099', name: 'self-adopted' }]);
+    assert.equal(existsSync(join(dir, 'brains', 'SMS-0099.json')), false);
+    const retired = JSON.parse(readFileSync(join(dir, 'brains', '_retired', 'SMS-0099.json'), 'utf8'));
+    assert.ok(retired.retiredAt, 'the extra record is retired, not deleted');
+    assert.ok(existsSync(join(dir, 'brains', 'SMS-0042.json')), 'the spawn record wins');
+    assert.ok(existsSync(join(dir, 'brains', 'SMS-0098.json')), 'another pane is untouched');
   } finally {
     restore();
   }

@@ -17,8 +17,11 @@ export function renderBrief({ brain, parent, user } = {}) {
     : (user ?? ROLE_LABELS.user);
   const model = brain.model ?? '默认';
 
+  const self = `${brain.name}${brain.id ? `#${brain.id}` : ''}`;
+
   return [
-    `你是 ${brain.name}${brain.id ? `#${brain.id}` : ''}，角色 ${role}，上级 ${parentLabel}，账户 ${brain.account ?? 'default'}，CLI ${brain.cli ?? 'claude'}，模型 ${model}。`,
+    `你是 ${self}，角色 ${role}，上级 ${parentLabel}，账户 ${brain.account ?? 'default'}，CLI ${brain.cli ?? 'claude'}，模型 ${model}。`,
+    `你已由 SBB 登记为 ${self}，不要再执行 \`sbb adopt\`。`,
     '',
     '怎么说话：',
     `- 回一条消息：\`sbb reply <msgId8> <一行>\``,

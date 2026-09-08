@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -12,6 +12,7 @@ import {
   awaitReady,
   buildCommand,
   prepareBrief,
+  readCodexTrust,
   shellQuote,
   splitArgs,
 } from '../src/lifecycle/launch.js';
@@ -153,7 +154,7 @@ test('awaitReady: a registry read failure is reported in the detail', async () =
   assert.match(result.detail, /registry read failed: registry unreadable/);
 });
 
-test('awaitReady: codex needs an idle composer and a thread written since the spawn', async () => {
+test('awaitReady: codex needs the brief accepted or a thread written since the spawn', async () => {
   const started = Date.now();
   const tmuxApi = createFakeTmux({ screens: [screen('codex-busy'), screen('codex-idle')] });
   const notYet = await awaitReady(
@@ -201,6 +202,63 @@ test('awaitReady: agy and cursor only need an idle composer', async () => {
     );
     assert.equal(result.ready, true, `${cli} should be ready on its idle composer`);
   }
+});
+
+test('awaitReady: a codex pane that echoes the brief is ready even while the turn runs', async () => {
+  const brief = '你是 ios#SMS-0042，角色 子脑，上级 lead#SMS-0007，账户 a，CLI codex，模型 默认。';
+  const tmuxApi = createFakeTmux({ screens: [`› ${brief}\n${screen('codex-busy')}`] });
+  const result = await awaitReady(
+    { cli: 'codex', paneId: '%30', account: 'a', cwd: '/tmp/proj', brief },
+    { tmuxApi, timeoutMs: 50, pollMs: 1, sleep: async () => {}, listThreads: () => [] },
+  );
+  assert.equal(result.ready, true);
+  assert.match(result.detail, /brief was accepted as the first turn/);
+});
+
+test('awaitReady: a blank or absent brief never proves acceptance', async () => {
+  for (const brief of [undefined, '   ', '别的简报']) {
+    const tmuxApi = createFakeTmux({ screens: [screen('codex-idle')] });
+    const result = await awaitReady(
+      { cli: 'codex', paneId: '%30', account: 'a', cwd: '/tmp/proj', brief },
+      { tmuxApi, timeoutMs: 5, pollMs: 1, sleep: async () => {}, listThreads: () => [] },
+    );
+    assert.equal(result.ready, false, `brief ${JSON.stringify(brief)} must not count`);
+  }
+});
+
+test('readCodexTrust: an exact trusted path only, subdirectories are not covered', () => {
+  const toml = [
+    '# comment',
+    '[projects."/tmp/proj"]',
+    'trust_level = "trusted"',
+    '',
+    '[projects."/tmp/proj/sub"]',
+    'trust_level = "untrusted"',
+  ].join('\n');
+  const readFile = () => toml;
+  const dir = '/tmp/home/.ai-account-a/codex';
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/proj', readFile }).trusted, true);
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/proj/', readFile }).trusted, true);
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/proj/sub', readFile }).trusted, false);
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/proj/sub', readFile }).level, 'untrusted');
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/proj/sub/deep', readFile }).trusted, false);
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/elsewhere', readFile }).trusted, false);
+});
+
+test('readCodexTrust: a missing CODEX_HOME or config.toml is not trusted, and says why', () => {
+  assert.deepEqual(readCodexTrust({ cwd: '/tmp/proj' }), { configPath: undefined, found: false, trusted: false });
+  const enoent = () => { throw Object.assign(new Error('no such file'), { code: 'ENOENT' }); };
+  const missing = readCodexTrust({ dir: '/tmp/home/.ai-account-a/codex', cwd: '/tmp/proj', readFile: enoent });
+  assert.equal(missing.trusted, false);
+  assert.equal(missing.found, false);
+  assert.match(missing.detail, /ENOENT/);
+});
+
+test('readCodexTrust: reads a real config.toml from disk', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sbb-codex-'));
+  writeFileSync(join(dir, 'config.toml'), '[projects."/tmp/proj"]\ntrust_level = "trusted"\n');
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/proj' }).trusted, true);
+  assert.equal(readCodexTrust({ dir, cwd: '/tmp/other' }).trusted, false);
 });
 
 test('EXIT_COMMANDS: every CLI with a known exit command is listed', () => {

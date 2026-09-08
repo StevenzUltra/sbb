@@ -64,6 +64,9 @@ export async function run(argv, deps = {}) {
       console.log(`spawned ${brain.id} ${brain.name} ${brain.coord ?? brain.paneId}`);
       if (result.briefFile) console.log(`brief     ${result.briefFile}`);
       if (result.quota) console.log(`quota     ${result.quota}`);
+      for (const extra of result.retiredDuplicates ?? []) {
+        console.log(`retired   ${extra.id} ${extra.name} (same pane, superseded by ${brain.id})`);
+      }
       if (result.notification) {
         const note = result.notification;
         console.log(`notify    ${note.status} via=${note.via ?? '-'}${note.reason ? ` reason=${note.reason}` : ''}${note.detail ? ` ${note.detail}` : ''}`);
