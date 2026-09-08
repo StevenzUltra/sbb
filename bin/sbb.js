@@ -23,6 +23,7 @@ const COMMANDS = {
   claim: 'Register resources a brain is working on; detect conflicts',
   plan: 'Propose, review, approve or reject a staffing plan',
   account: 'List isolated accounts or create a new one',
+  help: 'Show the command overview, or the protocol rules (sbb help protocol)',
 };
 
 function usage() {
