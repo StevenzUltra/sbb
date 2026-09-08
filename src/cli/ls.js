@@ -19,6 +19,11 @@ function shortCwd(cwd) {
   return cwd?.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd ?? '-';
 }
 
+/** A brain whose pane disappeared is `gone` (docs/spec/lifecycle.md), not `stale`. */
+function statusCell(row) {
+  return row.paneId === null ? 'gone' : row.status;
+}
+
 /** @param {import('../registry/roster.js').RosterRow} row */
 function nameCell(row) {
   if (!row.name) return '-';
@@ -35,7 +40,7 @@ function toCells(row) {
     row.account,
     row.cli,
     row.model,
-    row.status,
+    statusCell(row),
     row.where,
     nameCell(row),
     shortCwd(row.cwd),
@@ -55,7 +60,7 @@ function printTree(rows) {
   /** @param {string|null} parent @param {number} depth */
   const walk = (parent, depth) => {
     for (const row of children.get(parent) ?? []) {
-      const detail = `${row.account}/${row.cli}  ${row.status}  ${row.where}`;
+      const detail = `${row.account}/${row.cli}  ${statusCell(row)}  ${row.where}`;
       console.log(`${'  '.repeat(depth)}${row.brainId}  ${row.brain}  ${row.role}  ${detail}${row.name ? `  ${row.name}` : ''}`);
       walk(row.brainId, depth + 1);
     }

@@ -355,3 +355,25 @@ test('roster: stale brains are only listed on request', async () => {
     restore();
   }
 });
+
+test('brains: paneId null marks a gone pane, other values must still be pane ids', () => {
+  const home = tempDir();
+  const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
+  try {
+    const base = {
+      id: 'TST-0001', uuid: 'uuid-1', name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude',
+      cwd: '/Users/dev/proj', paneId: '%30', createdAt: Date.now(), origin: 'adopted',
+    };
+    const gone = saveBrain({ ...base, paneId: null });
+    assert.equal(gone.paneId, null);
+    assert.equal(getBrain('TST-0001').paneId, null, 'the gone pane is persisted');
+    const missing = saveBrain({ ...base, id: 'TST-0002', uuid: 'uuid-2', name: 'lead2', paneId: undefined });
+    assert.equal(missing.paneId, null, 'a missing paneId normalises to null');
+    assert.throws(
+      () => saveBrain({ ...base, id: 'TST-0003', uuid: 'uuid-3', name: 'lead3', paneId: 'abc' }),
+      (err) => err.reason === 'invalid_pane',
+    );
+  } finally {
+    restore();
+  }
+});

@@ -59,3 +59,15 @@
 - `plan reject` 的授权限制仍是 M2 的开口（规格只约束 propose/approve）。
 - `sbb spawn` 仍为 h1 的 stub；`releaseClaims(brainId)` 仍等 h1 的 kill/retire 钩子。
 - 未做（不在派单范围）：`sbb doctor` 展示 `senderSock`/服务器路径诊断。
+
+## 追加（2026-09-09，派单 msgId `74e60024` + `39d0a1b0`，同分支）
+
+- 合并 `origin/main` @ `8b8aeda`（含 #11）→ `b1eb69c`：唯一冲突是 `src/cli/reply.js` 的 import 区（h1 的 `defaultSendToInbox`/`waitingInboxPath` 与我的 `splitCoordFull`/`serverSocketPath`），两边都保留。
+- 事故根因：`src/account/wrapper-template.sh` 的 tmux 打标签块有「`TMUX_PANE` 为空时退化成不带 `-t`」的分支，而 `test/account.test.js` 会真实执行生成的 wrapper，继承了父进程的 `$TMUX`，于是把真实 pane 的 `@ai_account`/`@codex_home` 改掉。修法：模板只在 `TMUX_PANE` 有值时打标签，删掉兜底分支。
+- 测试隔离：wrapper 测试不再依赖 PATH 前置的假 tmux（模板自己会把 `/opt/homebrew/bin` 重新前置，假 tmux 永远排不到），改为
+  - 正例：起 `-L sbb-account-test-<pid>` scratch 服务器，手工拼 `$TMUX=<socket>,<pid>,<sid>` + `TMUX_PANE=<scratch pane>`，用真 tmux 打标签后读回 `@ai_account`/`@codex_home`/`@ai_pane_pid`；
+  - 反例（事故形状）：同一 scratch 服务器 + `$TMUX` 已设、`TMUX_PANE` 缺失，先用 shell 函数计数器证明零次调用，再读回 scratch pane 选项未被改动。
+  - 每轮跑测试前后都只读快照 `tmux show-options -p -t %30 @ai_account/@codex_home`，三次全量 + 一次聚焦均为 `A` / `/Users/steven/.ai-account-a/codex`，未再变动。
+- `paneId: null` 表示 pane 已消失：`brains.js` 校验放开（`undefined` 归一化为 `null`，其余仍须匹配 `%\d+`）；`ls` 对 `paneId` 为 null 的行 STATUS 显示 `gone`（表格、`--tree`、位置参数同一函数）；`switch` 失败时把记录写成 `paneId: null`，测试断言读回。
+- 点验隔离（`39d0a1b0`）：真机点验只在自有 scratch 会话里做，通知目标不落真实 pane。实测 `sbb plan reject`（scratch `-L sbbh3iso-<pid>` + scratch home/`SBB_DIR` + `SBB_TMUX_ARGS=-L <scratch>`，proposer 是 scratch pane `%0` 上的脑）——通知 `plan PL-MTSYOCML-d520 rejected: not now` 出现在我的 scratch pane 里，真实 pane `%30` 标签前后不变。
+- 证据：`npm test` 连续三次 287/287；聚焦 4 个测试文件 49/49。未合并、未 push main、未装依赖。

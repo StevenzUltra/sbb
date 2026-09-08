@@ -4,9 +4,10 @@ import assert from 'node:assert/strict';
 import { switchTo } from '../src/lifecycle/switch.js';
 import { run } from '../src/cli/switch.js';
 import { createFakeTmux } from './fixtures/lifecycle/fake-tmux.js';
+import { getBrain } from '../src/registry/brains.js';
 import { tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
 
-const BRAIN = { id: 'SMS-0012', name: 'ios', role: 'sub', parent: 'SMS-0007', account: 'a', cli: 'claude', paneId: '%30', cwd: '/tmp', uuid: '3f1c9a2e-0d4b-4f7a-9c1e-5b2d8a6f0c33' };
+const BRAIN = { id: 'SMS-0012', name: 'ios', role: 'sub', parent: 'SMS-0007', account: 'a', cli: 'claude', paneId: '%30', cwd: '/tmp', uuid: '3f1c9a2e-0d4b-4f7a-9c1e-5b2d8a6f0c33', createdAt: 1757000000000, origin: 'adopted' };
 
 test('switchTo: selects the pane and switches the client only when it is elsewhere', async () => {
   const tmuxApi = createFakeTmux({ clientSession: '25' });
@@ -72,15 +73,16 @@ test('cli switch: a gone pane exits 4 and says why the record was not rewritten'
   console.error = (line) => errors.push(line);
   try {
     writeBrain({ id: 'SMS-0007', name: 'lead', role: 'main', paneId: '%29' });
-    writeBrain({ id: 'SMS-0012', name: 'ios', role: 'sub', parent: 'SMS-0007', paneId: '%30' });
+    writeBrain({ id: 'SMS-0012', name: 'ios', role: 'sub', parent: 'SMS-0007', paneId: '%30', uuid: BRAIN.uuid });
     const code = await run(['ios'], {
       switchTo: async () => ({ gone: true, brain: BRAIN, detail: 'pane %30 is gone' }),
     });
     assert.equal(code, 4);
     assert.match(errors[0], /brain SMS-0012 ios pane %30 is gone/);
-    // docs/spec/lifecycle.md asks for paneId:null; validateBrain rejects it, and the
-    // command reports the real validator message instead of writing an invalid record.
-    assert.match(errors[1], /cannot mark paneId=null: invalid paneId/);
+    // docs/spec/lifecycle.md: the gone pane is persisted as paneId:null, so `sbb ls` can
+    // report `gone` instead of a stale coordinate.
+    assert.match(errors[1], /record marked paneId=null/);
+    assert.equal(getBrain('SMS-0012').paneId, null, 'the record no longer names a live pane');
   } finally {
     console.error = original;
     restore();

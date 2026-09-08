@@ -20,25 +20,21 @@ export CLAUDE_CONFIG_DIR="$CLAUDE_DIR"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$PATH"
 export CLAUDE_CODE_MAX_OUTPUT_TOKENS="64000"
 
-if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-  TMUX_PANE_ID="$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)"
+# Tag only the pane tmux handed us in $TMUX_PANE. Never fall back to the server's
+# current pane: a script that inherited $TMUX (tests, hooks, background jobs) would
+# otherwise retag a real pane that belongs to someone else.
+if [ -n "${TMUX_PANE:-}" ] && command -v tmux >/dev/null 2>&1; then
   # Stamp the pane tag with the pid that owns this account env: `env` hands it to
   # the pane shell, every other subcommand execs into $$. The status script drops
   # the tag once that pid is gone, so a respawned pane reports the root account.
   if [ "${1:-shell}" = "env" ]; then
-    AI_OWNER_PID="$(tmux display-message -p '#{pane_pid}' 2>/dev/null || true)"
+    AI_OWNER_PID="$(tmux display-message -p -t "$TMUX_PANE" '#{pane_pid}' 2>/dev/null || true)"
   else
     AI_OWNER_PID="$$"
   fi
-  if [ -n "$TMUX_PANE_ID" ]; then
-    tmux set-option -p -t "$TMUX_PANE_ID" @codex_home "$CODEX_DIR" >/dev/null 2>&1 || true
-    tmux set-option -p -t "$TMUX_PANE_ID" @ai_account "__TAG__" >/dev/null 2>&1 || true
-    tmux set-option -p -t "$TMUX_PANE_ID" @ai_pane_pid "$AI_OWNER_PID" >/dev/null 2>&1 || true
-  else
-    tmux set-option -p @codex_home "$CODEX_DIR" >/dev/null 2>&1 || true
-    tmux set-option -p @ai_account "__TAG__" >/dev/null 2>&1 || true
-    tmux set-option -p @ai_pane_pid "$AI_OWNER_PID" >/dev/null 2>&1 || true
-  fi
+  tmux set-option -p -t "$TMUX_PANE" @codex_home "$CODEX_DIR" >/dev/null 2>&1 || true
+  tmux set-option -p -t "$TMUX_PANE" @ai_account "__TAG__" >/dev/null 2>&1 || true
+  tmux set-option -p -t "$TMUX_PANE" @ai_pane_pid "$AI_OWNER_PID" >/dev/null 2>&1 || true
 fi
 
 # Keep Codex credentials per-account instead of macOS keychain.

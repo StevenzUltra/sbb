@@ -27,8 +27,8 @@ export async function run(argv, deps = {}) {
     }
     if (result.gone) {
       console.error(`sbb: brain ${result.brain.id} ${result.brain.name} ${result.detail}`);
-      // docs/spec/lifecycle.md asks for `paneId: null` here, but registry/brains.js
-      // validateBrain rejects a null paneId; say so instead of writing an invalid record.
+      // Persist the gone pane (docs/spec/lifecycle.md): `sbb ls` then reports `gone`
+      // instead of a stale coordinate.
       try {
         (deps.saveBrain ?? saveBrain)({ ...result.brain, paneId: null });
         console.error('sbb: record marked paneId=null');
