@@ -14,7 +14,7 @@ import {
   previewTransport,
 } from './util.js';
 
-const USAGE = `usage: sbb ask <address> <text...> [--wait <ms|30s|5m|1h>] [--priority now|next|later]
+const USAGE = `usage: sbb ask <address> <text...> [--wait <ms|30s|5m|1h>] [--priority now|next|later] [--role <text>]
 
 Waits (default 10m) for a reply carrying replyTo = the message id, or a Claude
 peer_idle_notice. Exit 0 on reply or idle, 5 on timeout.`;
@@ -24,6 +24,7 @@ export async function run(argv, deps = {}) {
     const { values, positionals } = parse(argv, {
       wait: { type: 'string' },
       priority: { type: 'string' },
+      role: { type: 'string' },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     });
@@ -39,6 +40,7 @@ export async function run(argv, deps = {}) {
     const now = deps.now ?? (() => Date.now());
 
     const identity = await callerIdentity(deps);
+    if (values.role) identity.role = values.role;
     const target = await (deps.resolve ?? defaultResolve)(address, { accounts: deps.accounts, onWarn: deps.onWarn, rows: deps.rows });
     const owner = identity.brain ?? 'user';
     // The inbox stays open for the whole wait: replies and idle notices arrive while polling.

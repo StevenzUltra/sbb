@@ -12,8 +12,8 @@ export const CLI_DISPLAY_NAMES = Object.freeze({
   other: 'CLI',
 });
 
-/** Role labels. main -> 主脑, sub -> 子脑, the user -> 用户. */
-export const ROLE_LABELS = Object.freeze({ main: '主脑', sub: '子脑', user: '用户' });
+/** Role labels. main -> 主脑, sub -> 子脑, an unregistered session -> 协作方, the user -> 用户. */
+export const ROLE_LABELS = Object.freeze({ main: '主脑', sub: '子脑', peer: '协作方', user: '用户' });
 
 /** Collapse a body to one line: no newlines, no runs of spaces. */
 export function collapseBody(text) {
@@ -80,7 +80,7 @@ export function identityFromRows({ paneId, rows }) {
     account: row.account,
     cli: row.cli,
     coord: row.coord,
-    role: ROLE_LABELS.sub,
+    role: ROLE_LABELS.peer,
     brain: null,
   };
 }

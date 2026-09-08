@@ -225,6 +225,64 @@ function waitForStatus(inbox, msgId, timeoutMs) {
   });
 }
 
+/**
+ * The waiting inbox recorded in a receipt's `fromSock`, when it is a socket we can write to.
+ * `sbb ask`/`sbb tell` leave one open while they wait, so a reply can go straight to the
+ * process that asked instead of into the sender's conversation.
+ * @param {string|undefined} fromSock
+ * @returns {string|null} socket path
+ */
+export function waitingInboxPath(fromSock) {
+  const from = normalizeFrom(fromSock);
+  return from.receivable ? from.path : null;
+}
+
+/**
+ * True when something is still listening: the process that asked has not given up yet.
+ * @param {string} sockPath
+ * @param {number} [timeoutMs]
+ */
+export async function canConnect(sockPath, timeoutMs = CONNECT_TIMEOUT_MS) {
+  try {
+    (await connectTo(sockPath, timeoutMs)).destroy();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deliver one `user` frame straight to a sender-side inbox socket. A plain inbox answers with
+ * nothing, so a written frame is `queued`, never `delivered`; `ok: false` means the socket
+ * could not be reached and the caller should fall back to the sender's session address.
+ * @param {{ sockPath: string, message: OutboundMessage, connectTimeoutMs?: number }} input
+ * @returns {Promise<{ ok: boolean, receipt: Receipt }>}
+ */
+export async function sendToInbox({ sockPath, message, connectTimeoutMs = CONNECT_TIMEOUT_MS }) {
+  const startedAt = Date.now();
+  const base = { via: 'uds-inbox', msgId: message.msgId };
+  const failed = (reason, detail) => ({
+    ok: false,
+    receipt: { ...base, status: 'blocked', reason, detail, elapsedMs: Date.now() - startedAt },
+  });
+  let socket;
+  try {
+    socket = await connectTo(sockPath, connectTimeoutMs);
+  } catch (err) {
+    return failed('socket_connect_failed', `${err.code ?? 'error'}: ${err.message}`);
+  }
+  const body = buildContent(message, normalizeFrom(message.fromSock));
+  try {
+    await writeAndEnd(socket, [userLine(message, body.content)]);
+  } catch (err) {
+    return failed('transport_unavailable', `write failed: ${err.code ?? err.message}`);
+  }
+  return {
+    ok: true,
+    receipt: { ...base, status: 'queued', detail: 'waiting inbox accepted the frame (no protocol ack)', elapsedMs: Date.now() - startedAt },
+  };
+}
+
 /** @type {import('../types.js').Transport} */
 export const claudeUds = {
   id: 'uds',

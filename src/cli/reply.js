@@ -3,7 +3,7 @@ import { getBrain, isValidBrainName } from '../registry/brains.js';
 import { writeInboxEntry } from '../registry/inbox.js';
 import { findReceipt } from '../registry/receipts.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
-import { closeInboxes } from '../transports/claude-uds.js';
+import { canConnect, closeInboxes, waitingInboxPath } from '../transports/claude-uds.js';
 import { newMsgId, shortId } from '../lib/ids.js';
 import {
   EXIT,
@@ -17,15 +17,18 @@ import {
   receiptExitCode,
 } from './util.js';
 
-const USAGE = `usage: sbb reply <msgId8|msgId> <text...>
+const USAGE = `usage: sbb reply <msgId8|msgId> <text...> [--role <text>]
 
 Looks the id up in the receipt log, then sends the reply to the original sender
-with replyTo set. If the original sender was the user, the reply is written to
-~/.sbb/inbox/user/ instead.`;
+with replyTo set. If the receipt carries a fromSock that is still listening, the
+reply goes there (the process that asked is waiting on it); otherwise it goes to
+the sender's session address. If the original sender was the user, the reply is
+written to ~/.sbb/inbox/user/ instead.`;
 
 export async function run(argv, deps = {}) {
   return main(async () => {
     const { values, positionals } = parse(argv, {
+      role: { type: 'string' },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     });
@@ -49,6 +52,7 @@ export async function run(argv, deps = {}) {
     }
 
     const identity = await callerIdentity(deps);
+    if (values.role) identity.role = values.role;
     const sender = original.from;
     if (!sender || sender === 'user') {
       const entry = {
@@ -72,11 +76,27 @@ export async function run(argv, deps = {}) {
       console.error(`sbb: cannot route a reply to "${sender}": no address in the receipt log`);
       return EXIT.BLOCKED;
     }
-    const target = await (deps.resolve ?? defaultResolve)(address, {
-      accounts: deps.accounts,
-      onWarn: deps.onWarn,
-      rows: deps.rows,
-    });
+    // The sender's session address injects the reply into their conversation, where the
+    // process that asked is not listening. The receipt's fromSock is that listener, so it
+    // wins when it is still up; a dead socket falls back to the session address.
+    const waitingSock = waitingInboxPath(original.fromSock);
+    const inboxSock = waitingSock && (await (deps.canConnect ?? canConnect)(waitingSock)) ? waitingSock : null;
+    const target = inboxSock
+      ? {
+        address,
+        cli: 'claude',
+        brain: undefined,
+        brainId: undefined,
+        paneId: null,
+        coord: null,
+        claude: { sock: inboxSock },
+        codex: undefined,
+      }
+      : await (deps.resolve ?? defaultResolve)(address, {
+        accounts: deps.accounts,
+        onWarn: deps.onWarn,
+        rows: deps.rows,
+      });
     const inbox = await openDeliveryInbox({ target, owner: identity.brain ?? 'user', deps });
     try {
       const { receipt } = await deliver({
@@ -86,6 +106,8 @@ export async function run(argv, deps = {}) {
         identity,
         deps,
         send: deps.send,
+        sendToInbox: deps.sendToInbox,
+        inboxSock,
         inbox,
       });
       printReceipt(receipt, { json: values.json });

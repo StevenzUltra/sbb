@@ -109,7 +109,7 @@
  * What a transport returns. `reason` is required for blocked and unverified.
  * @typedef {Object} Receipt
  * @property {DeliveryStatus} status
- * @property {string} via           'uds' | 'uds+screen' | 'codex-queue' | 'send-keys'
+ * @property {string} via           'uds' | 'uds+screen' | 'uds-inbox' | 'codex-queue' | 'send-keys'
  * @property {string} msgId         32 hex
  * @property {number} elapsedMs
  * @property {string|undefined} reason   machine-readable, e.g. 'pane_in_copy_mode', 'held', 'no_rollout', 'enter_swallowed_twice'

@@ -2,6 +2,7 @@
 // send path (envelope -> sender inbox -> router -> receipt log). Not a command itself.
 import { parseArgs } from 'node:util';
 import { send as defaultSend, transports as defaultTransports } from '../transports/index.js';
+import { sendToInbox as defaultSendToInbox } from '../transports/claude-uds.js';
 import { newMsgId } from '../lib/ids.js';
 import { claudeSocksDirs } from '../lib/paths.js';
 import { buildEnvelope, identityFromRows, senderName } from '../registry/envelope.js';
@@ -226,6 +227,7 @@ export function attachInboxHandlers(inbox, { owner, deps = {} }) {
  * @param {{ target: import('../types.js').Target, body: string, msgId?: string,
  *           priority?: import('../types.js').Priority, replyTo?: string,
  *           inbox?: import('../transports/uds-inbox.js').Inbox, verifyTimeoutMs?: number,
+ *           inboxSock?: string|null, sendToInbox?: Function,
  *           dryRun?: boolean, identity?: Record<string, any>, send?: Function,
  *           deps?: Record<string, any> }} input
  */
@@ -248,7 +250,11 @@ export async function deliver(input) {
   };
   // Screen confirmation is the router's job (src/transports/index.js); deliver only
   // carries the inbox and the from* fields the transports need.
-  const receipt = await send(input.target, message, { verifyTimeoutMs: input.verifyTimeoutMs, inbox });
+  // `inboxSock` is a waiting listener found in the receipt log (src/cli/reply.js). A plain
+  // inbox answers with nothing, so that path can only report `queued`.
+  const receipt = input.inboxSock
+    ? (await (input.sendToInbox ?? defaultSendToInbox)({ sockPath: input.inboxSock, message })).receipt
+    : await send(input.target, message, { verifyTimeoutMs: input.verifyTimeoutMs, inbox });
   const entry = {
     msgId,
     from: identity.brain ?? identity.sender,
