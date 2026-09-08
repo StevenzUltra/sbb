@@ -5,12 +5,15 @@ Each command is `src/cli/<name>.js` exporting `run(argv: string[]) -> Promise<nu
 
 ## sbb ls [--json] [--tree] [--account <name>] [--cli <kind>]
 
-Roster union (docs/spec/registry.md). Human table sorted by account, then coord.
+Roster union (docs/spec/registry.md). Human table sorted by account, then coord; the first
+column is the brain id. `sbb ls #SMS-0012` (or a name) prints that one row in full.
 
 ## sbb adopt <pane|address> --name <name> [--role main|sub] [--parent <brain>] [--model <id>]
 
-Registers a live session as a brain. Fails (exit 4) if the pane is not a known CLI session,
-if the name exists, or if `--parent` is unknown. Prints the Brain JSON with `--json`.
+Registers a live session as a brain and allocates its unique id (docs/spec/registry.md
+"Brain id"). Fails (exit 4) if the pane is not a known CLI session, if the name is taken by
+a live brain, or if `--parent` is unknown. Prints `adopted <id> <name>` or the Brain JSON
+with `--json`. `--parent` accepts an id or a name.
 
 ## sbb tell <address> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms>] [--dry-run]
 

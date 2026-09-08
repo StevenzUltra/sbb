@@ -67,6 +67,15 @@ inside its socket namespace.
 Claude session (permission-mode parity)". `denied` = user declined. `refused`/`dropped` =
 rate limit, duplicate, relay loop or full queue; never retry these by typing.
 
+Measured 2026-09-09: a `user` frame sent from a plain process (not a child of the
+recipient) with `from` set to another account's socket was **held**: the recipient pane
+showed a dialog `Deny — drop it and tell the sender it was declined / Deliver this message
+to Claude` with Deny preselected. Selecting Deliver (Down, Enter) delivered the full body
+and the session started working. A frame sent by a child process of the recipient's own
+session (`selfSent`) was delivered without a dialog. Whether one approval persists for the
+same sender in that session is not yet measured; treat every cross-account send as
+possibly held and surface it as `blocked` reason `held` until a `delivered` receipt arrives.
+
 ### Idle notification
 
 ```
