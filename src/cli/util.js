@@ -1,10 +1,12 @@
 // Shared CLI helpers: argument parsing, exit codes, receipt printing and the
-// send path (envelope -> router -> receipt log). Not a command itself.
+// send path (envelope -> sender inbox -> router -> receipt log). Not a command itself.
 import { parseArgs } from 'node:util';
 import { send as defaultSend, transports as defaultTransports } from '../transports/index.js';
 import { newMsgId } from '../lib/ids.js';
-import { buildEnvelope, identityFromRows } from '../registry/envelope.js';
+import { claudeSocksDirs } from '../lib/paths.js';
+import { buildEnvelope, identityFromRows, senderName } from '../registry/envelope.js';
 import { appendReceipt, formatReceiptLine } from '../registry/receipts.js';
+import { writeInboxEntry } from '../registry/inbox.js';
 import { roster as defaultRoster } from '../registry/roster.js';
 
 /** Exit codes from docs/spec/receipts.md. */
@@ -112,33 +114,187 @@ export async function callerIdentity(deps = {}) {
   return { ...identity, address, paneId: paneId ?? null };
 }
 
+/** Permission modes a peer understands; the spec says omit `from-mode` when unknown. */
+export const FROM_MODES = Object.freeze(['bypass', 'prompting']);
+
 /**
- * Build the envelope, route it and log the receipt.
+ * `SBB_FROM_MODE` is the only way a caller can declare its own permission mode; a value
+ * outside the protocol vocabulary is refused rather than sent to the peer.
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {'bypass'|'prompting'|undefined}
+ */
+export function fromModeFromEnv(env = process.env) {
+  const raw = env?.SBB_FROM_MODE;
+  if (!raw) return undefined;
+  if (FROM_MODES.includes(raw)) return /** @type {'bypass'|'prompting'} */ (raw);
+  console.error(`sbb: warning: ignoring SBB_FROM_MODE="${raw}" (expected ${FROM_MODES.join('|')})`);
+  return undefined;
+}
+
+/** Directory the sender inbox listens in: the primary Claude socket dir. */
+export function deliveryInboxDir() {
+  return claudeSocksDirs()[0];
+}
+
+/**
+ * Split a received `user` frame into an inbox entry. Claude peers wrap the body in
+ * `<cross-session-message from="..." from-name="...">`; plain content is kept as is.
+ * @param {Record<string, any>} frame
+ */
+export function parsePeerFrame(frame) {
+  const raw = typeof frame?.message?.content === 'string' ? frame.message.content : '';
+  const match = /^<cross-session-message\b([^>]*)>([\s\S]*?)<\/cross-session-message>\s*$/.exec(raw.trim());
+  const attrs = match ? parseAttrs(match[1]) : {};
+  return {
+    msgId: String(frame?.msg_id ?? '') || newMsgId(),
+    from: attrs['from-name'] ?? null,
+    fromSock: attrs.from ?? null,
+    fromAddress: attrs.from ?? null,
+    replyTo: frame?.reply_to ?? frame?.replyTo ?? null,
+    text: (match ? match[2] : raw).trim(),
+    source: 'uds',
+  };
+}
+
+/** @param {string} text */
+function parseAttrs(text) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const m of String(text).matchAll(/([A-Za-z][\w-]*)="([^"]*)"/g)) out[m[1]] = m[2];
+  return out;
+}
+
+/**
+ * Start the sender-side inbox. Only a `claude` target can send receipts back over uds;
+ * everything else gets no inbox and no `fromSock`. A socket that cannot be created is
+ * reported once and the send continues (the receipt will say `queued`).
+ * @param {{ target: import('../types.js').Target, owner: string, deps?: Record<string, any> }} input
+ * @returns {Promise<import('../transports/uds-inbox.js').Inbox|undefined>}
+ */
+export async function openDeliveryInbox({ target, owner, deps = {} }) {
+  if (target?.cli !== 'claude') return undefined;
+  let inbox;
+  try {
+    if (deps.startInbox) inbox = await deps.startInbox({ dir: deliveryInboxDir() });
+    else {
+      const mod = await import('../transports/uds-inbox.js');
+      inbox = await mod.startInbox({ dir: deliveryInboxDir() });
+    }
+  } catch (err) {
+    console.error(`sbb: warning: inbox unavailable (${err?.message ?? err}); receipts cannot be received`);
+    return undefined;
+  }
+  if (!inbox) return undefined;
+  attachInboxHandlers(inbox, { owner, deps });
+  return inbox;
+}
+
+/**
+ * Persist what the inbox receives while the send is in flight: peer status frames go to
+ * the receipt log, peer `user` frames become inbox entries for this brain (or the user).
+ * @param {import('../transports/uds-inbox.js').Inbox} inbox
+ * @param {{ owner: string, deps?: Record<string, any> }} input
+ */
+export function attachInboxHandlers(inbox, { owner, deps = {} }) {
+  const append = deps.appendReceipt ?? appendReceipt;
+  const writeEntry = deps.writeInboxEntry ?? writeInboxEntry;
+  inbox.on('receipt', (frame) => {
+    append({
+      kind: 'peer-status',
+      msgId: frame?.orig_msg_id ?? null,
+      status: frame?.status ?? null,
+      statusDetail: frame?.status_detail ?? null,
+      dropReason: frame?.drop_reason ?? null,
+      fromSock: frame?.from ?? null,
+      owner,
+    });
+  });
+  inbox.on('message', (frame) => {
+    writeEntry({ owner, entry: parsePeerFrame(frame) });
+  });
+  inbox.on('error', (err) => {
+    console.error(`sbb: warning: inbox: ${err?.message ?? err}`);
+  });
+}
+
+/**
+ * uds can only report `queued`: the protocol sends no receipt for a normal delivery, so
+ * the peer's screen is the only positive evidence. `src/transports/confirm.js` is an
+ * optional transport helper (task h2); when it is absent the receipt stays `queued`.
+ * @param {import('../types.js').Receipt} receipt
+ * @param {{ target: any, text: string, fromName: string, timeoutMs?: number,
+ *           deps?: Record<string, any>, dryRun?: boolean }} input
+ */
+export async function confirmOnScreenUpgrade(receipt, input) {
+  if (input.dryRun || receipt.status !== 'queued' || receipt.via !== 'uds') return receipt;
+  let confirm = input.deps?.confirmOnScreen;
+  if (typeof confirm !== 'function') {
+    let mod;
+    try {
+      mod = await import('../transports/confirm.js');
+    } catch {
+      return receipt;
+    }
+    confirm = mod?.confirmOnScreen;
+    if (typeof confirm !== 'function') return receipt;
+  }
+  let result;
+  try {
+    result = await confirm(input.target, { text: input.text, fromName: input.fromName }, { timeoutMs: input.timeoutMs });
+  } catch (err) {
+    return { ...receipt, detail: joinDetail(receipt.detail, `screen confirm failed: ${err?.message ?? err}`) };
+  }
+  const status = typeof result === 'string' ? result : result?.status;
+  if (status === 'delivered') return { ...receipt, status: 'delivered', via: 'uds+screen' };
+  if (status) return { ...receipt, detail: joinDetail(receipt.detail, `screen confirm: ${status}`) };
+  return receipt;
+}
+
+/** @param {string|undefined} detail @param {string} note */
+function joinDetail(detail, note) {
+  return detail ? `${detail}; ${note}` : note;
+}
+
+/**
+ * Build the envelope, start the sender inbox, route it and log the receipt.
  * @param {{ target: import('../types.js').Target, body: string, msgId?: string,
  *           priority?: import('../types.js').Priority, replyTo?: string,
- *           fromSock?: string|null, verifyTimeoutMs?: number, dryRun?: boolean,
- *           identity?: Record<string, any>, send?: Function }} input
+ *           inbox?: import('../transports/uds-inbox.js').Inbox, verifyTimeoutMs?: number,
+ *           dryRun?: boolean, identity?: Record<string, any>, send?: Function,
+ *           deps?: Record<string, any> }} input
  */
 export async function deliver(input) {
   const send = input.send ?? defaultSend;
   const msgId = input.msgId ?? newMsgId();
   const identity = input.identity ?? (await callerIdentity(input.deps ?? {}));
   const text = buildEnvelope({ ...identity, body: input.body, msgId });
+  const fromName = senderName(identity);
+  const inbox = input.inbox;
   const message = {
     msgId,
     text,
     priority: input.priority ?? 'next',
     replyTo: input.replyTo,
     fromBrain: identity.brain ?? 'user',
-    fromSock: input.fromSock ?? undefined,
+    fromSock: inbox?.sockPath ? `uds:${inbox.sockPath}` : undefined,
+    fromName,
+    fromMode: fromModeFromEnv(input.deps?.env ?? process.env),
   };
-  const receipt = await send(input.target, message, { verifyTimeoutMs: input.verifyTimeoutMs });
+  let receipt = await send(input.target, message, { verifyTimeoutMs: input.verifyTimeoutMs, inbox });
+  receipt = await confirmOnScreenUpgrade(receipt, {
+    target: input.target,
+    text,
+    fromName,
+    timeoutMs: input.verifyTimeoutMs,
+    deps: input.deps,
+    dryRun: input.dryRun,
+  });
   const entry = {
     msgId,
     from: identity.brain ?? identity.sender,
     fromId: identity.id ?? null,
     fromAddress: identity.address ?? null,
-    fromSock: input.fromSock ?? null,
+    fromSock: message.fromSock ?? null,
     to: input.target.brain ?? input.target.address,
     toId: input.target.brainId ?? null,
     address: input.target.address,
