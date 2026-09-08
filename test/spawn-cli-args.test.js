@@ -59,30 +59,35 @@ function writeConfig(dir, body) {
   writeFileSync(join(dir, 'config.json'), typeof body === 'string' ? body : JSON.stringify(body));
 }
 
-test('spawnCliArgs: reads spawn.cliArgs[<cli>] from the raw config file', () => {
+test('spawnCliArgs: reads spawn.cliArgs[<cli>] through the policy config reader', () => {
   const dir = tempDir();
   writeConfig(dir, CONFIG);
   assert.equal(spawnCliArgs('claude', { dir }), '--permission-mode bypassPermissions');
   assert.equal(spawnCliArgs('codex', { dir }), '--sandbox danger-full-access -a never');
   assert.equal(spawnCliArgs('agy', { dir }), undefined, 'a CLI without a default yields nothing');
+  writeConfig(dir, { machineTag: 'mbp' });
+  assert.equal(spawnCliArgs('claude', { dir }), undefined, 'no spawn section');
 });
 
-test('spawnCliArgs: missing, unparseable or non-string config yields nothing', () => {
+test('spawnCliArgs: a missing or corrupt config means no default, never an error', () => {
   const dir = tempDir();
   const warned = [];
   const onWarn = (message) => warned.push(message);
   assert.equal(spawnCliArgs('claude', { dir, onWarn }), undefined, 'no config.json is not an error');
-  assert.deepEqual(warned, []);
   writeConfig(dir, '{ not json');
   assert.equal(spawnCliArgs('claude', { dir, onWarn }), undefined);
-  assert.equal(warned.length, 1);
-  assert.match(warned[0], /cannot parse/);
-  writeConfig(dir, { spawn: { cliArgs: { claude: '   ' } } });
-  assert.equal(spawnCliArgs('claude', { dir }), undefined, 'blank is not a default');
-  writeConfig(dir, { spawn: { cliArgs: { claude: ['--x'] } } });
-  assert.equal(spawnCliArgs('claude', { dir }), undefined, 'only strings are accepted');
-  writeConfig(dir, { machineTag: 'mbp' });
-  assert.equal(spawnCliArgs('claude', { dir }), undefined, 'no spawn section');
+  assert.deepEqual(warned, [], 'the policy reader falls back to defaults silently');
+});
+
+test('spawnCliArgs: blank and non-string values are ignored', () => {
+  /** @param {{ sbbDir?: string }} opts */
+  const readConfig = (opts) => {
+    assert.equal(opts.sbbDir, '/tmp/sbb-cfg');
+    return { spawn: { cliArgs: { claude: '   ', codex: ['--x'] } } };
+  };
+  assert.equal(spawnCliArgs('claude', { dir: '/tmp/sbb-cfg', readConfig }), undefined, 'blank is not a default');
+  assert.equal(spawnCliArgs('codex', { dir: '/tmp/sbb-cfg', readConfig }), undefined, 'only strings are accepted');
+  assert.equal(spawnCliArgs('agy', { dir: '/tmp/sbb-cfg', readConfig }), undefined, 'no entry');
 });
 
 test('mergeCliArgs: config defaults, then explicit args, then plan-node args', () => {
