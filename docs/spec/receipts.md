@@ -22,7 +22,12 @@ Reason vocabulary (extend only by adding to this table):
 `pane_in_copy_mode`, `target_busy`, `target_prompting`, `foreground_program`,
 `enter_swallowed_twice`, `held`, `denied`, `refused`, `dropped`, `expired`,
 `transport_unavailable`, `socket_connect_failed`, `auth_rejected`, `no_rollout`,
-`thread_not_found`, `target_not_found`, `target_ambiguous`, `policy`, `no_transport`.
+`thread_not_found`, `target_not_found`, `target_ambiguous`, `policy`, `no_transport`,
+`too_long`, `queue_timeout`.
+
+`too_long` = typed text over 4000 chars (`blocked`, send-keys).
+`queue_timeout` = `codex queue` did not return within 25 s (`unverified`; the command
+may or may not have landed).
 
 ## Receipt log
 
