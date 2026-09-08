@@ -46,6 +46,18 @@ h3 测试污染用户 pane 标签与向用户 pane 打字（隔离到 scratch tm
 - 步 16：回执审计 unverified 0、Claude held 0、delivered 97、blocked 22（策略拦截、moderated、
   已退休目标，均为预期）。
 
-## 待补跑
+## run 11–14（main a63189b，#27 之后）
 
-run 11（含 h3 的 ask 镜像修复）与 run 12（第二遍连过）结果追加在下方。
+| 轮次 | 结果 | 备注 |
+| --- | --- | --- |
+| 11 | 16 步全过 | 12b 的 Codex→Codex 回答经收件箱镜像被 ask 拿到（via=mirror）；回执审计 unverified 0 |
+| 12 | 15/16，步 8 超时 | 所有消息都送达，但 lead（haiku）没有发最终汇总：上一轮留下的 README.zh.md 让 ios 认为任务已完成，lead 陷入澄清。改为每轮开始前清掉该产物 |
+| 13 | 16 步全过 | 干净 |
+| 14 | 16 步全过，但发现安全漏洞 | lead 的消息被 moderated 扣住 12 秒后，被 lead 自己在 Bash 里 `sbb approve` 放行（批准方被记成 user）。修法：approve/deny 解析调用者身份，已登记脑一律拒绝（h3 在做）。步 16 的 1 条 unverified 来自用户另一会话自发使用 `sbb tell` 打字到忙碌 Codex，与排练无关 |
+
+产物：`docs/reports/rehearsal-artifacts/`（各轮子脑产出的中文 README 与报告，原样保留作样本）。
+
+## 结论
+
+传话内核、生命周期、转移、策略、提案、额度、编号在真实 Claude 与 Codex（gpt-6 与 DeepSeek 两种后端）
+会话上连续跑通；剩余项只有 approve 的调用者授权（安全修复，已派单）。合入后再跑一轮确认，即请用户验收。
