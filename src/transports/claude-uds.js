@@ -8,6 +8,8 @@ import { SOCK_NAME_RE, startInbox } from './uds-inbox.js';
 
 const CONNECT_TIMEOUT_MS = 3000;
 const DEFAULT_VERIFY_TIMEOUT_MS = 4000;
+/** How long `sbb reply` waits for the receiving SBB inbox to ack (lifecycle.md). */
+export const ACK_WAIT_MS = 2000;
 const FROM_PREFIX = 'uds:';
 
 /** Peer statuses that are final blocks; the router must not fall back to typing. */
@@ -252,13 +254,17 @@ export async function canConnect(sockPath, timeoutMs = CONNECT_TIMEOUT_MS) {
 }
 
 /**
- * Deliver one `user` frame straight to a sender-side inbox socket. A plain inbox answers with
- * nothing, so a written frame is `queued`, never `delivered`; `ok: false` means the socket
- * could not be reached and the caller should fall back to the sender's session address.
- * @param {{ sockPath: string, message: OutboundMessage, connectTimeoutMs?: number }} input
+ * Deliver one `user` frame straight to a sender-side inbox socket. An SBB inbox answers a
+ * frame that carries `reply_to` with a `peer_message_status` ack (docs/spec/lifecycle.md
+ * section "Inbox ack"); with `inbox` supplied, that ack is awaited and the receipt becomes
+ * `delivered`. Without an inbox the frame is only written, so it stays `queued`.
+ * `ok: false` means the socket could not be reached and the caller should fall back to the
+ * sender's session address.
+ * @param {{ sockPath: string, message: OutboundMessage, connectTimeoutMs?: number,
+ *           inbox?: Inbox, ackTimeoutMs?: number }} input
  * @returns {Promise<{ ok: boolean, receipt: Receipt }>}
  */
-export async function sendToInbox({ sockPath, message, connectTimeoutMs = CONNECT_TIMEOUT_MS }) {
+export async function sendToInbox({ sockPath, message, connectTimeoutMs = CONNECT_TIMEOUT_MS, inbox, ackTimeoutMs = ACK_WAIT_MS }) {
   const startedAt = Date.now();
   const base = { via: 'uds-inbox', msgId: message.msgId };
   const failed = (reason, detail) => ({
@@ -277,9 +283,30 @@ export async function sendToInbox({ sockPath, message, connectTimeoutMs = CONNEC
   } catch (err) {
     return failed('transport_unavailable', `write failed: ${err.code ?? err.message}`);
   }
+  if (!inbox) {
+    return {
+      ok: true,
+      receipt: { ...base, status: 'queued', detail: 'waiting inbox accepted the frame (no protocol ack)', elapsedMs: Date.now() - startedAt },
+    };
+  }
+  const frame = await waitForStatus(inbox, message.msgId, ackTimeoutMs);
+  if (frame?.status === 'delivered') {
+    return { ok: true, receipt: { ...base, status: 'delivered', detail: 'acked by the receiving SBB inbox', elapsedMs: Date.now() - startedAt } };
+  }
+  if (frame && BLOCKED_STATUSES.has(frame.status)) {
+    return {
+      ok: true,
+      receipt: { ...base, status: 'blocked', reason: frame.status, detail: frame.status_detail ?? frame.drop_reason, elapsedMs: Date.now() - startedAt },
+    };
+  }
   return {
     ok: true,
-    receipt: { ...base, status: 'queued', detail: 'waiting inbox accepted the frame (no protocol ack)', elapsedMs: Date.now() - startedAt },
+    receipt: {
+      ...base,
+      status: 'queued',
+      detail: frame ? `unknown peer status: ${frame.status}` : `no ack within ${ackTimeoutMs}ms`,
+      elapsedMs: Date.now() - startedAt,
+    },
   };
 }
 

@@ -1,0 +1,221 @@
+// spawn.js: validation, quota floor, pane setup, readiness and the parent notification.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnBrain, checkQuotaFloor, quotaFloor } from '../src/lifecycle/spawn.js';
+import { createFakeTmux, typedLiterals, tmuxCommands } from './fixtures/lifecycle/fake-tmux.js';
+import { tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
+
+const ACCOUNTS = [{
+  name: 'a',
+  baseDir: '/tmp/home/.ai-account-a',
+  claudeDir: '/tmp/home/.ai-account-a/claude',
+  codexDir: '/tmp/home/.ai-account-a/codex',
+}];
+const PARENT = { id: 'SMS-0007', name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude' };
+
+/** A sub brain needs its parent on disk: saveBrain validates that the record exists. */
+function seedParent() {
+  writeBrain({ id: 'SMS-0007', name: 'lead', role: 'main', account: 'a', cli: 'claude', paneId: '%29', coord: '24:3.3' });
+}
+
+/** @param {Record<string, any>} [over] */
+function baseDeps(over = {}) {
+  const tmuxApi = createFakeTmux();
+  const delivered = [];
+  const deps = {
+    accounts: ACCOUNTS,
+    listBrains: () => [],
+    getBrain: (ref) => (ref === 'lead' ? PARENT : undefined),
+    which: async () => true,
+    readQuota: async () => [{ account: 'a', window: 'weekly', remaining: 50 }],
+    allocateId: () => 'SMS-0042',
+    newUuid: () => 'uuid-42',
+    tmuxApi,
+    awaitReady: async () => ({ ready: true, session: { pid: 4242 } }),
+    resolve: async () => ({ address: 'lead', account: 'a', cli: 'claude', paneId: '%29', coord: '24:3.3' }),
+    deliver: async (input) => {
+      delivered.push(input);
+      return { receipt: { status: 'delivered', via: 'uds', msgId: 'm1', elapsedMs: 1 } };
+    },
+    config: {},
+    tmuxApiRef: tmuxApi,
+    delivered,
+    ...over,
+  };
+  return deps;
+}
+
+/** @param {Record<string, any>} [over] */
+function spawnInput(over = {}) {
+  return {
+    name: 'ios',
+    role: 'sub',
+    parent: 'lead',
+    account: 'a',
+    cli: 'claude',
+    model: 'claude-haiku-4-5-20251001',
+    cwd: '/tmp/proj',
+    ...over,
+  };
+}
+
+test('spawnBrain: happy path registers the brain and notifies the parent', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    const deps = baseDeps();
+    const result = await spawnBrain(spawnInput(), deps);
+
+    assert.ok(result.brain, JSON.stringify(result));
+    assert.deepEqual(
+      { id: result.brain.id, name: result.brain.name, role: result.brain.role, parent: result.brain.parent, origin: result.brain.origin, pid: result.brain.pid, coord: result.brain.coord },
+      { id: 'SMS-0042', name: 'ios', role: 'sub', parent: 'SMS-0007', origin: 'spawned', pid: 4242, coord: '24:3.4' },
+    );
+    const record = JSON.parse(readFileSync(join(dir, 'brains', 'SMS-0042.json'), 'utf8'));
+    assert.equal(record.uuid, 'uuid-42');
+    assert.equal(record.account, 'a');
+
+    const options = tmuxCommands(deps.tmuxApiRef).filter((c) => c[0] === 'set-option').map((c) => c.slice(4));
+    assert.deepEqual(options, [
+      ['@ai_account', 'a'],
+      ['@sbb_brain', 'SMS-0042'],
+      ['@codex_home', '/tmp/home/.ai-account-a/codex'],
+    ]);
+    assert.deepEqual(tmuxCommands(deps.tmuxApiRef)[0], ['new-window', '-n', 'ai-a', '-c', '/tmp/proj', '-P', '-F', '#{pane_id}']);
+
+    const typed = typedLiterals(deps.tmuxApiRef);
+    assert.equal(typed.length, 1);
+    assert.ok(!/[\r\n]/.test(typed[0]), 'one line reaches the pane');
+    assert.match(typed[0], /--append-system-prompt/);
+    assert.match(typed[0], /你是 ios#SMS-0042/);
+
+    assert.equal(deps.delivered.length, 1);
+    assert.equal(deps.delivered[0].body, '已上线，上级 lead');
+    assert.equal(deps.delivered[0].identity.id, 'SMS-0042');
+    assert.equal(deps.delivered[0].identity.role, '子脑');
+    assert.equal(result.notification.status, 'delivered');
+  } finally {
+    restore();
+  }
+});
+
+test('spawnBrain: --split uses split-window in the caller window', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    const deps = baseDeps();
+    await spawnBrain(spawnInput({ split: true }), deps);
+    assert.deepEqual(tmuxCommands(deps.tmuxApiRef)[0], ['split-window', '-c', '/tmp/proj', '-P', '-F', '#{pane_id}']);
+  } finally {
+    restore();
+  }
+});
+
+test('spawnBrain: a long brief goes to ~/.sbb/briefs and the pane gets the pointer', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    const deps = baseDeps();
+    const result = await spawnBrain(spawnInput({ brief: 'x'.repeat(6001) }), deps);
+    assert.equal(result.briefFile, join(dir, 'briefs', 'SMS-0042.md'));
+    assert.equal(readFileSync(result.briefFile, 'utf8').length, 6002);
+    const typed = typedLiterals(deps.tmuxApiRef)[0];
+    assert.match(typed, /SMS-0042\.md/);
+    assert.ok(typed.length < 4000, 'the pane command stays small');
+  } finally {
+    restore();
+  }
+});
+
+test('spawnBrain: a failed readiness kills the pane and registers nothing', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    const deps = baseDeps({ awaitReady: async () => ({ ready: false, reason: 'not_ready', detail: 'no session', screen: 'last screen lines' }) });
+    const result = await spawnBrain(spawnInput(), deps);
+    assert.equal(result.blocked.reason, 'not_ready');
+    assert.match(result.blocked.detail, /no session/);
+    assert.equal(result.screen, 'last screen lines');
+    assert.ok(tmuxCommands(deps.tmuxApiRef).some((c) => c[0] === 'kill-pane'), 'the pane is cleaned up');
+    assert.equal(existsSync(join(dir, 'brains', 'SMS-0042.json')), false);
+    assert.equal(deps.delivered.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('spawnBrain: validation refusals are blocked, never guessed', async () => {
+  const cases = [
+    [{ name: 'BAD NAME' }, 'invalid_name'],
+    [{ name: 'lead' }, 'duplicate_name'],
+    [{ role: 'main', parent: 'lead' }, 'invalid_parent'],
+    [{ parent: 'nope' }, 'unknown_parent'],
+    [{ account: 'zz' }, 'unknown_account'],
+    [{ cli: 'gpt' }, 'invalid_cli'],
+  ];
+  for (const [over, reason] of cases) {
+    const deps = baseDeps({ listBrains: () => [{ id: 'SMS-0001', name: 'lead' }] });
+    const result = await spawnBrain(spawnInput(over), deps);
+    assert.equal(result.blocked?.reason, reason, `${JSON.stringify(over)} -> ${reason}`);
+  }
+});
+
+test('spawnBrain: a missing CLI binary is blocked before any pane exists', async () => {
+  const deps = baseDeps({ which: async () => false });
+  const result = await spawnBrain(spawnInput(), deps);
+  assert.equal(result.blocked.reason, 'cli_missing');
+  assert.equal(tmuxCommands(deps.tmuxApiRef).length, 0);
+});
+
+test('spawnBrain: a tmux failure is blocked with the tmux error', async () => {
+  const deps = baseDeps({ tmuxApi: createFakeTmux({ failNewWindow: true }) });
+  deps.tmuxApiRef = deps.tmuxApi;
+  const result = await spawnBrain(spawnInput(), deps);
+  assert.equal(result.blocked.reason, 'tmux_failed');
+  assert.match(result.blocked.detail, /no current session/);
+});
+
+test('spawnBrain: the quota floor blocks only a known shortfall', async () => {
+  const short = baseDeps({ readQuota: async () => [{ account: 'a', window: 'weekly', remaining: 4 }] });
+  const blocked = await spawnBrain(spawnInput(), short);
+  assert.equal(blocked.blocked.reason, 'quota');
+  assert.match(blocked.blocked.detail, /4% is below floor 10%/);
+
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    const unknown = baseDeps({ readQuota: async () => [{ account: 'a', window: 'weekly', remaining: null, note: 'unavailable' }] });
+    assert.ok((await spawnBrain(spawnInput(), unknown)).brain, 'unknown never blocks');
+
+    let read = false;
+    const forced = baseDeps({ readQuota: async () => { read = true; return []; } });
+    const result = await spawnBrain(spawnInput({ force: true }), forced);
+    assert.ok(result.brain);
+    assert.equal(read, false, '--force skips the quota read');
+    assert.equal(result.quota, 'skipped (--force)');
+  } finally {
+    restore();
+  }
+});
+
+test('checkQuotaFloor: unknown rows and unknown windows never block', () => {
+  assert.deepEqual(checkQuotaFloor({ account: 'a', floor: 10, rows: [] }), { ok: true, note: 'unknown' });
+  assert.deepEqual(
+    checkQuotaFloor({ account: 'a', floor: 10, rows: [{ account: 'a', window: 'session', remaining: 1 }] }),
+    { ok: true, note: 'unknown' },
+  );
+  assert.equal(checkQuotaFloor({ account: 'a', floor: 10, rows: [{ account: 'a', window: 'weekly', remaining: 10 }] }).ok, true);
+  assert.equal(checkQuotaFloor({ account: 'a', floor: 10, rows: [{ account: 'a', window: 'weekly', remaining: 9.9 }] }).ok, false);
+});
+
+test('quotaFloor: config default is 10, a configured value wins', () => {
+  assert.equal(quotaFloor({}), 10);
+  assert.equal(quotaFloor({ quota: { floorWeekly: 25 } }), 25);
+  assert.equal(quotaFloor({ quota: { floorWeekly: 'nonsense' } }), 10);
+});
