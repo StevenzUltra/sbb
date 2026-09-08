@@ -34,6 +34,17 @@ export function senderPrefix(identity) {
 }
 
 /**
+ * Display name for the recipient: `<name>#<id>` for a registered brain, else the CLI
+ * display name (`Claude`, `Codex`, ...) or the sender name for the user.
+ * @param {{ sender?: string|null, id?: string|null, cli?: string|null }} identity
+ */
+export function senderName(identity) {
+  const { sender, id, cli } = identity ?? {};
+  if (id) return `${sender}#${id}`;
+  return CLI_DISPLAY_NAMES[cli] ?? sender ?? 'Claude';
+}
+
+/**
  * @param {{ sender: string, account?: string|null, cli?: string|null, coord?: string|null,
  *           role: string, body: string, msgId: string }} input
  * @returns {string} one line

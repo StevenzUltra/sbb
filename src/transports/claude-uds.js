@@ -13,6 +13,12 @@ const FROM_PREFIX = 'uds:';
 /** Peer statuses that are final blocks; the router must not fall back to typing. */
 const BLOCKED_STATUSES = new Set(['held', 'denied', 'refused', 'dropped', 'expired']);
 
+/** Characters 2.1.263 accepts inside the wrapper's `from` attribute. */
+const FROM_VALUE_RE = /^[A-Za-z0-9%:_/.\-]+$/;
+
+/** Permission modes 2.1.263 renders; anything else is omitted as unknown. */
+const FROM_MODES = new Set(['bypass', 'prompting']);
+
 /** @typedef {import('../types.js').Target} Target */
 /** @typedef {import('../types.js').OutboundMessage} OutboundMessage */
 /** @typedef {import('../types.js').Receipt} Receipt */
@@ -85,16 +91,41 @@ function normalizeFrom(fromSock) {
   return { present: true, receivable: true, address: fromSock, path };
 }
 
+/**
+ * Wrap the body so 2.1.263 renders it as `Message from @<name>: <body>` (protocols.md
+ * section 1). Falls back to plain text when an attribute cannot be represented, and says
+ * so in `note` rather than degrading silently.
+ * @param {OutboundMessage} message
+ * @param {{ present: boolean, receivable: boolean, address?: string }} from
+ * @returns {{ content: string, note?: string }}
+ */
+function buildContent(message, from) {
+  const name = message.fromName;
+  if (typeof name !== 'string' || name === '') return { content: message.text };
+  if (!from.receivable) {
+    return { content: message.text, note: 'content not wrapped: no receivable fromSock' };
+  }
+  if (/["<>\r\n]/.test(name)) {
+    return { content: message.text, note: `content not wrapped: from-name has forbidden characters: ${name}` };
+  }
+  if (!FROM_VALUE_RE.test(from.address)) {
+    return { content: message.text, note: `content not wrapped: fromSock has characters peers reject: ${from.address}` };
+  }
+  const attrs = [`from="${from.address}"`, `from-name="${name}"`];
+  if (FROM_MODES.has(message.fromMode)) attrs.push(`from-mode="${message.fromMode}"`);
+  return { content: `<cross-session-message ${attrs.join(' ')}>\n${message.text}\n</cross-session-message>` };
+}
+
 /** @param {string} token */
 function authLine(token) {
   return `${JSON.stringify({ type: 'auth', token })}\n`;
 }
 
-/** @param {OutboundMessage} message */
-function userLine(message) {
+/** @param {OutboundMessage} message @param {string} content */
+function userLine(message, content) {
   const frame = {
     type: 'user',
-    message: { role: 'user', content: message.text },
+    message: { role: 'user', content },
     msg_id: message.msgId,
     priority: message.priority ?? 'next',
   };
@@ -249,6 +280,8 @@ export const claudeUds = {
       }
     }
 
+    const body = buildContent(message, from);
+
     let socket;
     try {
       socket = await connectTo(sockPath, CONNECT_TIMEOUT_MS);
@@ -256,7 +289,7 @@ export const claudeUds = {
       return finish('blocked', 'socket_connect_failed', `${err.code ?? 'error'}: ${err.message}`);
     }
     try {
-      await writeAndEnd(socket, [authLine(tokenResult.token), userLine(message)]);
+      await writeAndEnd(socket, [authLine(tokenResult.token), userLine(message, body.content)]);
     } catch (err) {
       return finish('blocked', 'transport_unavailable', `write failed: ${err.code ?? err.message}`);
     }
@@ -274,6 +307,8 @@ export const claudeUds = {
         receipt = finish('blocked', frame.status, frame.status_detail ?? frame.drop_reason);
       } else receipt = finish('queued', undefined, `unknown peer status: ${frame.status}`);
     }
+
+    if (body.note) receipt.detail = receipt.detail ? `${receipt.detail}; ${body.note}` : body.note;
 
     if (opts.notifyIdle && from.receivable && (receipt.status === 'delivered' || receipt.status === 'queued')) {
       try {
