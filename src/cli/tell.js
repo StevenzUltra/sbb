@@ -1,6 +1,6 @@
 // sbb tell: build the envelope, resolve the target, route it, log the receipt.
 import { readFileSync } from 'node:fs';
-import { bodyFromFile } from '../registry/envelope.js';
+import { bodyFromFile, senderPrefix } from '../registry/envelope.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { shortId } from '../lib/ids.js';
 import {
@@ -83,7 +83,7 @@ export async function run(argv, deps = {}) {
         console.log(`pane      ${target.paneId}`);
         console.log(`coord     ${target.coord}`);
         console.log(`transport ${transport.id}${transport.available ? '' : ' (unsupported, would be blocked)'}`);
-        console.log(`sender    ${identity.sender}@${identity.account ?? 'cli'}/${identity.cli ?? '-'}:${identity.coord ?? '-'} [${identity.role}]`);
+        console.log(`sender    ${senderPrefix(identity)}[${identity.role}]`);
       }
       return EXIT.OK;
     }

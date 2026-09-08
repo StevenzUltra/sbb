@@ -1,14 +1,15 @@
 // sbb ls: roster union. docs/spec/cli.md.
 import { homedir } from 'node:os';
+import { getBrain } from '../registry/brains.js';
 import { roster as defaultRoster } from '../registry/roster.js';
 import { EXIT, main, parse, renderTable, writeJson } from './util.js';
 
-const USAGE = `usage: sbb ls [--json] [--tree] [--account <name>] [--cli <kind>]
+const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>]
 
-Rows are live CLI sessions across every account. --tree prints brains only,
-indented by parent.`;
+Rows are live CLI sessions across every account. An id (#SMS-0012) or a brain name
+prints that one row. --tree prints brains only, indented by parent.`;
 
-const HEADERS = ['BRAIN', 'ROLE', 'PARENT', 'ACCOUNT', 'CLI', 'MODEL', 'STATUS', 'WHERE', 'NAME/THREAD', 'CWD'];
+const HEADERS = ['ID', 'BRAIN', 'ROLE', 'PARENT', 'ACCOUNT', 'CLI', 'MODEL', 'STATUS', 'WHERE', 'NAME/THREAD', 'CWD'];
 
 /** @param {string} cwd */
 function shortCwd(cwd) {
@@ -25,6 +26,7 @@ function nameCell(row) {
 /** @param {import('../registry/roster.js').RosterRow} row */
 function toCells(row) {
   return [
+    row.brainId,
     row.brain,
     row.role,
     row.parent,
@@ -40,19 +42,20 @@ function toCells(row) {
 
 /** @param {import('../registry/roster.js').RosterRow[]} rows */
 function printTree(rows) {
-  const byName = new Map(rows.filter((r) => r.brain).map((r) => [r.brain, r]));
+  const brainRows = rows.filter((r) => r.brain);
+  const byId = new Map(brainRows.map((r) => [r.brainId, r]));
   /** @type {Map<string|null, import('../registry/roster.js').RosterRow[]>} */
   const children = new Map();
-  for (const row of rows.filter((r) => r.brain)) {
-    const key = row.parent && byName.has(row.parent) ? row.parent : null;
+  for (const row of brainRows) {
+    const key = row.parent && byId.has(row.parent) ? row.parent : null;
     children.set(key, [...(children.get(key) ?? []), row]);
   }
   /** @param {string|null} parent @param {number} depth */
   const walk = (parent, depth) => {
     for (const row of children.get(parent) ?? []) {
       const detail = `${row.account}/${row.cli}  ${row.status}  ${row.where}`;
-      console.log(`${'  '.repeat(depth)}${row.brain}  ${row.role}  ${detail}${row.name ? `  ${row.name}` : ''}`);
-      walk(row.brain, depth + 1);
+      console.log(`${'  '.repeat(depth)}${row.brainId}  ${row.brain}  ${row.role}  ${detail}${row.name ? `  ${row.name}` : ''}`);
+      walk(row.brainId, depth + 1);
     }
   };
   walk(null, 0);
@@ -60,7 +63,7 @@ function printTree(rows) {
 
 export async function run(argv, deps = {}) {
   return main(async () => {
-    const { values } = parse(argv, {
+    const { values, positionals } = parse(argv, {
       json: { type: 'boolean' },
       tree: { type: 'boolean' },
       account: { type: 'string' },
@@ -72,7 +75,7 @@ export async function run(argv, deps = {}) {
       return EXIT.OK;
     }
     const rows = await (deps.roster ?? defaultRoster)({
-      includeStaleBrains: Boolean(values.tree),
+      includeStaleBrains: Boolean(values.tree) || positionals.length > 0,
       onWarn: deps.onWarn,
       accounts: deps.accounts,
       listPanes: deps.listPanes,
@@ -84,6 +87,19 @@ export async function run(argv, deps = {}) {
     let filtered = rows;
     if (values.account) filtered = filtered.filter((r) => r.account === values.account.toLowerCase());
     if (values.cli) filtered = filtered.filter((r) => r.cli === values.cli.toLowerCase());
+    if (positionals.length > 0) {
+      const ref = positionals[0];
+      const brain = (deps.getBrain ?? getBrain)(ref);
+      if (!brain) {
+        console.error(`sbb: no brain matching "${ref}"`);
+        return EXIT.BLOCKED;
+      }
+      filtered = filtered.filter((r) => r.brainId === brain.id);
+      if (filtered.length === 0) {
+        console.error(`sbb: brain ${brain.id} ${brain.name} has no live pane`);
+        return EXIT.BLOCKED;
+      }
+    }
 
     if (values.tree) {
       printTree(filtered);

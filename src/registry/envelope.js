@@ -1,6 +1,6 @@
 // Envelope builder. Callers pass only the body; SBB adds the sender prefix and the
 // `(sbb:<id8>)` suffix so the receiver can answer with `sbb reply <id>`.
-// Format: [<sender>@<account>/<cli>:<coord>][<role>] <body>   (sbb:<id8>)
+// Format: [<name>#<id>@<account>/<cli>:<coord>][<role>] <body>   (sbb:<id8>)
 import { shortId } from '../lib/ids.js';
 
 /** CLI display names, matching the cross-ai-tmux-bridge skill (agy runs Gemini). */
@@ -21,15 +21,16 @@ export function collapseBody(text) {
 }
 
 /**
- * Sender prefix. Inside tmux: `[sender@account/cli:coord]`. Outside tmux (a script)
- * the spec fixes the identity as `user@cli`.
- * @param {{ sender: string, account?: string|null, cli?: string|null, coord?: string|null }} identity
+ * Sender prefix. A registered brain carries its id: `[ios#SMS-0012@a/claude:24:3.4]`.
+ * Outside tmux (a script) the spec fixes the identity as `user@cli`.
+ * @param {{ sender: string, id?: string|null, account?: string|null, cli?: string|null, coord?: string|null }} identity
  */
 export function senderPrefix(identity) {
-  const { sender, account, cli, coord } = identity;
-  if (account && cli && coord) return `[${sender}@${account}/${cli}:${coord}]`;
-  if (cli) return `[${sender}@${cli}]`;
-  return `[${sender}@cli]`;
+  const { sender, id, account, cli, coord } = identity;
+  const name = id ? `${sender}#${id}` : sender;
+  if (account && cli && coord) return `[${name}@${account}/${cli}:${coord}]`;
+  if (cli) return `[${name}@${cli}]`;
+  return `[${name}@cli]`;
 }
 
 /**
@@ -55,6 +56,7 @@ export function identityFromRows({ paneId, rows }) {
   if (row.brain) {
     return {
       sender: row.brain,
+      id: row.brainId ?? null,
       account: row.account,
       cli: row.cli,
       coord: row.coord,

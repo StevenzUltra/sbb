@@ -136,9 +136,11 @@ export async function deliver(input) {
   const entry = {
     msgId,
     from: identity.brain ?? identity.sender,
+    fromId: identity.id ?? null,
     fromAddress: identity.address ?? null,
     fromSock: input.fromSock ?? null,
     to: input.target.brain ?? input.target.address,
+    toId: input.target.brainId ?? null,
     address: input.target.address,
     status: receipt.status,
     via: receipt.via,

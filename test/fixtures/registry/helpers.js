@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { allocateId } from '../../../src/registry/brain-id.js';
+import { saveBrain } from '../../../src/registry/brains.js';
 
 export const FIXTURE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -43,6 +45,30 @@ export function writeClaudeSession(home, account, opts) {
     fixture('claude-key.template.json'),
   );
   return dir;
+}
+
+/**
+ * Write a brain record through the real store. Pass `id`/`uuid` to keep a test
+ * deterministic; otherwise the id comes from the machine counter.
+ * @param {Record<string, any>} over
+ */
+export function writeBrain(over = {}) {
+  return saveBrain({
+    id: over.id ?? allocateId(),
+    uuid: over.uuid ?? `uuid-${over.name ?? 'brain'}-${Math.random().toString(16).slice(2)}`,
+    name: over.name ?? 'lead',
+    role: over.role ?? 'main',
+    parent: over.parent ?? null,
+    account: over.account ?? 'a',
+    cli: over.cli ?? 'claude',
+    model: over.model,
+    cwd: over.cwd ?? '/Users/dev/proj',
+    paneId: over.paneId ?? '%30',
+    coord: over.coord ?? '24:3.4',
+    pid: over.pid,
+    createdAt: over.createdAt ?? Date.now(),
+    origin: over.origin ?? 'adopted',
+  });
 }
 
 /**

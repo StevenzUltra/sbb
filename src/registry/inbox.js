@@ -33,8 +33,9 @@ export function userInboxDir() {
 /**
  * Write one inbox entry. The file name is `<t>-<msgId>.json` so a directory
  * listing is already in arrival order.
- * @param {{ owner: string, entry: { msgId: string, from?: string, fromBrain?: string|null,
- *           fromSock?: string|null, replyTo?: string|null, text: string, t?: number, read?: boolean } }} input
+ * @param {{ owner: string, entry: { msgId: string, from?: string, fromId?: string|null,
+ *           fromBrain?: string|null, fromAddress?: string|null, fromSock?: string|null,
+ *           replyTo?: string|null, text: string, t?: number, read?: boolean } }} input
  */
 export function writeInboxEntry({ owner, entry }) {
   const dir = inboxDirFor(owner);

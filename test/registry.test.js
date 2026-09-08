@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { brainsDir } from '../src/lib/paths.js';
-import { BrainError, getBrain, listBrains, removeBrain, saveBrain } from '../src/registry/brains.js';
+import { BrainError, getBrain, listBrains, listRetiredBrains, removeBrain, saveBrain } from '../src/registry/brains.js';
 import { isAlive, listClaudeSessions, paneTmuxKey } from '../src/registry/claude-sessions.js';
 import { CodexRegistryError, listCodexThreads } from '../src/registry/codex-threads.js';
 import {
@@ -14,7 +14,7 @@ import {
   roster,
   screenStatus,
 } from '../src/registry/roster.js';
-import { buildCodexDb, fixtureJson, tempDir, withEnv, writeClaudeSession } from './fixtures/registry/helpers.js';
+import { buildCodexDb, fixtureJson, tempDir, withEnv, writeBrain, writeClaudeSession } from './fixtures/registry/helpers.js';
 
 /** A pid that has certainly exited: the runner reaps the child before returning. */
 function deadPid() {
@@ -48,35 +48,27 @@ function fakeAccounts(home, names) {
   }));
 }
 
-test('brains: save, get, list and remove are atomic and validated', () => {
+test('brains: save, get, list and retire by id', () => {
   const home = tempDir();
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
   try {
-    const brain = {
-      name: 'lead',
-      role: 'main',
-      parent: null,
-      account: 'a',
-      cli: 'claude',
-      model: 'claude-fable-5-1',
-      cwd: '/Users/dev/proj',
-      paneId: '%30',
-      coord: '24:3.4',
-      pid: 1234,
-      createdAt: Date.now(),
-      origin: 'adopted',
-    };
-    saveBrain(brain);
+    const brain = writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead', model: 'claude-fable-5-1', pid: 1234 });
     assert.deepEqual(getBrain('lead'), brain);
-    const files = readdirSync(brainsDir());
-    assert.deepEqual(files, ['lead.json'], 'no temp file is left behind');
+    assert.deepEqual(getBrain('TST-0001'), brain);
+    assert.deepEqual(getBrain('#tst-0001'), brain, 'id lookup ignores case and the leading #');
+    assert.deepEqual(readdirSync(brainsDir()), ['TST-0001.json'], 'no temp file is left behind');
     assert.equal(listBrains().length, 1);
 
-    saveBrain({ ...brain, name: 'ios', role: 'sub', parent: 'lead' });
-    assert.deepEqual(listBrains().map((b) => b.name), ['ios', 'lead']);
-    assert.equal(removeBrain('ios'), true);
-    assert.equal(removeBrain('ios'), false);
-    assert.equal(listBrains().length, 1);
+    writeBrain({ id: 'TST-0002', uuid: 'uuid-ios', name: 'ios', role: 'sub', parent: 'TST-0001' });
+    assert.deepEqual(listBrains().map((b) => b.id), ['TST-0001', 'TST-0002']);
+
+    const retired = removeBrain('ios');
+    assert.equal(retired.id, 'TST-0002');
+    assert.ok(retired.retiredAt > 0, 'retiring stamps retiredAt');
+    assert.equal(removeBrain('ios'), undefined, 'a second remove finds nothing');
+    assert.deepEqual(listBrains().map((b) => b.id), ['TST-0001']);
+    assert.deepEqual(listRetiredBrains().map((b) => b.id), ['TST-0002'], 'the record is kept, never deleted');
+    assert.equal(getBrain('ios'), undefined, 'a retired brain is not live');
   } finally {
     restore();
   }
@@ -87,16 +79,32 @@ test('brains: invalid records are rejected with a reason', () => {
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
   try {
     const base = {
-      name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude',
+      id: 'TST-0001', uuid: 'uuid-1', name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude',
       cwd: '/Users/dev/proj', paneId: '%30', createdAt: Date.now(), origin: 'adopted',
     };
     assert.throws(() => saveBrain({ ...base, name: 'Lead' }), (err) => err instanceof BrainError && err.reason === 'invalid_name');
+    assert.throws(() => saveBrain({ ...base, id: 'SMS-1' }), (err) => err.reason === 'invalid_id');
+    assert.throws(() => saveBrain({ ...base, uuid: '' }), (err) => err.reason === 'invalid_uuid');
+    const normalised = saveBrain({ ...base, id: 'sms-0001', uuid: 'uuid-norm', name: 'norm' });
+    assert.equal(normalised.id, 'SMS-0001', 'a lower-case id is normalised, not rejected');
     assert.throws(() => saveBrain({ ...base, role: 'sub', parent: null }), (err) => err.reason === 'invalid_parent');
-    assert.throws(() => saveBrain({ ...base, role: 'sub', parent: 'ghost' }), (err) => err.reason === 'unknown_parent');
-    assert.throws(() => saveBrain({ ...base, parent: 'other' }), (err) => err.reason === 'invalid_parent');
+    assert.throws(() => saveBrain({ ...base, role: 'sub', parent: 'TST-9999' }), (err) => err.reason === 'unknown_parent');
+    assert.throws(() => saveBrain({ ...base, parent: 'TST-0002' }), (err) => err.reason === 'invalid_parent');
     assert.throws(() => saveBrain({ ...base, paneId: '30' }), (err) => err.reason === 'invalid_pane');
     assert.throws(() => saveBrain({ ...base, cli: 'gpt' }), (err) => err.reason === 'invalid_cli');
     assert.throws(() => saveBrain({ ...base, account: '' }), (err) => err.reason === 'invalid_account');
+
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-1', name: 'lead' });
+    assert.throws(() => saveBrain({ ...base, uuid: 'uuid-2' }), (err) => err.reason === 'duplicate_id');
+    assert.throws(
+      () => saveBrain({ ...base, id: 'TST-0003', name: 'other' }),
+      (err) => err.reason === 'duplicate_uuid',
+    );
+    assert.throws(() => saveBrain({ ...base, id: 'TST-0004', uuid: 'uuid-4' }), (err) => err.reason === 'duplicate_name');
+    assert.doesNotThrow(
+      () => saveBrain({ ...base, id: 'TST-0001', uuid: 'uuid-1', name: 'lead' }),
+      're-saving the same record is an update, not a conflict',
+    );
   } finally {
     restore();
   }
@@ -106,10 +114,7 @@ test('brains: a corrupt record is skipped, not invented', () => {
   const home = tempDir();
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
   try {
-    saveBrain({
-      name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude',
-      cwd: '/Users/dev/proj', paneId: '%30', createdAt: Date.now(), origin: 'adopted',
-    });
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-1', name: 'lead' });
     writeFileSync(join(brainsDir(), 'broken.json'), '{ not json');
     assert.deepEqual(listBrains().map((b) => b.name), ['lead']);
     assert.equal(getBrain('broken'), undefined);
@@ -229,10 +234,7 @@ test('roster: union of panes, Claude sessions and Codex threads, brains overlaid
       { id: 't1', name: 'Reply with PONG', cwd: '/Users/dev/proj', rolloutPath: rollout, updatedAt: 100 },
       { id: 't2', name: 'other', cwd: '/Users/dev/other', rolloutPath: join(rolloutDir, 'missing.jsonl'), updatedAt: 200 },
     ]);
-    saveBrain({
-      name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude', model: 'claude-fable-5-1',
-      cwd: '/Users/dev/proj', paneId: '%30', coord: '24:3.4', createdAt: Date.now(), origin: 'adopted',
-    });
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead', model: 'claude-fable-5-1' });
 
     const panes = fixtureJson('panes.json');
     const rows = await roster({
@@ -251,6 +253,7 @@ test('roster: union of panes, Claude sessions and Codex threads, brains overlaid
     assert.equal(lead.name, 'lead');
     assert.equal(lead.status, 'busy');
     assert.equal(lead.brain, 'lead');
+    assert.equal(lead.brainId, 'TST-0001');
     assert.equal(lead.role, 'main');
     assert.equal(lead.model, 'claude-fable-5-1');
     assert.ok(lead.claude, 'the Claude session is attached');
@@ -339,15 +342,13 @@ test('roster: stale brains are only listed on request', async () => {
   const home = tempDir();
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
   try {
-    saveBrain({
-      name: 'ghost', role: 'main', parent: null, account: 'a', cli: 'claude',
-      cwd: '/Users/dev/proj', paneId: '%99', coord: '24:9.9', createdAt: Date.now(), origin: 'adopted',
-    });
+    writeBrain({ id: 'TST-0009', uuid: 'uuid-ghost', name: 'ghost', paneId: '%99', coord: '24:9.9' });
     const live = await roster({ accounts: [], listPanes: async () => [], withStatus: false, onWarn: () => {} });
     assert.deepEqual(live, []);
     const withStale = await roster({ accounts: [], listPanes: async () => [], withStatus: false, includeStaleBrains: true, onWarn: () => {} });
     assert.equal(withStale.length, 1);
     assert.equal(withStale[0].brain, 'ghost');
+    assert.equal(withStale[0].brainId, 'TST-0009');
     assert.equal(withStale[0].status, 'stale');
     assert.equal(withStale[0].source, 'brain');
   } finally {

@@ -28,6 +28,7 @@ export const TREE_MAX_PROCS = 64;
 /**
  * @typedef {Object} RosterRow
  * @property {string|null} brain
+ * @property {string|null} brainId
  * @property {string|null} role
  * @property {string|null} parent
  * @property {string} account
@@ -224,6 +225,7 @@ export async function roster(opts = {}) {
 
     rows.push({
       brain: brain?.name ?? null,
+      brainId: brain?.id ?? null,
       role: brain?.role ?? null,
       parent: brain?.parent ?? null,
       account,
@@ -253,6 +255,7 @@ export async function roster(opts = {}) {
       if (livePanes.has(brain.paneId)) continue;
       rows.push({
         brain: brain.name,
+        brainId: brain.id,
         role: brain.role,
         parent: brain.parent,
         account: brain.account,

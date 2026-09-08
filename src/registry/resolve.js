@@ -2,7 +2,7 @@
 // Never guesses: an unknown or ambiguous address raises ResolveError.
 import { discoverAccounts } from '../lib/paths.js';
 import { resolvePaneId as defaultResolvePaneId } from '../lib/tmux.js';
-import { getBrain } from './brains.js';
+import { duplicateIdentities, getBrain, normalizeBrainId } from './brains.js';
 import { roster as defaultRoster } from './roster.js';
 
 /** @typedef {import('../types.js').Target} Target */
@@ -16,7 +16,7 @@ const COORD_RE = /^[^:]+:\d+\.\d+$/;
 /** Address could not be resolved. `reason` is `target_not_found` or `target_ambiguous`. */
 export class ResolveError extends Error {
   /**
-   * @param {'target_not_found'|'target_ambiguous'} reason
+   * @param {'target_not_found'|'target_ambiguous'|'duplicate_identity'} reason
    * @param {string} message
    * @param {string} [detail]
    */
@@ -33,6 +33,7 @@ function toTarget(row, address) {
   return {
     address,
     brain: row.brain ?? undefined,
+    brainId: row.brainId ?? undefined,
     account: row.account,
     cli: row.cli,
     paneId: row.paneId,
@@ -40,6 +41,45 @@ function toTarget(row, address) {
     claude: row.claude,
     codex: row.codex,
   };
+}
+
+/**
+ * A record whose id or uuid appears twice is a hard error: refuse to resolve it.
+ * @param {import('../types.js').Brain} brain
+ */
+function assertUniqueIdentity(brain) {
+  const { ids, uuids } = duplicateIdentities();
+  if (ids.includes(brain.id) || (brain.uuid && uuids.includes(brain.uuid))) {
+    throw new ResolveError(
+      'duplicate_identity',
+      `brain ${brain.name} (${brain.id}) has a duplicated id or uuid`,
+      'run sbb doctor and fix ~/.sbb/brains before sending',
+    );
+  }
+}
+
+/**
+ * Re-resolve a registered brain to its live pane.
+ * @param {import('../types.js').Brain} brain
+ * @param {string} address
+ * @param {RosterRow[]} rows
+ * @param {(target: string) => Promise<string>} resolvePaneId
+ * @returns {Promise<Target>}
+ */
+async function resolveBrain(brain, address, rows, resolvePaneId) {
+  assertUniqueIdentity(brain);
+  let paneId;
+  try {
+    paneId = await resolvePaneId(brain.paneId);
+  } catch (err) {
+    throw new ResolveError('target_not_found', `brain "${brain.name}" pane ${brain.paneId} is gone`, String(err?.message ?? err));
+  }
+  if (!paneId) throw new ResolveError('target_not_found', `brain "${brain.name}" pane ${brain.paneId} is gone`);
+  const row = rows.find((r) => r.paneId === paneId);
+  if (!row) {
+    throw new ResolveError('target_not_found', `brain "${brain.name}" pane ${paneId} is not a live CLI session`);
+  }
+  return { ...toTarget(row, address), brain: brain.name, brainId: brain.id };
 }
 
 /**
@@ -58,7 +98,15 @@ export async function resolve(address, opts = {}) {
   const rows = opts.rows
     ?? (await (opts.roster ?? defaultRoster)({ withStatus: false, accounts, onWarn: opts.onWarn }));
 
-  // 3. a bare pane id or coordinate
+  // 0. a brain id: #SMS-0012 (the # is optional, case-insensitive, exact)
+  const asId = normalizeBrainId(raw);
+  if (asId) {
+    const brain = getBrain(asId);
+    if (!brain) throw new ResolveError('target_not_found', `unknown brain id "${asId}"`, 'no brain record');
+    return resolveBrain(brain, raw, rows, resolvePaneId);
+  }
+
+  // 4. a bare pane id or coordinate
   if (PANE_ID_RE.test(raw) || COORD_RE.test(raw)) {
     const row = PANE_ID_RE.test(raw) ? rows.find((r) => r.paneId === raw) : rows.find((r) => r.coord === raw);
     if (!row) throw new ResolveError('target_not_found', `no live CLI session at ${raw}`);
@@ -69,18 +117,7 @@ export async function resolve(address, opts = {}) {
   if (!raw.includes('/') && !raw.includes(':')) {
     const brain = getBrain(raw);
     if (!brain) throw new ResolveError('target_not_found', `unknown brain "${raw}"`, 'no brain record');
-    let paneId;
-    try {
-      paneId = await resolvePaneId(brain.paneId);
-    } catch (err) {
-      throw new ResolveError('target_not_found', `brain "${raw}" pane ${brain.paneId} is gone`, String(err?.message ?? err));
-    }
-    if (!paneId) throw new ResolveError('target_not_found', `brain "${raw}" pane ${brain.paneId} is gone`);
-    const row = rows.find((r) => r.paneId === paneId);
-    if (!row) {
-      throw new ResolveError('target_not_found', `brain "${raw}" pane ${paneId} is not a live CLI session`);
-    }
-    return { ...toTarget(row, raw), brain: brain.name };
+    return resolveBrain(brain, raw, rows, resolvePaneId);
   }
 
   // 2. <account>/<cli>:<name|%pane|session:window.pane>

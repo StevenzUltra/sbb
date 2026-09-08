@@ -5,6 +5,7 @@ import { run as defaultRun } from '../lib/exec.js';
 import { tmux as defaultTmux } from '../lib/tmux.js';
 import { discoverAccounts, usageGuardDb } from '../lib/paths.js';
 import { listClaudeSessions } from '../registry/claude-sessions.js';
+import { duplicateIdentities, listBrains, listRetiredBrains } from '../registry/brains.js';
 import { usageGuardBinary } from '../quota/usage-guard.js';
 import { which as whichBinary } from '../quota/catalog.js';
 import { EXIT, main, parse, writeJson } from './util.js';
@@ -12,7 +13,8 @@ import { EXIT, main, parse, writeJson } from './util.js';
 const USAGE = `usage: sbb doctor [--json]
 
 Prints the tmux server, discovered accounts, live Claude sessions with socket
-connectivity, the Codex binary, and Usage Guard app/database presence.`;
+connectivity, brain id health, the Codex binary, and Usage Guard presence.
+Exit 1 when tmux is unreachable or a brain id/uuid is duplicated.`;
 
 /**
  * @param {string} path
@@ -94,19 +96,25 @@ export async function run(argv, deps = {}) {
       return result.code === 0 ? result.stdout.trim() : `unavailable (${result.stderr.trim().split('\n')[0] || 'not found'})`;
     })();
 
+    const brains = (deps.listBrains ?? listBrains)();
+    const retired = (deps.listRetiredBrains ?? listRetiredBrains)();
+    const duplicates = (deps.duplicateIdentities ?? duplicateIdentities)();
+    const identitiesOk = duplicates.ids.length === 0 && duplicates.uuids.length === 0;
+
     const usageGuardApp = usageGuardBinary(deps.env);
     const usageGuardDbPath = deps.dbPath ?? usageGuardDb();
     const report = {
       tmux: { ok: tmuxOk, socket: tmuxSocket, version: tmuxVersion },
       accounts: accounts.map((a) => ({ name: a.name, claudeDir: a.claudeDir ?? null, codexDir: a.codexDir ?? null })),
       claudeSessions: sessionRows,
+      brains: { live: brains.length, retired: retired.length, duplicates },
       codex: { path: codexPath ?? null, version: codexVersion },
       usageGuard: { app: usageGuardApp ?? null, db: usageGuardDbPath, dbExists: existsSync(usageGuardDbPath) },
     };
 
     if (values.json) {
       writeJson(report);
-      return tmuxOk ? EXIT.OK : EXIT.INTERNAL;
+      return tmuxOk && identitiesOk ? EXIT.OK : EXIT.INTERNAL;
     }
 
     console.log(`tmux        ${tmuxOk ? 'ok' : 'UNREACHABLE'}  socket=${tmuxSocket ?? '-'}${tmuxVersion ? `  ${tmuxVersion}` : ''}`);
@@ -117,8 +125,13 @@ export async function run(argv, deps = {}) {
     for (const row of sessionRows) {
       console.log(`claude      pid=${row.pid}  account=${row.account}  name=${row.name ?? '-'}  status=${row.status ?? '-'}  sock=${row.sock ?? '-'}  connect=${row.connect}`);
     }
+    console.log(
+      identitiesOk
+        ? `brains      live=${brains.length} retired=${retired.length}`
+        : `brains      DUPLICATE ids=${duplicates.ids.join(',') || '-'} uuids=${duplicates.uuids.join(',') || '-'}`,
+    );
     console.log(`codex       ${codexPath ?? '(not on PATH)'}  ${codexVersion}`);
     console.log(`usage-guard app=${usageGuardApp ?? '(not installed)'}  db=${usageGuardDbPath}  dbExists=${existsSync(usageGuardDbPath)}`);
-    return tmuxOk ? EXIT.OK : EXIT.INTERNAL;
+    return tmuxOk && identitiesOk ? EXIT.OK : EXIT.INTERNAL;
   });
 }

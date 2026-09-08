@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { saveBrain } from '../src/registry/brains.js';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { brainsDir } from '../src/lib/paths.js';
 import { ResolveError, resolve } from '../src/registry/resolve.js';
-import { tempDir, withEnv } from './fixtures/registry/helpers.js';
+import { tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
 
 const ACCOUNTS = [
   { name: 'a', baseDir: '/x/.ai-account-a', claudeDir: '/x/.ai-account-a/claude', codexDir: '/x/.ai-account-a/codex' },
@@ -12,7 +14,7 @@ const ACCOUNTS = [
 /** @param {Record<string, any>} over */
 function row(over = {}) {
   return {
-    brain: null, role: null, parent: null, account: 'a', cli: 'claude', model: null,
+    brain: null, brainId: null, role: null, parent: null, account: 'a', cli: 'claude', model: null,
     status: 'idle', where: '24:3.4', name: 'lead', cwd: '/Users/dev/proj',
     paneId: '%30', coord: '24:3.4', pid: 1234, threadId: null, hasRollout: null,
     threadUncertain: false, sock: '/tmp/cc-socks/1234.sock', keyFile: '/tmp/1234.key',
@@ -37,12 +39,10 @@ test('resolve: a brain name re-resolves the pane and keeps the live row data', a
   const home = tempDir();
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: `${home}/.sbb` });
   try {
-    saveBrain({
-      name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude', model: 'claude-fable-5-1',
-      cwd: '/Users/dev/proj', paneId: '%30', coord: '24:3.4', createdAt: Date.now(), origin: 'adopted',
-    });
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead', model: 'claude-fable-5-1' });
     const target = await resolve('lead', deps());
     assert.equal(target.brain, 'lead');
+    assert.equal(target.brainId, 'TST-0001');
     assert.equal(target.account, 'a');
     assert.equal(target.cli, 'claude');
     assert.equal(target.paneId, '%30');
@@ -58,10 +58,7 @@ test('resolve: a brain whose pane is gone is target_not_found, not a guess', asy
   const home = tempDir();
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: `${home}/.sbb` });
   try {
-    saveBrain({
-      name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude',
-      cwd: '/Users/dev/proj', paneId: '%30', createdAt: Date.now(), origin: 'adopted',
-    });
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead' });
     await assert.rejects(
       () => resolve('lead', deps({ resolvePaneId: async () => { throw new Error('no such pane'); } })),
       (err) => err instanceof ResolveError && err.reason === 'target_not_found',
@@ -76,6 +73,44 @@ test('resolve: an unknown brain is target_not_found', async () => {
   const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: `${home}/.sbb` });
   try {
     await assert.rejects(() => resolve('ghost', deps()), (err) => err.reason === 'target_not_found');
+  } finally {
+    restore();
+  }
+});
+
+test('resolve: a brain id resolves like a name, case-insensitively and with #', async () => {
+  const home = tempDir();
+  const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: `${home}/.sbb` });
+  try {
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead' });
+    for (const address of ['#TST-0001', 'TST-0001', 'tst-0001', '#tst-0001']) {
+      const target = await resolve(address, deps());
+      assert.equal(target.brainId, 'TST-0001', address);
+      assert.equal(target.brain, 'lead', address);
+      assert.equal(target.paneId, '%30', address);
+    }
+    await assert.rejects(() => resolve('#TST-9999', deps()), (err) => err instanceof ResolveError && err.reason === 'target_not_found');
+    await assert.rejects(() => resolve('#SMS-1', deps()), (err) => err.reason === 'target_not_found');
+  } finally {
+    restore();
+  }
+});
+
+test('resolve: a duplicated id or uuid is a hard error, not a coin flip', async () => {
+  const home = tempDir();
+  const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: `${home}/.sbb` });
+  try {
+    const brain = writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead' });
+    writeFileSync(join(brainsDir(), 'TST-0001b.json'), `${JSON.stringify({ ...brain, name: 'lead-two', paneId: '%31' })}\n`);
+    await assert.rejects(
+      () => resolve('#TST-0001', deps()),
+      (err) => err instanceof ResolveError && err.reason === 'duplicate_identity',
+    );
+    await assert.rejects(
+      () => resolve('lead', deps()),
+      (err) => err.reason === 'duplicate_identity',
+      'the name path refuses too',
+    );
   } finally {
     restore();
   }

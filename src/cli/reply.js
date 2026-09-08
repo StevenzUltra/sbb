@@ -43,6 +43,7 @@ export async function run(argv, deps = {}) {
       const entry = {
         msgId: newMsgId(),
         from: identity.brain ?? identity.sender,
+        fromId: identity.id ?? null,
         fromAddress: identity.address ?? null,
         fromSock: null,
         replyTo: original.msgId,

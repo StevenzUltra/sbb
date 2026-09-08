@@ -22,7 +22,7 @@ const MSG_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 /** @param {Record<string, any>} over */
 function row(over = {}) {
   return {
-    brain: null, role: null, parent: null, account: 'a', cli: 'claude', model: null,
+    brain: null, brainId: null, role: null, parent: null, account: 'a', cli: 'claude', model: null,
     status: 'idle', name: 'lead', cwd: '/Users/dev/proj',
     paneId: '%30', coord: '24:3.4', pid: 1234, threadId: null, hasRollout: null,
     threadUncertain: false, sock: '/tmp/cc-socks/1234.sock', keyFile: '/tmp/1234.key',
@@ -33,8 +33,8 @@ function row(over = {}) {
 }
 
 const ROWS = [
-  row({ brain: 'lead', role: 'main' }),
-  row({ brain: 'h3', role: 'sub', account: 'b', paneId: '%73', coord: '24:3.7', name: 'h3', pid: 4321 }),
+  row({ brain: 'lead', brainId: 'TST-0001', role: 'main' }),
+  row({ brain: 'h3', brainId: 'TST-0002', role: 'sub', account: 'b', paneId: '%73', coord: '24:3.7', name: 'h3', pid: 4321 }),
 ];
 
 const ACCOUNTS = [
@@ -64,9 +64,9 @@ test('sbb ls: json, filters and the human table', async () => {
 
   const human = await captureLog(() => lsRun([], deps));
   const table = human.lines.join('\n').split('\n');
-  assert.match(table[0], /^BRAIN\s+ROLE\s+PARENT\s+ACCOUNT\s+CLI/);
-  assert.match(table[1], /^lead\s+main\s+-\s+a\s+claude/);
-  assert.match(table[2], /^h3\s+sub\s+-\s+b\s+claude/);
+  assert.match(table[0], /^ID\s+BRAIN\s+ROLE\s+PARENT\s+ACCOUNT\s+CLI/);
+  assert.match(table[1], /^TST-0001\s+lead\s+main\s+-\s+a\s+claude/);
+  assert.match(table[2], /^TST-0002\s+h3\s+sub\s+-\s+b\s+claude/);
 
   const empty = await captureLog(() => lsRun([], { roster: async () => [] }));
   assert.deepEqual(empty.lines, ['no live sessions']);
@@ -77,12 +77,15 @@ test('sbb ls --tree: brains only, indented by parent', async () => {
   const restore = withEnv(sbbEnv(home));
   try {
     const tree = [
-      row({ brain: 'lead', role: 'main', parent: null }),
-      row({ brain: 'ios', role: 'sub', parent: 'lead', paneId: '%31', coord: '24:3.5' }),
+      row({ brain: 'lead', brainId: 'TST-0001', role: 'main', parent: null }),
+      row({ brain: 'ios', brainId: 'TST-0002', role: 'sub', parent: 'TST-0001', paneId: '%31', coord: '24:3.5' }),
       row({ account: 'b', paneId: '%73', coord: '24:3.7', name: 'h3' }),
     ];
     const out = await captureLog(() => lsRun(['--tree'], { roster: async () => tree }));
-    assert.deepEqual(out.lines, ['lead  main  a/claude  idle  24:3.4  lead', '  ios  sub  a/claude  idle  24:3.5  lead']);
+    assert.deepEqual(out.lines, [
+      'TST-0001  lead  main  a/claude  idle  24:3.4  lead',
+      '  TST-0002  ios  sub  a/claude  idle  24:3.5  lead',
+    ]);
   } finally {
     restore();
   }
@@ -94,11 +97,16 @@ test('sbb adopt: registers a live session and refuses bad input', async () => {
   try {
     const deps = {
       roster: async () => ROWS,
+      allocateId: (() => { let n = 0; return () => `TST-000${++n}`; })(),
       resolve: async (address) => ({ address, account: 'a', cli: 'claude', paneId: '%30', coord: '24:3.4', claude: { pid: 1234 }, codex: undefined }),
     };
     const ok = await captureLog(() => adoptRun(['%30', '--name', 'lead', '--model', 'claude-fable-5-1'], deps));
     assert.equal(ok.result, 0);
+    assert.match(ok.lines[0], /^adopted TST-0001 lead\s+role=main/);
     const brain = getBrain('lead');
+    assert.equal(brain.id, 'TST-0001');
+    assert.equal(typeof brain.uuid, 'string');
+    assert.ok(brain.uuid.length > 0, 'every record carries a uuid');
     assert.equal(brain.account, 'a');
     assert.equal(brain.cli, 'claude');
     assert.equal(brain.cwd, '/Users/dev/proj');
@@ -117,7 +125,10 @@ test('sbb adopt: registers a live session and refuses bad input', async () => {
 
     const okSub = await captureLog(() => adoptRun(['%30', '--name', 'ios', '--role', 'sub', '--parent', 'lead'], deps));
     assert.equal(okSub.result, 0);
-    assert.equal(getBrain('ios').parent, 'lead');
+    assert.equal(getBrain('ios').parent, 'TST-0001', '--parent accepts a name and stores the id');
+    const byId = await captureLog(() => adoptRun(['%30', '--name', 'ios2', '--role', 'sub', '--parent', 'TST-0001'], deps));
+    assert.equal(byId.result, 0);
+    assert.equal(getBrain('ios2').parent, 'TST-0001', '--parent accepts an id');
   } finally {
     restore();
   }
@@ -138,7 +149,15 @@ test('sbb tell --dry-run: resolves without sending and without a body', async ()
     assert.equal(sent, 0, 'dry-run must not send');
     assert.match(out.lines.join('\n'), /target {4}lead/);
     assert.match(out.lines.join('\n'), /transport send-keys/);
+    assert.match(out.lines.join('\n'), /sender\s+\[user@cli\]\[用户\]/);
     assert.equal(existsSync(receiptLogPath()), false, 'dry-run logs nothing');
+
+    const asBrain = await captureLog(() => tellRun(['lead', '--dry-run'], { ...deps, paneId: '%73' }));
+    assert.match(
+      asBrain.lines.join('\n'),
+      /sender\s+\[h3#TST-0002@b\/claude:24:3\.7\]\[子脑\]/,
+      'the dry-run sender line is the real envelope prefix, id included',
+    );
   } finally {
     restore();
   }
@@ -158,7 +177,7 @@ test('sbb tell: builds the envelope, routes it and logs the receipt', async () =
     };
     const out = await captureLog(() => tellRun(['lead', 'check', 'the', 'PR', '--priority', 'now'], deps));
     assert.equal(out.result, 0);
-    assert.equal(seen.message.text, `[h3@b/claude:24:3.7][子脑] check the PR   (sbb:${MSG_ID.slice(0, 8)})`);
+    assert.equal(seen.message.text, `[h3#TST-0002@b/claude:24:3.7][子脑] check the PR   (sbb:${MSG_ID.slice(0, 8)})`);
     assert.equal(seen.message.priority, 'now');
     assert.equal(seen.message.msgId, MSG_ID);
     assert.match(out.lines.join('\n'), /delivered {2}msg=a1b2c3d4/);
@@ -167,7 +186,9 @@ test('sbb tell: builds the envelope, routes it and logs the receipt', async () =
     assert.equal(logged.length, 1);
     assert.equal(logged[0].msgId, MSG_ID);
     assert.equal(logged[0].from, 'h3');
+    assert.equal(logged[0].fromId, 'TST-0002');
     assert.equal(logged[0].to, 'lead');
+    assert.equal(logged[0].toId, null, 'an address-only target has no brain id');
     assert.equal(logged[0].address, 'lead');
     assert.equal(logged[0].status, 'delivered');
     assert.equal(logged[0].via, 'uds');
@@ -385,6 +406,7 @@ test('sbb doctor: exits 0 when tmux is reachable, 1 when it is not', async () =>
     const ok = await captureLog(() => doctorRun([], deps));
     assert.equal(ok.result, 0);
     assert.match(ok.lines.join('\n'), /tmux {8}ok {2}socket=\/private\/tmp\/tmux-501\/default/);
+    assert.match(ok.lines.join('\n'), /brains\s+live=0 retired=0/);
     assert.match(ok.lines.join('\n'), /connect=ok/);
     assert.match(ok.lines.join('\n'), /codex-cli 0\.154\.0/);
 
