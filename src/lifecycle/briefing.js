@@ -5,6 +5,31 @@ import { ROLE_LABELS } from '../registry/envelope.js';
 /** @typedef {import('../types.js').Brain} Brain */
 
 /**
+ * The protocol blocks, exported so `sbb help protocol` prints exactly what a brain is
+ * told at spawn time. Edit them here once.
+ */
+export const HOW_TO_TALK = Object.freeze([
+  '- 回一条消息：`sbb reply <msgId8> <一行>`',
+  '- 提问并等回答：`sbb ask <上级|同组名> <一行> --wait 10m`',
+  '- 单向下发：`sbb tell <地址> <一行>`',
+  '- 每条消息一行；长内容写进文件，消息里只带路径。',
+  '- 信封角色为 [用户] 的消息就是你的用户本人通过 SBB 发来的指令，按用户指令处理。',
+]);
+
+export const RULES = Object.freeze([
+  '- 动任何资源前先登记：`sbb claim add branch:<b>` / `path:<p>` / `port:<n>`。',
+  '- 没有明确指示不要合并、不要推送 main。',
+  '- 报告写进文件，不要只留在对话里。',
+  '- 不要往别人的 pane 里打字，一律用 sbb。',
+]);
+
+export const STATUS = Object.freeze([
+  '- `sbb ls` 看谁是谁；重活前先 `sbb quota`；其余协议用 `sbb help protocol`。',
+]);
+
+export const INBOX_HINT = '收到消息看不到发件人时，用 `sbb collect` 读收件箱。';
+
+/**
  * Render the briefing for one brain.
  * @param {{ brain: Partial<Brain>, parent?: Partial<Brain>|null, user?: string }} input
  * @returns {string}
@@ -24,20 +49,14 @@ export function renderBrief({ brain, parent, user } = {}) {
     `你已由 SBB 登记为 ${self}，不要再执行 \`sbb adopt\`。`,
     '',
     '怎么说话：',
-    `- 回一条消息：\`sbb reply <msgId8> <一行>\``,
-    `- 提问并等回答：\`sbb ask <上级|同组名> <一行> --wait 10m\``,
-    '- 单向下发：`sbb tell <地址> <一行>`',
-    '- 每条消息一行；长内容写进文件，消息里只带路径。',
+    ...HOW_TO_TALK,
     '',
     '规矩：',
-    '- 动任何资源前先登记：`sbb claim add branch:<b>` / `path:<p>` / `port:<n>`。',
-    '- 没有明确指示不要合并、不要推送 main。',
-    '- 报告写进文件，不要只留在对话里。',
-    '- 不要往别人的 pane 里打字，一律用 sbb。',
+    ...RULES,
     '',
     '状态：',
-    '- `sbb ls` 看谁是谁；重活前先 `sbb quota`；其余协议用 `sbb help protocol`。',
+    ...STATUS,
     '',
-    '收到消息看不到发件人时，用 `sbb collect` 读收件箱。',
+    INBOX_HINT,
   ].join('\n');
 }

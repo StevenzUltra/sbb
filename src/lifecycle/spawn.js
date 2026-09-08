@@ -8,10 +8,11 @@ import * as tmuxLib from '../lib/tmux.js';
 import { allocateId, newUuid } from '../registry/brain-id.js';
 import { BRAIN_NAME_RE, getBrain, isValidBrainName, listBrains, removeBrain, saveBrain } from '../registry/brains.js';
 import { ROLE_LABELS } from '../registry/envelope.js';
+import { configPath } from '../policy/config.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { readQuota } from '../quota/usage-guard.js';
 import { deliver as defaultDeliver } from '../cli/util.js';
-import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexTrust } from './launch.js';
+import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexTrust, splitArgs } from './launch.js';
 import { renderBrief } from './briefing.js';
 
 /** docs/spec/policy.md: refuse an account below this weekly remaining percent. */
@@ -39,6 +40,45 @@ export function readConfig({ dir, onWarn = (m) => process.stderr.write(`sbb: war
     onWarn(`cannot parse ${path}: ${err?.message ?? err}`);
     return {};
   }
+}
+
+/**
+ * Default `--cli-args` for one CLI, from `~/.sbb/config.json` `spawn.cliArgs[<cli>]`.
+ * Read from the raw file on purpose: `policy/config.js` `mergeConfig` drops unknown keys,
+ * so routing this through `readConfig()` would silently lose the section.
+ * @param {string} cli
+ * @param {{ dir?: string, readFile?: (path: string, enc: string) => string,
+ *           onWarn?: (message: string) => void }} [opts]
+ * @returns {string|undefined}
+ */
+export function spawnCliArgs(cli, { dir, readFile = readFileSync, onWarn } = {}) {
+  const path = configPath({ sbbDir: dir });
+  let raw;
+  try {
+    raw = readFile(path, 'utf8');
+  } catch (err) {
+    if (err?.code !== 'ENOENT') onWarn?.(`cannot read ${path}: ${err?.message ?? err}`);
+    return undefined;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    onWarn?.(`cannot parse ${path}: ${err?.message ?? err}`);
+    return undefined;
+  }
+  const value = parsed?.spawn?.cliArgs?.[cli];
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+/**
+ * Effective extra CLI args, in order: config defaults, explicit `--cli-args`, plan-node
+ * args. Every source is whitespace-split with quotes honoured.
+ * @param {(string|string[]|undefined|null)[]} sources
+ * @returns {string[]}
+ */
+export function mergeCliArgs(sources) {
+  return sources.flatMap((source) => splitArgs(source));
 }
 
 /** @param {Record<string, any>} config */
@@ -81,7 +121,7 @@ function blocked(reason, detail) {
  * @param {{ name: string, role?: 'main'|'sub', parent?: string, account: string,
  *           cli: import('../types.js').CliKind, model?: string, cwd?: string,
  *           brief?: string, briefFile?: string, extraArgs?: string|string[],
- *           split?: boolean, force?: boolean, user?: string }} input
+ *           cliArgs?: string|string[], split?: boolean, force?: boolean, user?: string }} input
  * @param {Record<string, any>} [deps]
  */
 export async function spawnBrain(input = {}, deps = {}) {
@@ -158,11 +198,16 @@ export async function spawnBrain(input = {}, deps = {}) {
     });
   }
   const prepared = (deps.prepareBrief ?? prepareBrief)({ id, brief: briefSource });
+  const cliArgs = mergeCliArgs([
+    (deps.spawnCliArgs ?? spawnCliArgs)(cli, { dir: deps.configDir, onWarn: deps.onWarn }),
+    input.extraArgs,
+    input.cliArgs,
+  ]);
   const command = buildCommand({
     cli,
     model: input.model,
     briefFile: prepared.file,
-    extraArgs: input.extraArgs,
+    extraArgs: cliArgs,
     account,
     name,
     accounts,
@@ -268,7 +313,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     }
   }
 
-  return { brain, notification, quota: quotaNote, briefFile: prepared.file, retiredDuplicates };
+  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, retiredDuplicates };
 }
 
 /**
