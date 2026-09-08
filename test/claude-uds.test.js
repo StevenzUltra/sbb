@@ -170,7 +170,7 @@ test('an unknown peer status is queued with the raw status in detail', async () 
   }
 });
 
-test('a fromSock that peers would ignore is not waited on', async () => {
+test('a fromSock whose name peers would ignore is blocked before any write', async () => {
   const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
   const dir = tmpDir('sbb-inbox-');
   try {
@@ -178,11 +178,28 @@ test('a fromSock that peers would ignore is not waited on', async () => {
     const receipt = await claudeUds.send(targetFor(server), msg({ fromSock: `uds:${join(dir, 'not-a-pid.sock')}` }), {
       verifyTimeoutMs: 5000,
     });
-    assert.equal(receipt.status, 'queued');
-    assert.match(receipt.detail, /not a receivable address/);
+    assert.equal(receipt.status, 'blocked');
+    assert.equal(receipt.reason, 'transport_unavailable');
+    assert.match(receipt.detail, /fromSock name not receivable by peers: not-a-pid.sock/);
     assert.ok(Date.now() - started < 500, 'must not wait for a receipt that can never arrive');
-    await server.waitForFrames(2);
-    assert.equal(server.frames[1].from, `uds:${join(dir, 'not-a-pid.sock')}`);
+    assert.equal(server.frames.length, 0, 'must not write anything');
+  } finally {
+    await server.close();
+    await closeInboxes();
+  }
+});
+
+test('a fromSock that is not a uds: address is blocked before any write', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ fromSock: join(dir, '123.sock') }), {
+      verifyTimeoutMs: 1000,
+    });
+    assert.equal(receipt.status, 'blocked');
+    assert.equal(receipt.reason, 'transport_unavailable');
+    assert.match(receipt.detail, /fromSock must be a uds: address/);
+    assert.equal(server.frames.length, 0, 'must not write anything');
   } finally {
     await server.close();
     await closeInboxes();

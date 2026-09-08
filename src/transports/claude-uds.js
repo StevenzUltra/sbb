@@ -67,15 +67,22 @@ function readPeerToken(keyFile) {
 }
 
 /**
- * A `from` address is only useful when its socket name is one peers accept.
+ * A `from` address is only useful when it is a `uds:` address whose socket name peers
+ * accept; anything else means the receipt can never come back to us.
  * @param {string|undefined} fromSock
+ * @returns {{ present: boolean, receivable: boolean, address?: string, path?: string, detail?: string }}
  */
 function normalizeFrom(fromSock) {
-  if (typeof fromSock !== 'string' || !fromSock.startsWith(FROM_PREFIX)) {
-    return { receivable: false, address: undefined, path: undefined };
+  if (typeof fromSock !== 'string' || fromSock === '') return { present: false, receivable: false };
+  if (!fromSock.startsWith(FROM_PREFIX)) {
+    return { present: true, receivable: false, detail: `fromSock must be a uds: address: ${fromSock}` };
   }
   const path = fromSock.slice(FROM_PREFIX.length);
-  return { receivable: SOCK_NAME_RE.test(basename(path)), address: fromSock, path };
+  const name = basename(path);
+  if (!SOCK_NAME_RE.test(name)) {
+    return { present: true, receivable: false, detail: `fromSock name not receivable by peers: ${name}` };
+  }
+  return { present: true, receivable: true, address: fromSock, path };
 }
 
 /** @param {string} token */
@@ -223,6 +230,10 @@ export const claudeUds = {
     }
 
     const from = normalizeFrom(message.fromSock);
+    if (from.present && !from.receivable) {
+      // The caller asked us to listen where we cannot: a configuration error, not a queue.
+      return finish('blocked', 'transport_unavailable', from.detail);
+    }
     /** @type {Inbox|undefined} */
     let inbox;
     if (from.receivable) {
@@ -252,12 +263,8 @@ export const claudeUds = {
 
     let receipt;
     if (!from.receivable) {
-      // Nothing will ever come back: either no from address at all, or one peers ignore.
-      receipt = finish(
-        'queued',
-        undefined,
-        message.fromSock ? `fromSock is not a receivable address: ${message.fromSock}` : undefined,
-      );
+      // No from address at all: nothing confirmed the message, but it was written.
+      receipt = finish('queued');
     } else {
       const timeoutMs = opts.verifyTimeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
       const frame = await waitForStatus(inbox, message.msgId, timeoutMs);
