@@ -1,5 +1,5 @@
 // sbb policy: inspect and edit ~/.sbb/config.json. docs/spec/policy.md "sbb policy".
-import { getBrain } from '../registry/brains.js';
+import { BRAIN_CLIS, getBrain } from '../registry/brains.js';
 import { PEER_MODES, readConfig, updateConfig } from '../policy/config.js';
 import { EXIT, UsageError, main, parse, renderTable, writeJson } from './util.js';
 
@@ -8,7 +8,8 @@ const USAGE = `usage: sbb policy show [--json]
        sbb policy set <id|name> [--peers on|off] [--autonomous on|off]
        sbb policy allow <a> <b>
        sbb policy deny <a> <b>
-       sbb policy quota [--floor-weekly <n>] [--main-reserve <n>]`;
+       sbb policy quota [--floor-weekly <n>] [--main-reserve <n>]
+       sbb policy spawn-args <cli> "<args>"`;
 
 const OPTIONS = {
   json: { type: 'boolean' },
@@ -41,6 +42,9 @@ function brainIdFor(ref) {
 
 export async function run(argv, deps = {}) {
   return main(async () => {
+    // `<args>` may start with `-`, which strict parseArgs reads as another option
+    // (`--permission-mode bypassPermissions`). This subcommand takes its tail verbatim.
+    if (argv[0] === 'spawn-args') return spawnArgsCommand(argv.slice(1), deps);
     const { values, positionals } = parse(argv, OPTIONS);
     if (values.help) {
       console.log(USAGE);
@@ -60,6 +64,8 @@ export async function run(argv, deps = {}) {
       console.log(`machineTag  ${config.machineTag}`);
       console.log(`peers       ${config.peers}`);
       console.log(`quota       floorWeekly=${config.quota.floorWeekly} mainReserve=${config.quota.mainReserve}`);
+      const spawnEntries = Object.entries(config.spawn.cliArgs);
+      console.log(`spawn       ${spawnEntries.length ? spawnEntries.map(([cli, text]) => `${cli}=${text}`).join(', ') : '-'}`);
       console.log(`allow       ${config.allow.length ? config.allow.map(([a, b]) => `${a} <-> ${b}`).join(', ') : '-'}`);
       const brains = Object.entries(config.brains);
       console.log(`brains      ${brains.length ? brains.map(([id, e]) => `${id}${e.peers ? ` peers=${e.peers}` : ''}${e.autonomous ? ' autonomous' : ''}`).join(', ') : '-'}`);
@@ -136,6 +142,33 @@ export async function run(argv, deps = {}) {
 
     throw new UsageError(`unknown policy subcommand "${sub}"`);
   });
+}
+
+/**
+ * `sbb policy spawn-args <cli> "<args>"` writes `spawn.cliArgs[<cli>]`; an empty string
+ * removes the entry. The tail is taken verbatim so values starting with `-` survive.
+ * @param {string[]} tail @param {{ updateConfig?: Function, sbbDir?: string, hostname?: string }} deps
+ */
+function spawnArgsCommand(tail, deps) {
+  if (tail.includes('-h') || tail.includes('--help')) {
+    console.log('usage: sbb policy spawn-args <cli> "<args>"   (an empty string removes the entry)');
+    return EXIT.OK;
+  }
+  const cli = tail[0];
+  if (!cli) throw new UsageError('policy spawn-args needs <cli> "<args>"');
+  if (!BRAIN_CLIS.includes(cli)) throw new UsageError(`policy spawn-args: unknown cli "${cli}" (${BRAIN_CLIS.join('|')})`);
+  const rest = tail.slice(1);
+  const text = (rest[0] === '--' ? rest.slice(1) : rest).join(' ').trim();
+  const writeCfg = deps.updateConfig ?? updateConfig;
+  const config = writeCfg((current) => {
+    const cliArgs = { ...current.spawn.cliArgs };
+    if (text === '') delete cliArgs[cli];
+    else cliArgs[cli] = text;
+    return { ...current, spawn: { ...current.spawn, cliArgs } };
+  }, { sbbDir: deps.sbbDir, hostname: deps.hostname });
+  const value = config.spawn.cliArgs[cli];
+  console.log(value === undefined ? `spawn.cliArgs.${cli} removed` : `spawn.cliArgs.${cli}=${value}`);
+  return EXIT.OK;
 }
 
 /** @param {Record<string, any>[]} holds */

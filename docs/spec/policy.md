@@ -10,7 +10,8 @@
   "peers": "on",
   "brains": { "SSL-0007": { "peers": "off", "autonomous": true } },
   "allow": [["SSL-0012", "SSL-0015"]],
-  "quota": { "floorWeekly": 10, "mainReserve": 20 }
+  "quota": { "floorWeekly": 10, "mainReserve": 20 },
+  "spawn": { "cliArgs": { "claude": "--permission-mode bypassPermissions" } }
 }
 ```
 
@@ -23,6 +24,9 @@
   below this percent unless `--force` (`blocked` reason `quota`). `mainReserve`: `spawn` of a
   sub brain refuses to use an account that hosts a main brain when that account is below this
   percent (`blocked` reason `quota`, detail says which main brain).
+- `spawn.cliArgs.<cli>`: default extra flags for `sbb spawn` of that CLI, written by
+  `sbb policy spawn-args` and passed through as `--cli-args=<text>` (whitespace-split by
+  `sbb spawn`; a plan node's own `cliArgs` is appended after them). Blank entries are dropped.
 
 ## Who may talk to whom
 
@@ -58,6 +62,7 @@ sbb policy peers on|off|moderated
 sbb policy set <id|name> --peers on|off | --autonomous on|off
 sbb policy allow <a> <b>   |   sbb policy deny <a> <b>
 sbb policy quota --floor-weekly <n> | --main-reserve <n>
+sbb policy spawn-args <cli> "<args>"     -> spawn.cliArgs[<cli>]; an empty string removes it
 ```
 
 ## Claims
