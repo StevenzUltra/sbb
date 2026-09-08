@@ -9,8 +9,6 @@ import { listClaudeSessions } from '../registry/claude-sessions.js';
 import { listCodexThreads } from '../registry/codex-threads.js';
 import { collapse, profileFor, probeOf } from '../transports/cli-profiles.js';
 
-/** A brief longer than this goes to a file; the pane gets a two-line pointer instead. */
-export const BRIEF_FILE_LIMIT = 6000;
 export const DEFAULT_READY_TIMEOUT_MS = 60000;
 export const DEFAULT_READY_POLL_MS = 1000;
 /** Grace period for a Codex thread's `updated_at_ms` against clock skew. */
@@ -114,31 +112,34 @@ export function resolveAccount(account, accounts) {
 }
 
 /**
- * Write a long brief to ~/.sbb/briefs/<id>.md and return the two-line pointer the pane
- * gets instead of the full text.
- * @param {{ id: string, brief: string, dir?: string, limit?: number }} input
- * @returns {{ brief: string, file?: string }}
+ * Write the brief to ~/.sbb/briefs/<id>.md and return the path. The pane command
+ * references this file, so the text never travels through an interactive shell prompt.
+ * @param {{ id: string, brief: string, dir?: string }} input
+ * @returns {{ brief: string, file: string }}
  */
-export function prepareBrief({ id, brief, dir, limit = BRIEF_FILE_LIMIT }) {
+export function prepareBrief({ id, brief, dir } = {}) {
   const text = String(brief ?? '');
-  if (text.length <= limit) return { brief: text };
   const target = dir ?? join(sbbDir(), 'briefs');
   mkdirSync(target, { recursive: true, mode: 0o700 });
   const file = join(target, `${id}.md`);
   writeFileSync(file, `${text}\n`, { mode: 0o600 });
-  return { brief: `简报文件：${file}\n先读该文件再开始工作。`, file };
+  return { brief: text, file };
 }
 
 /**
- * Build the command that starts one CLI in a fresh pane.
- * @param {{ cli: import('../types.js').CliKind, model?: string, brief?: string,
+ * Build the command that starts one CLI in a fresh pane. The CLI reads the brief itself:
+ * `claude --append-system-prompt-file <file>`, and `"$(cat <file>)"` as the prompt for
+ * codex / agy / cursor. `paneCommand` is what tmux runs directly, so a multi-kilobyte
+ * brief never has to be typed into an interactive shell (docs/spec/lifecycle.md step 4).
+ * @param {{ cli: import('../types.js').CliKind, model?: string, briefFile: string,
  *           extraArgs?: string|string[], account: string|import('../types.js').Account,
  *           name?: string, accounts?: import('../types.js').Account[] }} input
- * @returns {{ env: Record<string,string>, argv: string[], shellLine: string }}
+ * @returns {{ env: Record<string,string>, argv: string[], shellLine: string, paneCommand: string[] }}
  */
-export function buildCommand({ cli, model, brief, extraArgs, account, name, accounts } = {}) {
+export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts } = {}) {
   const binary = CLI_BINARIES[cli];
   if (!binary) throw new Error(`unknown cli "${cli}"`);
+  if (!briefFile) throw new Error('buildCommand: briefFile is required');
   const acct = resolveAccount(account, accounts);
 
   /** @type {Record<string,string>} */
@@ -151,22 +152,34 @@ export function buildCommand({ cli, model, brief, extraArgs, account, name, acco
   }
 
   const extra = splitArgs(extraArgs);
+  const briefArg = `$(cat ${shellQuote(briefFile)})`;
   /** @type {string[]} */
   const argv = [binary];
+  /** @type {string[]} */
+  const shellArgs = [shellQuote(binary)];
+  /** @param {string} value @param {string} [rendered] */
+  const push = (value, rendered) => {
+    argv.push(value);
+    shellArgs.push(rendered ?? shellQuote(value));
+  };
   if (model) {
-    if (cli === 'codex') argv.push('-m', model);
-    else argv.push('--model', model);
+    if (cli === 'codex') { push('-m'); push(model); } else { push('--model'); push(model); }
   }
-  if (brief) {
-    if (cli === 'claude') argv.push('--append-system-prompt', brief);
-    else if (cli === 'agy') argv.push('--prompt-interactive', brief);
-    else argv.push(brief); // codex and cursor take the brief as their first prompt
+  if (cli === 'claude') {
+    push('--append-system-prompt-file');
+    push(briefFile);
+  } else if (cli === 'agy') {
+    push('--prompt-interactive');
+    push(briefArg, `"$(cat ${shellQuote(briefFile)})"`);
+  } else {
+    // codex and cursor take the brief as their first prompt
+    push(briefArg, `"$(cat ${shellQuote(briefFile)})"`);
   }
-  argv.push(...extra);
+  for (const arg of extra) push(arg);
 
   const assignments = Object.entries(env).map(([key, value]) => shellQuote(`${key}=${value}`));
-  const shellLine = ['exec', ...(assignments.length ? ['env', ...assignments] : []), ...argv.map(shellQuote)].join(' ');
-  return { env, argv, shellLine };
+  const shellLine = ['exec', ...(assignments.length ? ['env', ...assignments] : []), ...shellArgs].join(' ');
+  return { env, argv, shellLine, paneCommand: ['sh', '-c', shellLine] };
 }
 
 /**

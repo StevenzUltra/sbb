@@ -161,7 +161,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   const command = buildCommand({
     cli,
     model: input.model,
-    brief: prepared.brief,
+    briefFile: prepared.file,
     extraArgs: input.extraArgs,
     account,
     name,
@@ -171,9 +171,11 @@ export async function spawnBrain(input = {}, deps = {}) {
   const tmuxApi = deps.tmuxApi ?? tmuxLib;
   let paneId;
   try {
+    // The CLI is the pane command: nothing is typed into an interactive shell, so a
+    // multi-kilobyte brief cannot stall behind the shell's completion or paste handling.
     paneId = input.split
-      ? await tmuxApi.tmux(['split-window', '-c', cwd, '-P', '-F', '#{pane_id}'])
-      : await tmuxApi.tmux(['new-window', '-n', `ai-${accountName}`, '-c', cwd, '-P', '-F', '#{pane_id}']);
+      ? await tmuxApi.tmux(['split-window', '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand])
+      : await tmuxApi.tmux(['new-window', '-n', `ai-${accountName}`, '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand]);
   } catch (err) {
     return blocked('tmux_failed', `cannot create a pane: ${err?.message ?? err}`);
   }
@@ -185,11 +187,9 @@ export async function spawnBrain(input = {}, deps = {}) {
     const options = [['@ai_account', accountName], ['@sbb_brain', id]];
     if (account.codexDir) options.push(['@codex_home', account.codexDir]);
     for (const [key, value] of options) await tmuxApi.tmux(['set-option', '-p', '-t', paneId, key, value]);
-    await tmuxApi.sendLiteral(paneId, command.shellLine);
-    await tmuxApi.sendKey(paneId, 'Enter');
   } catch (err) {
     const cleanup = await killPane(tmuxApi, paneId);
-    return { ...blocked('tmux_failed', `cannot start the CLI: ${err?.message ?? err}${cleanup}`), paneId };
+    return { ...blocked('tmux_failed', `cannot configure the pane: ${err?.message ?? err}${cleanup}`), paneId };
   }
 
   const ready = await (deps.awaitReady ?? defaultAwaitReady)(
