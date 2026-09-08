@@ -129,6 +129,7 @@ function userLine(message, content) {
     msg_id: message.msgId,
     priority: message.priority ?? 'next',
   };
+  if (message.replyTo) frame.reply_to = message.replyTo;
   if (message.fromSock) frame.from = message.fromSock;
   return `${JSON.stringify(frame)}\n`;
 }

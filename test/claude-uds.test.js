@@ -201,6 +201,38 @@ test('notes that fromName cannot be wrapped without a fromSock', async () => {
   }
 });
 
+test('adds reply_to to the user frame when the message replies to a msgId', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  const fromSock = fromIn(dir);
+  const replyTo = 'f0e1d2c3b4a5968778695a4b3c2d1e0f';
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ text: 'ping', fromSock, replyTo }), {
+      verifyTimeoutMs: 1000,
+    });
+    assert.equal(receipt.status, 'delivered');
+    await server.waitForFrames(2);
+    assert.equal(
+      server.raw.split('\n')[1],
+      `{"type":"user","message":{"role":"user","content":"ping"},"msg_id":"${MSG_ID}","priority":"next","reply_to":"${replyTo}","from":"${fromSock}"}`,
+    );
+  } finally {
+    await server.close();
+    await closeInboxes();
+  }
+});
+
+test('omits reply_to when the message has none', async () => {
+  const server = await startFakeClaudeServer();
+  try {
+    await claudeUds.send(targetFor(server), msg({ text: 'ping' }), {});
+    await server.waitForFrames(2);
+    assert.equal('reply_to' in server.frames[1], false);
+  } finally {
+    await server.close();
+  }
+});
+
 test('maps a delivered receipt', async () => {
   const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
   const dir = tmpDir('sbb-inbox-');
