@@ -64,9 +64,11 @@
  */
 
 /**
- * A brain record persisted at ~/.sbb/brains/<name>.json.
+ * A brain record persisted at ~/.sbb/brains/<id>.json (retired ones under _retired/).
  * @typedef {Object} Brain
- * @property {string} name          unique, [a-z0-9][a-z0-9-]{0,39}
+ * @property {string} id            immutable, unique per machine, never reused: '<TAG>-<seq>' e.g. 'SMS-0012'
+ * @property {string} uuid          global identity (UUID v7 or randomUUID), never reused
+ * @property {string} name          alias, unique among live brains, [a-z0-9][a-z0-9-]{0,39}
  * @property {'main'|'sub'} role
  * @property {string|null} parent   brain name; null for main brains (parent is the user)
  * @property {string} account
@@ -78,6 +80,7 @@
  * @property {number|undefined} pid   CLI process pid when known
  * @property {number} createdAt     epoch ms
  * @property {'spawned'|'adopted'} origin
+ * @property {number|undefined} retiredAt  epoch ms once killed/forgotten; record lives in _retired/
  */
 
 /**
