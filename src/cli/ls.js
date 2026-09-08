@@ -2,12 +2,14 @@
 import { homedir } from 'node:os';
 import { getBrain } from '../registry/brains.js';
 import { roster as defaultRoster } from '../registry/roster.js';
+import { conflictedBrainIds } from '../policy/claims.js';
 import { EXIT, main, parse, renderTable, writeJson } from './util.js';
 
-const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>]
+const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>] [--claims]
 
 Rows are live CLI sessions across every account. An id (#SMS-0012) or a brain name
-prints that one row. --tree prints brains only, indented by parent.`;
+prints that one row. --tree prints brains only, indented by parent. --claims marks rows
+whose brain holds a claim conflicting with another brain with a leading !.`;
 
 const HEADERS = ['ID', 'BRAIN', 'ROLE', 'PARENT', 'ACCOUNT', 'CLI', 'MODEL', 'STATUS', 'WHERE', 'NAME/THREAD', 'CWD'];
 
@@ -15,6 +17,17 @@ const HEADERS = ['ID', 'BRAIN', 'ROLE', 'PARENT', 'ACCOUNT', 'CLI', 'MODEL', 'ST
 function shortCwd(cwd) {
   const home = homedir();
   return cwd?.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd ?? '-';
+}
+
+/**
+ * A brain whose pane disappeared is `gone` (docs/spec/lifecycle.md), not `stale`.
+ * A brain waiting for its turn under `sbb move --after-idle` shows where it is headed.
+ * @param {import('../registry/roster.js').RosterRow} row
+ */
+function statusCell(row) {
+  const base = row.paneId === null ? 'gone' : row.status;
+  const pending = row.brainId ? getBrain(row.brainId)?.pendingMove : undefined;
+  return pending?.to ? `${base} -> ${pending.to}` : base;
 }
 
 /** @param {import('../registry/roster.js').RosterRow} row */
@@ -25,8 +38,6 @@ function nameCell(row) {
 
 /** @param {import('../registry/roster.js').RosterRow} row */
 function toCells(row) {
-  // A brain waiting for its turn under `sbb move --after-idle` shows where it is headed.
-  const pending = row.brainId ? getBrain(row.brainId)?.pendingMove : undefined;
   return [
     row.brainId,
     row.brain,
@@ -35,7 +46,7 @@ function toCells(row) {
     row.account,
     row.cli,
     row.model,
-    pending?.to ? `${row.status} -> ${pending.to}` : row.status,
+    statusCell(row),
     row.where,
     nameCell(row),
     shortCwd(row.cwd),
@@ -55,7 +66,7 @@ function printTree(rows) {
   /** @param {string|null} parent @param {number} depth */
   const walk = (parent, depth) => {
     for (const row of children.get(parent) ?? []) {
-      const detail = `${row.account}/${row.cli}  ${row.status}  ${row.where}`;
+      const detail = `${row.account}/${row.cli}  ${statusCell(row)}  ${row.where}`;
       console.log(`${'  '.repeat(depth)}${row.brainId}  ${row.brain}  ${row.role}  ${detail}${row.name ? `  ${row.name}` : ''}`);
       walk(row.brainId, depth + 1);
     }
@@ -70,6 +81,7 @@ export async function run(argv, deps = {}) {
       tree: { type: 'boolean' },
       account: { type: 'string' },
       cli: { type: 'string' },
+      claims: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     });
     if (values.help) {
@@ -114,6 +126,10 @@ export async function run(argv, deps = {}) {
     if (filtered.length === 0) {
       console.log('no live sessions');
       return EXIT.OK;
+    }
+    if (values.claims) {
+      const conflicted = (deps.conflictedBrainIds ?? conflictedBrainIds)({ sbbDir: deps.sbbDir });
+      filtered = filtered.map((r) => (conflicted.has(r.brainId) ? { ...r, brainId: `!${r.brainId}` } : r));
     }
     console.log(renderTable(HEADERS, filtered.map(toCells)));
     return EXIT.OK;

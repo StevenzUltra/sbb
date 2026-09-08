@@ -102,6 +102,29 @@ export async function selfPane() {
   return panes.find((p) => p.paneId === id) ?? (line ? undefined : undefined);
 }
 
+/**
+ * Socket path of the tmux server this process talks to, or null outside tmux. `$TMUX` already
+ * names it as `<socket path>,<server pid>,<session id>` and costs no child process; only
+ * `SBB_TMUX_ARGS` (which may point at another server) forces a tmux query. Cached per env so
+ * repeated sends do not spawn tmux again.
+ * @returns {Promise<string|null>}
+ */
+let serverPathCache = { key: null, path: null };
+export async function serverSocketPath() {
+  const key = `${process.env.TMUX ?? ''}|${process.env.SBB_TMUX_ARGS ?? ''}`;
+  if (serverPathCache.key === key) return serverPathCache.path;
+  let path = (process.env.TMUX ?? '').split(',')[0] || null;
+  if (process.env.SBB_TMUX_ARGS) {
+    try {
+      path = (await tmux(['display-message', '-p', '#{socket_path}'])) || null;
+    } catch {
+      path = null;
+    }
+  }
+  serverPathCache = { key, path };
+  return path;
+}
+
 /** @param {string} paneId */
 export async function selectPane(paneId) {
   await tmux(['select-window', '-t', paneId]);

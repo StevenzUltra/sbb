@@ -1,9 +1,44 @@
-// sbb switch: M2, see docs/spec/. Owner per docs/tasks/m2-*.md.
-export async function run(argv) {
-  if (argv.includes('--help') || argv.includes('-h')) {
-    console.log('usage: sbb switch [options]  (see docs/spec/)');
-    return 0;
-  }
-  console.error('sbb switch: not implemented yet (M2)');
-  return 1;
+// sbb switch: focus a brain's pane in tmux. docs/spec/lifecycle.md.
+import { saveBrain } from '../registry/brains.js';
+import { switchTo } from '../lifecycle/switch.js';
+import { EXIT, main, parse, UsageError, writeJson } from './util.js';
+
+const USAGE = `usage: sbb switch <id|name|#id>
+
+Focuses the brain's current pane (select-window + select-pane), switching the client
+first when it is attached to another session. Exit 4 when the pane is gone.`;
+
+export async function run(argv, deps = {}) {
+  return main(async () => {
+    const { values, positionals } = parse(argv, {
+      json: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    });
+    if (values.help) {
+      console.log(USAGE);
+      return EXIT.OK;
+    }
+    if (positionals.length !== 1) throw new UsageError('switch needs exactly one <id|name>');
+
+    const result = await (deps.switchTo ?? switchTo)(positionals[0], deps);
+    if (result.blocked) {
+      console.error(`sbb: blocked: ${result.blocked.reason}: ${result.blocked.detail}`);
+      return EXIT.BLOCKED;
+    }
+    if (result.gone) {
+      console.error(`sbb: brain ${result.brain.id} ${result.brain.name} ${result.detail}`);
+      // Persist the gone pane (docs/spec/lifecycle.md): `sbb ls` then reports `gone`
+      // instead of a stale coordinate.
+      try {
+        (deps.saveBrain ?? saveBrain)({ ...result.brain, paneId: null });
+        console.error('sbb: record marked paneId=null');
+      } catch (err) {
+        console.error(`sbb: cannot mark paneId=null: ${err?.message ?? err}`);
+      }
+      return EXIT.BLOCKED;
+    }
+    if (values.json) writeJson(result);
+    else console.log(`switched ${result.brain.id} ${result.brain.name} ${result.coord}`);
+    return EXIT.OK;
+  });
 }
