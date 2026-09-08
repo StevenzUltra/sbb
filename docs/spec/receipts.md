@@ -71,3 +71,10 @@ blocked    msg=9c01d2aa  via=send-keys  reason=pane_in_copy_mode
 
 `--json` prints the Receipt object. Exit codes: 0 delivered/queued, 3 unverified, 4 blocked,
 2 usage error, 1 internal error.
+
+## `via` values
+
+`uds` (Claude socket), `uds+screen` (socket accepted, then confirmed on the target's screen),
+`codex-queue`, `codex-queue+screen`, `send-keys`, `uds-inbox` (a `sbb reply` written straight
+into the waiting `ask`/`tell` process's inbox socket; no protocol ack exists on that path, so it
+is always `queued` until the inbox answers with its own status frame, planned for M2).
