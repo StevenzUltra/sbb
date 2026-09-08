@@ -85,7 +85,7 @@ A brain proposes staffing with a JSON file:
 
 ```json
 { "parent": "SSL-0007", "reason": "…", "brains": [
-  { "name": "ios", "role": "sub", "account": "b", "cli": "claude", "model": "claude-sonnet-5", "reason": "…", "load": "medium" } ] }
+  { "name": "ios", "role": "sub", "account": "b", "cli": "claude", "model": "claude-sonnet-5", "cliArgs": "--permission-mode bypassPermissions", "reason": "…", "load": "medium" } ] }
 ```
 
 ```
@@ -97,7 +97,9 @@ sbb plan reject <planId> --reason <text>  -> status rejected, proposer notified
 
 Proposer must be the `parent` or its ancestor; a parent marked `autonomous` may `approve`
 its own plan (that is what "autonomous" means). `plan approve` shells out to `sbb spawn` for
-each node so lifecycle code stays in one place.
+each node so lifecycle code stays in one place. An optional per-node `cliArgs` string is
+passed through as `sbb spawn --cli-args` (whitespace-split, quotes honoured), so a plan can
+start its brains with flags such as `--permission-mode bypassPermissions`.
 
 ## sbb account
 

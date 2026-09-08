@@ -17,6 +17,7 @@ import {
   parseSpawnOutput,
   rejectPlan,
   resultPath,
+  spawnArgs,
 } from '../src/policy/plans.js';
 import { listInbox } from '../src/registry/inbox.js';
 import { getBrain } from '../src/registry/brains.js';
@@ -291,6 +292,71 @@ test('rejectPlan records who rejected and why', () => {
     assert.equal(rejected.decidedAt, 1234);
     assert.equal(getPlan(plan.planId).plan.rejectionReason, 'too many brains');
     assert.ok(PlanError.prototype instanceof Error);
+  } finally {
+    restore();
+  }
+});
+
+test('normalizePlan keeps an optional cliArgs string and rejects other types', () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    team();
+    const base = planFixture();
+    const withArgs = normalizePlan(
+      { ...base, brains: [{ ...base.brains[0], cliArgs: '--permission-mode bypassPermissions' }] },
+      { getBrain, accounts: ACCOUNTS },
+    );
+    assert.equal(withArgs.brains[0].cliArgs, '--permission-mode bypassPermissions');
+    assert.equal(normalizePlan(base, { getBrain, accounts: ACCOUNTS }).brains[0].cliArgs, undefined, 'absent by default');
+    const blank = normalizePlan(
+      { ...base, brains: [{ ...base.brains[0], cliArgs: '   ' }] },
+      { getBrain, accounts: ACCOUNTS },
+    );
+    assert.equal(blank.brains[0].cliArgs, undefined, 'blank cliArgs is dropped, not spawned');
+    assert.throws(
+      () => normalizePlan({ ...base, brains: [{ ...base.brains[0], cliArgs: ['--x'] }] }, { getBrain, accounts: ACCOUNTS }),
+      /cliArgs must be a string/,
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('spawnArgs carries cliArgs as --cli-args for sbb spawn', () => {
+  const node = { name: 'fe-a', role: 'sub', account: 'a', cli: 'claude', parent: 'TST-0001', cwd: '/tmp/proj' };
+  const withArgs = spawnArgs({ ...node, cliArgs: '--permission-mode bypassPermissions' });
+  const at = withArgs.indexOf('--cli-args');
+  assert.ok(at !== -1, `the flag is passed: ${withArgs.join(' ')}`);
+  assert.equal(withArgs[at + 1], '--permission-mode bypassPermissions');
+  assert.equal(withArgs.filter((a) => a === '--cli-args').length, 1, 'exactly once');
+  assert.ok(!spawnArgs(node).includes('--cli-args'), 'no flag without cliArgs');
+});
+
+test('approvePlan hands each node its cliArgs to the spawn runner', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    team();
+    const input = planFixture();
+    input.brains[0].cliArgs = '--permission-mode bypassPermissions';
+    const plan = createPlan(input, { proposer: null, getBrain, accounts: ACCOUNTS });
+    const seen = [];
+    const { plan: done } = await approvePlan(plan, {
+      approver: null,
+      config: mergeConfig({}),
+      rows: [{ account: 'a', window: 'weekly', remaining: 90 }, { account: 'b', window: 'weekly', remaining: 90 }],
+      brains: [],
+      spawn: async (node) => {
+        seen.push([node.name, node.cliArgs]);
+        return { code: 0, stdout: `spawned TST-0009 ${node.name} 24:3.9`, stderr: '' };
+      },
+      getBrain,
+      accounts: ACCOUNTS,
+    });
+    assert.equal(done.status, 'approved');
+    assert.deepEqual(seen[0], ['fe-a', '--permission-mode bypassPermissions']);
+    assert.equal(seen[1][1], undefined, 'a node without cliArgs stays untouched');
   } finally {
     restore();
   }
