@@ -14,8 +14,9 @@ export function screen(name) {
 
 /**
  * @param {{ paneId?: string, coord?: string, key?: string, clientSession?: string,
+ *           clients?: { tty: string, session: string }[],
  *           screens?: string[], panes?: Record<string, any>[],
- *           exitAfterEnter?: boolean, failNewWindow?: boolean }} [opts]
+ *           exitAfterEnter?: boolean, failNewWindow?: boolean, failListClients?: boolean }} [opts]
  */
 export function createFakeTmux(opts = {}) {
   const paneId = opts.paneId ?? '%30';
@@ -66,6 +67,10 @@ export function createFakeTmux(opts = {}) {
     },
     async listPanes() {
       return panes;
+    },
+    async listClients() {
+      if (opts.failListClients) throw new Error('no server running');
+      return opts.clients ?? [];
     },
     async resolvePaneId() {
       if (!panes.some((p) => p.paneId === paneId)) throw new Error(`can't find pane ${paneId}`);

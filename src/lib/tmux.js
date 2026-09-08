@@ -125,6 +125,22 @@ export async function serverSocketPath() {
   return path;
 }
 
+const CLIENT_FORMAT = ['#{client_tty}', '#{client_session}'].join('\t');
+
+/**
+ * Every attached tmux client. `sbb switch` uses this to move only the caller's own
+ * client, never whatever client was most recently active.
+ * @returns {Promise<{tty: string, session: string}[]>}
+ */
+export async function listClients() {
+  const out = await tmux(['list-clients', '-F', CLIENT_FORMAT]);
+  if (!out) return [];
+  return out.split('\n').map((line) => {
+    const [tty, session] = line.split('\t');
+    return { tty, session };
+  });
+}
+
 /** @param {string} paneId */
 export async function selectPane(paneId) {
   await tmux(['select-window', '-t', paneId]);
