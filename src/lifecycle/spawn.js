@@ -12,8 +12,9 @@ import { readConfig as readPolicyConfig } from '../policy/config.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { findSpawnedThread } from '../registry/codex-threads.js';
 import { readQuota } from '../quota/usage-guard.js';
-import { deliver as defaultDeliver } from '../cli/util.js';
-import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexTrust, splitArgs } from './launch.js';
+import { deliver as defaultDeliver, openDeliveryInbox } from '../cli/util.js';
+import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexDefaultModel, readCodexTrust, splitArgs } from './launch.js';
+import { closeInboxes } from '../transports/claude-uds.js';
 import { renderBrief } from './briefing.js';
 
 /** docs/spec/policy.md: refuse an account below this weekly remaining percent. */
@@ -167,6 +168,23 @@ export async function spawnBrain(input = {}, deps = {}) {
     }
   }
 
+  // Codex merges the project's `.codex/config.toml` over the account's config, so a spawn
+  // without --model would run whatever the cwd asks for (2026-09-09: account c was refused
+  // by its endpoint for a project-level gpt-6-astra). Pass the account's own top-level
+  // model explicitly, and record the model that actually runs.
+  let model = input.model;
+  let modelSource = input.model ? 'flag' : undefined;
+  if (cli === 'codex' && !model) {
+    const accountModel = (deps.readCodexDefaultModel ?? readCodexDefaultModel)({ dir: account.codexDir });
+    if (accountModel.detail) {
+      (deps.onWarn ?? ((message) => process.stderr.write(`sbb: warning: ${message}\n`)))(accountModel.detail);
+    }
+    if (accountModel.model) {
+      model = accountModel.model;
+      modelSource = 'codex-config';
+    }
+  }
+
   let quotaNote = 'skipped (--force)';
   if (!input.force) {
     const floor = quotaFloor(deps.config ?? readConfig({ onWarn: deps.onWarn }));
@@ -182,7 +200,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   if (briefSource === undefined && input.briefFile) briefSource = readFileSync(input.briefFile, 'utf8');
   if (briefSource === undefined) {
     briefSource = renderBrief({
-      brain: { id, name, role, account: accountName, cli, model: input.model },
+      brain: { id, name, role, account: accountName, cli, model },
       parent: parentBrain,
       user: input.user,
     });
@@ -195,7 +213,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   ]);
   const command = buildCommand({
     cli,
-    model: input.model,
+    model,
     briefFile: prepared.file,
     extraArgs: cliArgs,
     account,
@@ -273,7 +291,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     parent,
     account: accountName,
     cli,
-    model: input.model,
+    model,
     cwd,
     paneId,
     coord: coord ?? undefined,
@@ -304,26 +322,41 @@ export async function spawnBrain(input = {}, deps = {}) {
       coord: brain.coord ?? null,
       role: role === 'sub' ? ROLE_LABELS.sub : ROLE_LABELS.main,
     };
+    let target;
     try {
-      const target = await (deps.resolve ?? defaultResolve)(parentBrain.name, {
+      target = await (deps.resolve ?? defaultResolve)(parentBrain.name, {
         accounts,
         rows: deps.rows,
         onWarn: deps.onWarn,
       });
-      const { receipt } = await (deps.deliver ?? defaultDeliver)({
-        target,
-        body: `已上线，上级 ${parentBrain.name}`,
-        identity,
-        deps,
-        send: deps.send,
-      });
-      notification = { status: receipt.status, via: receipt.via, reason: receipt.reason, detail: receipt.detail };
     } catch (err) {
-      notification = { status: 'blocked', reason: 'notify_failed', detail: String(err?.message ?? err) };
+      notification = { status: 'blocked', reason: 'target_not_found', detail: String(err?.message ?? err) };
+    }
+    if (target) {
+      // Same delivery path as `sbb tell`: without an inbox the envelope has no fromSock,
+      // peers cannot reply to it and the transport reports `content not wrapped`
+      // (measured 2026-09-09 on a scratch spawn).
+      const inbox = await (deps.openInbox ?? openDeliveryInbox)({ target, owner: brain.name, deps });
+      try {
+        const { receipt } = await (deps.deliver ?? defaultDeliver)({
+          target,
+          body: `已上线，上级 ${parentBrain.name}`,
+          identity,
+          deps,
+          send: deps.send,
+          inbox,
+        });
+        notification = { status: receipt.status, via: receipt.via, reason: receipt.reason, detail: receipt.detail };
+      } catch (err) {
+        notification = { status: 'blocked', reason: 'notify_failed', detail: String(err?.message ?? err) };
+      } finally {
+        await inbox?.close?.();
+        await (deps.closeInboxes ?? closeInboxes)();
+      }
     }
   }
 
-  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, thread: thread ?? null, threadError, retiredDuplicates };
+  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, model: model ?? null, modelSource, thread: thread ?? null, threadError, retiredDuplicates };
 }
 
 /**

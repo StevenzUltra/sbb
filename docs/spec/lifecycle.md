@@ -26,7 +26,7 @@ sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --
    | cli    | cli line                                                                          |
    | ------ | --------------------------------------------------------------------------------- |
    | claude | `claude [--model M] --append-system-prompt-file ~/.sbb/briefs/<id>.md [extra]`     |
-   | codex  | `codex [-m M] [extra] "$(cat ~/.sbb/briefs/<id>.md)"` (PROMPT arg = first turn, which also makes the thread queueable) |
+   | codex  | `codex [-m M] [extra] "$(cat ~/.sbb/briefs/<id>.md)"` (PROMPT arg = first turn, which also makes the thread queueable). `M` is `--model` when given, else the account's top-level `model` from `<CODEX_HOME>/config.toml`: Codex merges a project `.codex/config.toml` over the account config, so passing the account model explicitly keeps a spawn off whatever the cwd asks for |
    | agy    | `agy [--model M] --prompt-interactive "$(cat ~/.sbb/briefs/<id>.md)" [extra]`       |
    | cursor | `cursor-agent [--model M] [extra] "$(cat ~/.sbb/briefs/<id>.md)"`                   |
 
@@ -42,7 +42,8 @@ sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --
    `threads.name`. No match means no field; an older thread is never attributed.
 7. `saveBrain({ id, uuid, name, role, parent, account, cli, model, cwd, paneId, coord, pid, threadId, threadName, origin:'spawned' })`.
 8. Print `spawned <id> <name> <coord>` (or JSON). Notify the parent brain (if any) with one
-   line via the normal delivery path: `[<name>#<id> …][子脑] 已上线，上级 <parent>`.
+   line via the normal delivery path: `[<name>#<id> …][子脑] 已上线，上级 <parent>`. Like
+   `sbb tell`, the send opens an inbox so the envelope carries `fromSock`.
 
 ## sbb kill
 
@@ -56,7 +57,9 @@ sbb kill <id|name> [--keep-children] [--yes] [--force]
   exact commands on scratch sessions before relying on them; note the result in the report.
   If the pane is still alive after 3 s, or `--force`, `tmux kill-pane`.
 - Retire records (`removeBrain` moves them to `_retired/` with `retiredAt`), release claims
-  (policy.md), notify the parent with one line. `--keep-children` re-parents children to the
+  (policy.md), notify the parent with one line through the same delivery path as `sbb tell`
+  (an inbox is opened for the send, so the envelope carries `fromSock` and can be replied
+  to). `--keep-children` re-parents children to the
   killed brain's parent (or makes them main) and notifies them.
 
 ## sbb switch
