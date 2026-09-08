@@ -1,0 +1,15 @@
+{
+  "pid": __PID__,
+  "sessionId": "__SESSION_ID__",
+  "cwd": "/Users/dev/proj",
+  "startedAt": 1788880661017,
+  "version": "2.1.263",
+  "peerProtocol": 1,
+  "peerFeatures": ["notify_idle", "reply_across_default_dirs"],
+  "kind": "interactive",
+  "tmux": "__TMUX__",
+  "messagingSocketPath": "__SOCK__",
+  "name": "__NAME__",
+  "status": "__STATUS__",
+  "updatedAt": 1788884250346
+}
