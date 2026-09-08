@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { listBrains } from '../src/registry/brains.js';
 import { spawnBrain, checkQuotaFloor, quotaFloor } from '../src/lifecycle/spawn.js';
-import { createFakeTmux, typedLiterals, tmuxCommands } from './fixtures/lifecycle/fake-tmux.js';
+import { createFakeTmux, tmuxCommands } from './fixtures/lifecycle/fake-tmux.js';
 import { tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
 
 const ACCOUNTS = [{
@@ -85,13 +85,17 @@ test('spawnBrain: happy path registers the brain and notifies the parent', async
       ['@sbb_brain', 'SMS-0042'],
       ['@codex_home', '/tmp/home/.ai-account-a/codex'],
     ]);
-    assert.deepEqual(tmuxCommands(deps.tmuxApiRef)[0], ['new-window', '-n', 'ai-a', '-c', '/tmp/proj', '-P', '-F', '#{pane_id}']);
-
-    const typed = typedLiterals(deps.tmuxApiRef);
-    assert.equal(typed.length, 1);
-    assert.ok(!/[\r\n]/.test(typed[0]), 'one line reaches the pane');
-    assert.match(typed[0], /--append-system-prompt/);
-    assert.match(typed[0], /你是 ios#SMS-0042/);
+    const created = tmuxCommands(deps.tmuxApiRef)[0];
+    assert.deepEqual(created.slice(0, 7), ['new-window', '-n', 'ai-a', '-c', '/tmp/proj', '-P', '-F']);
+    assert.deepEqual(created.slice(7, 10), ['#{pane_id}', 'sh', '-c'], 'the CLI is the pane command');
+    assert.match(created[10], /^exec env /);
+    assert.match(created[10], /--append-system-prompt-file/);
+    assert.match(created[10], /SMS-0042\.md/);
+    assert.equal(
+      deps.tmuxApiRef.calls.filter((c) => Array.isArray(c) && c[0].startsWith('send-')).length,
+      0,
+      'nothing is typed into the pane',
+    );
 
     assert.equal(deps.delivered.length, 1);
     assert.equal(deps.delivered[0].body, '已上线，上级 lead');
@@ -110,24 +114,26 @@ test('spawnBrain: --split uses split-window in the caller window', async () => {
     seedParent();
     const deps = baseDeps();
     await spawnBrain(spawnInput({ split: true }), deps);
-    assert.deepEqual(tmuxCommands(deps.tmuxApiRef)[0], ['split-window', '-c', '/tmp/proj', '-P', '-F', '#{pane_id}']);
+    const created = tmuxCommands(deps.tmuxApiRef)[0];
+    assert.deepEqual(created.slice(0, 5), ['split-window', '-c', '/tmp/proj', '-P', '-F']);
+    assert.deepEqual(created.slice(5, 8), ['#{pane_id}', 'sh', '-c']);
   } finally {
     restore();
   }
 });
 
-test('spawnBrain: a long brief goes to ~/.sbb/briefs and the pane gets the pointer', async () => {
+test('spawnBrain: the brief always goes to ~/.sbb/briefs and the pane command only points at it', async () => {
   const dir = tempDir();
   const restore = withEnv({ SBB_DIR: dir });
   try {
     seedParent();
     const deps = baseDeps();
-    const result = await spawnBrain(spawnInput({ brief: 'x'.repeat(6001) }), deps);
+    const result = await spawnBrain(spawnInput({ brief: 'x'.repeat(20000) }), deps);
     assert.equal(result.briefFile, join(dir, 'briefs', 'SMS-0042.md'));
-    assert.equal(readFileSync(result.briefFile, 'utf8').length, 6002);
-    const typed = typedLiterals(deps.tmuxApiRef)[0];
-    assert.match(typed, /SMS-0042\.md/);
-    assert.ok(typed.length < 4000, 'the pane command stays small');
+    assert.equal(readFileSync(result.briefFile, 'utf8').length, 20001);
+    const created = tmuxCommands(deps.tmuxApiRef)[0];
+    assert.match(created[10], /SMS-0042\.md/);
+    assert.ok(created[10].length < 4000, 'the pane command stays small');
   } finally {
     restore();
   }

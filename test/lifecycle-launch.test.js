@@ -7,7 +7,6 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  BRIEF_FILE_LIMIT,
   EXIT_COMMANDS,
   awaitReady,
   buildCommand,
@@ -27,11 +26,11 @@ async function throughShell(value, shell) {
   return stdout;
 }
 
-test('buildCommand: claude gets --append-system-prompt and its account environment', () => {
+test('buildCommand: claude reads the brief from its file and gets the account environment', () => {
   const built = buildCommand({
     cli: 'claude',
     model: 'claude-haiku-4-5-20251001',
-    brief: '你是 ios#SMS-0012',
+    briefFile: '/tmp/briefs/SMS-0012.md',
     extraArgs: '--verbose --add-dir /tmp/x',
     account: 'a',
     name: 'ios',
@@ -40,36 +39,54 @@ test('buildCommand: claude gets --append-system-prompt and its account environme
   assert.deepEqual(built.argv, [
     'claude',
     '--model', 'claude-haiku-4-5-20251001',
-    '--append-system-prompt', '你是 ios#SMS-0012',
+    '--append-system-prompt-file', '/tmp/briefs/SMS-0012.md',
     '--verbose', '--add-dir', '/tmp/x',
   ]);
   assert.deepEqual(built.env, {
     CLAUDE_CONFIG_DIR: '/tmp/home/.ai-account-a/claude',
     CLAUDE_CODE_SESSION_NAME: 'ios',
   });
-  assert.match(built.shellLine, /^exec env /);
-  assert.ok(!/[\r\n]/.test(built.shellLine), 'the command line must stay one line for send-keys');
+  assert.equal(
+    built.shellLine,
+    'exec env CLAUDE_CONFIG_DIR=/tmp/home/.ai-account-a/claude CLAUDE_CODE_SESSION_NAME=ios'
+      + ' claude --model claude-haiku-4-5-20251001 --append-system-prompt-file /tmp/briefs/SMS-0012.md'
+      + ' --verbose --add-dir /tmp/x',
+  );
+  assert.deepEqual(built.paneCommand, ['sh', '-c', built.shellLine], 'tmux runs the CLI directly');
+  assert.ok(!/[\r\n]/.test(built.shellLine), 'the pane command stays one line');
 });
 
-test('buildCommand: codex gets -m, CODEX_HOME and the brief as its first prompt', () => {
-  const built = buildCommand({ cli: 'codex', model: 'gpt-6', brief: '简报', account: 'a', accounts: ACCOUNTS });
-  assert.deepEqual(built.argv, ['codex', '-m', 'gpt-6', '简报']);
+test('buildCommand: codex gets -m, CODEX_HOME and $(cat <file>) as its first prompt', () => {
+  const built = buildCommand({ cli: 'codex', model: 'gpt-6', briefFile: '/tmp/briefs/SMS-0042.md', account: 'a', accounts: ACCOUNTS });
+  assert.deepEqual(built.argv, ['codex', '-m', 'gpt-6', '$(cat /tmp/briefs/SMS-0042.md)']);
   assert.deepEqual(built.env, { CODEX_HOME: '/tmp/home/.ai-account-a/codex' });
-  assert.match(built.shellLine, /^exec env CODEX_HOME=\/tmp\/home\/\.ai-account-a\/codex codex -m gpt-6 '简报'$/);
+  assert.equal(
+    built.shellLine,
+    'exec env CODEX_HOME=/tmp/home/.ai-account-a/codex codex -m gpt-6 "$(cat /tmp/briefs/SMS-0042.md)"',
+  );
 });
 
-test('buildCommand: agy and cursor use their own prompt flags', () => {
-  const agy = buildCommand({ cli: 'agy', model: 'gemini-3-pro', brief: '简报', account: 'a', accounts: ACCOUNTS });
-  assert.deepEqual(agy.argv, ['agy', '--model', 'gemini-3-pro', '--prompt-interactive', '简报']);
+test('buildCommand: agy and cursor read the brief through $(cat <file>) too', () => {
+  const agy = buildCommand({ cli: 'agy', model: 'gemini-3-pro', briefFile: '/tmp/briefs/b.md', account: 'a', accounts: ACCOUNTS });
+  assert.deepEqual(agy.argv, ['agy', '--model', 'gemini-3-pro', '--prompt-interactive', '$(cat /tmp/briefs/b.md)']);
   assert.deepEqual(agy.env, {});
-  const cursor = buildCommand({ cli: 'cursor', brief: '简报', account: 'a', accounts: ACCOUNTS });
-  assert.deepEqual(cursor.argv, ['cursor-agent', '简报']);
+  const cursor = buildCommand({ cli: 'cursor', briefFile: '/tmp/briefs/b.md', account: 'a', accounts: ACCOUNTS });
+  assert.deepEqual(cursor.argv, ['cursor-agent', '$(cat /tmp/briefs/b.md)']);
   assert.match(cursor.shellLine, /^exec cursor-agent /, 'no env assignments means no env wrapper');
 });
 
-test('buildCommand: an unknown cli or account is refused, never guessed', () => {
-  assert.throws(() => buildCommand({ cli: 'gpt', account: 'a', accounts: ACCOUNTS }), /unknown cli/);
-  assert.throws(() => buildCommand({ cli: 'claude', account: 'zz', accounts: ACCOUNTS }), /unknown account/);
+test('buildCommand: a brief file path with spaces survives as one argument', () => {
+  const built = buildCommand({ cli: 'codex', briefFile: '/tmp/my briefs/b.md', account: 'a', accounts: ACCOUNTS });
+  assert.equal(
+    built.shellLine,
+    'exec env CODEX_HOME=/tmp/home/.ai-account-a/codex codex "$(cat \'/tmp/my briefs/b.md\')"',
+  );
+});
+
+test('buildCommand: an unknown cli, a missing brief file or account is refused, never guessed', () => {
+  assert.throws(() => buildCommand({ cli: 'gpt', briefFile: '/x/b.md', account: 'a', accounts: ACCOUNTS }), /unknown cli/);
+  assert.throws(() => buildCommand({ cli: 'claude', briefFile: '/x/b.md', account: 'zz', accounts: ACCOUNTS }), /unknown account/);
+  assert.throws(() => buildCommand({ cli: 'claude', account: 'a', accounts: ACCOUNTS }), /briefFile is required/);
 });
 
 test('shellQuote: the quoted value survives a real shell byte for byte', async () => {
@@ -98,17 +115,17 @@ test('splitArgs: whitespace splits, quotes group', () => {
   assert.deepEqual(splitArgs(undefined), []);
 });
 
-test('prepareBrief: a short brief stays inline, a long one goes to ~/.sbb/briefs', () => {
-  const short = prepareBrief({ id: 'SMS-0001', brief: '一行' });
-  assert.deepEqual(short, { brief: '一行' });
-
+test('prepareBrief: every brief goes to ~/.sbb/briefs/<id>.md, short or long', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sbb-briefs-'));
-  const long = 'x'.repeat(BRIEF_FILE_LIMIT + 1);
-  const prepared = prepareBrief({ id: 'SMS-0001', brief: long, dir });
-  assert.equal(prepared.file, join(dir, 'SMS-0001.md'));
-  assert.equal(readFileSync(prepared.file, 'utf8'), `${long}\n`);
-  assert.equal(prepared.brief.split('\n').length, 2);
-  assert.match(prepared.brief, /SMS-0001\.md/);
+  const short = prepareBrief({ id: 'SMS-0001', brief: '一行', dir });
+  assert.deepEqual(short, { brief: '一行', file: join(dir, 'SMS-0001.md') });
+  assert.equal(readFileSync(short.file, 'utf8'), '一行\n');
+
+  const long = 'x'.repeat(20000);
+  const big = prepareBrief({ id: 'SMS-0002', brief: long, dir });
+  assert.equal(big.file, join(dir, 'SMS-0002.md'));
+  assert.equal(readFileSync(big.file, 'utf8').length, 20001);
+  assert.equal(big.brief, long);
 });
 
 test('awaitReady: claude is ready when a registry file names the pane', async () => {
