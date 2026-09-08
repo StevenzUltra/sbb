@@ -16,8 +16,11 @@ import {
 
 const USAGE = `usage: sbb ask <address> <text...> [--wait <ms|30s|5m|1h>] [--priority now|next|later] [--role <text>] [--force]
 
-Waits (default 10m) for a reply carrying replyTo = the message id, or a Claude
-peer_idle_notice. Exit 0 on reply or idle, 5 on timeout.`;
+Waits (default 10m) for a reply carrying replyTo = the message id, a frame from the
+target's own socket, a body carrying the envelope marker, or a Claude
+peer_idle_notice. A delivery merely mirrored from the target is a fallback candidate:
+it is printed as via=mirror-fallback only if nothing exact arrives before --wait
+expires. Exit 0 on reply or idle, 5 on timeout.`;
 
 export async function run(argv, deps = {}) {
   return main(async () => {
@@ -75,23 +78,37 @@ export async function run(argv, deps = {}) {
 
       const deadline = now() + waitMs;
       const pollMs = deps.pollMs ?? 500;
+      const printReply = (entry, via) => {
+        console.log(`reply     msg=${String(entry.msgId).slice(0, 8)} from=${entry.from ?? '-'}  via=${via}`);
+        console.log(String(entry.text ?? ''));
+      };
+      /** A mirror match is only a fallback: it is held until the deadline. */
+      let candidate = null;
       for (;;) {
         const reply = matchReply(owners, message.msgId, {
           since,
           targetSock,
           from: [target?.brain, target?.brainId].filter(Boolean),
         });
-        if (reply) {
-          console.log(`reply     msg=${String(reply.entry.msgId).slice(0, 8)} from=${reply.entry.from ?? '-'}  via=${reply.match}`);
-          console.log(String(reply.entry.text ?? ''));
+        // The exact tiers (replyTo, target socket, body marker) are the answer. A mirror
+        // entry - any delivery from the target into our id inbox - is not: in rehearsal
+        // run 15 the target's progress note "翻译任务已分派给 ios" arrived that way and ask
+        // returned it 12 s before the real summary, which never got read.
+        if (reply && reply.match !== 'mirror') {
+          printReply(reply.entry, reply.match);
           return EXIT.OK;
         }
+        if (reply) candidate = reply;
         const idle = idleNotices.find((n) => n?.orig_msg_id === message.msgId) ?? idleNotices[0];
         if (idle) {
           console.log(`idle      state=${idle.state ?? '-'}${idle.detail ? `  ${idle.detail}` : ''}`);
           return EXIT.OK;
         }
         if (now() >= deadline) {
+          if (candidate) {
+            printReply(candidate.entry, 'mirror-fallback');
+            return EXIT.OK;
+          }
           console.log('timeout');
           return EXIT.TIMEOUT;
         }
@@ -120,8 +137,10 @@ function peerSock(sock) {
  * answering with Claude's own SendMessage carries no reply id at all (measured 2026-09-09:
  * the frame for "好" had replyTo null), so the first frame in the window from the target's
  * own socket counts, and so does any body carrying the envelope's own `sbb:<msgId first 8>`
- * marker. Last, a delivery mirror entry (`~/.sbb/inbox/<brain id>/`) whose `from` is the
- * target itself: a codex-queue answer arrives that way with no socket and no marker.
+ * marker. Last, the newest delivery mirror entry (`~/.sbb/inbox/<brain id>/`) whose `from` is
+ * the target itself: a codex-queue answer arrives that way with no socket and no marker. That
+ * tier is only a candidate - the caller keeps waiting and reports it as `mirror-fallback` at
+ * the deadline, because a target also mirrors its intermediate progress notes.
  * @param {string|string[]} owners name-keyed inbox and the brain-id mirror
  * @param {string} msgId
  * @param {{ since?: number, targetSock?: string|null, from?: string[] }} [ctx]
@@ -139,11 +158,13 @@ export function matchReply(owners, msgId, { since = 0, targetSock = null, from =
     if (targetSock && peerSock(entry.fromSock) === targetSock) return { entry, match: 'fromSock' };
     if (String(entry.text ?? '').includes(marker)) return { entry, match: 'body' };
   }
+  let newest;
   for (const { entry } of all) {
     if ((entry.t ?? 0) < since) continue;
-    if (fromSet.has(entry.from) || fromSet.has(entry.fromId)) return { entry, match: 'mirror' };
+    if (!(fromSet.has(entry.from) || fromSet.has(entry.fromId))) continue;
+    if (newest === undefined || (entry.t ?? 0) > (newest.entry.t ?? 0)) newest = { entry, match: 'mirror' };
   }
-  return undefined;
+  return newest;
 }
 
 export { listInbox, previewTransport };

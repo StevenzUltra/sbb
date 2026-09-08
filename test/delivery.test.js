@@ -512,7 +512,7 @@ test('sbb tell: a delivery to a registered brain is mirrored into its id inbox',
   }
 });
 
-test('sbb ask: a delivery mirrored into the id inbox is the reply', async () => {
+test('sbb ask: a mirror-only delivery is reported as via=mirror-fallback at the deadline', async () => {
   const home = tempDir();
   const restore = withEnv(sbbEnv(home));
   try {
@@ -531,8 +531,72 @@ test('sbb ask: a delivery mirrored into the id inbox is the reply', async () => 
     });
     const out = await captureLog(() => askRun(['lead', 'ping', '--wait', '1s'], d));
     assert.equal(out.result, 0);
-    assert.match(out.lines.join('\n'), /reply {5}msg=bbbbbbbb from=lead {2}via=mirror/);
+    assert.match(out.lines.join('\n'), /reply {5}msg=bbbbbbbb from=lead {2}via=mirror-fallback/);
     assert.match(out.lines.join('\n'), /共改 3 处/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask: a mirror candidate never preempts the exact reply that arrives later', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const inbox = fakeInbox();
+    let sleeps = 0;
+    const d = deps({
+      inbox,
+      pollMs: 1,
+      sleep: async () => {
+        sleeps += 1;
+        // The progress note is mirrored at once; the real summary only on a later poll.
+        if (sleeps === 3) {
+          inbox.emit('message', { type: 'user', msg_id: REPLY_ID, reply_to: MSG_ID, message: { role: 'user', content: 'PONG 汇总完成' } });
+        }
+      },
+      send: async () => {
+        writeInboxEntry({
+          owner: 'TST-0002',
+          entry: {
+            msgId: REPLY_ID, from: 'lead', fromId: 'TST-0001',
+            text: '翻译任务已分派给 ios，等待执行结果', t: Date.now() + 1000,
+          },
+        });
+        return { status: 'queued', via: 'codex-queue', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping', '--wait', '30s'], d));
+    assert.equal(out.result, 0);
+    const text = out.lines.join('\n');
+    assert.match(text, /via=replyTo/, 'the exact reply wins');
+    assert.match(text, /PONG 汇总完成/);
+    assert.doesNotMatch(text, /翻译任务已分派给 ios/, 'the progress note is not returned as the answer');
+    assert.doesNotMatch(text, /mirror-fallback/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask: the newest mirror candidate is the one printed at the deadline', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const d = deps({
+      pollMs: 1,
+      sleep: async () => {},
+      send: async () => {
+        const base = Date.now() + 1000;
+        writeInboxEntry({ owner: 'TST-0002', entry: { msgId: 'aa'.repeat(16), from: 'lead', fromId: 'TST-0001', text: '进度一', t: base } });
+        writeInboxEntry({ owner: 'TST-0002', entry: { msgId: 'cc'.repeat(16), from: 'lead', fromId: 'TST-0001', text: '进度二（最新）', t: base + 5 } });
+        return { status: 'queued', via: 'codex-queue', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping', '--wait', '1s'], d));
+    assert.equal(out.result, 0);
+    const text = out.lines.join('\n');
+    assert.match(text, /via=mirror-fallback/);
+    assert.match(text, /进度二（最新）/);
+    assert.doesNotMatch(text, /进度一/);
   } finally {
     restore();
   }
