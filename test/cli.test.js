@@ -307,6 +307,99 @@ test('sbb reply: an unknown message id is blocked, not guessed', async () => {
   }
 });
 
+test('sbb reply: a live fromSock reaches the waiting ask, not the sender session', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    let seen;
+    const deps = {
+      rows: [],
+      findReceipt: () => ({
+        msgId: MSG_ID, from: 'lead', fromAddress: 'a/claude:24:3.4', fromSock: 'uds:/tmp/cc-socks/9625.sock',
+      }),
+      canConnect: async (sockPath) => { seen = { sockPath }; return true; },
+      sendToInbox: async ({ sockPath, message }) => {
+        seen = { sockPath, message };
+        return { ok: true, receipt: { status: 'queued', via: 'uds-inbox', msgId: message.msgId, elapsedMs: 3 } };
+      },
+      resolve: async () => { throw new Error('the waiting inbox must win over the session address'); },
+      send: async () => { throw new Error('must not send to the sender session'); },
+    };
+    const out = await captureLog(() => replyRun([MSG_ID.slice(0, 8), '好', '--role', '发起方'], deps));
+    assert.equal(out.result, 0);
+    assert.equal(seen.sockPath, '/tmp/cc-socks/9625.sock');
+    assert.equal(seen.message.replyTo, MSG_ID, 'the waiting ask matches on reply_to');
+    assert.match(seen.message.text, /^\[user@cli\]\[发起方\] 好/, '--role overrides the envelope role');
+    assert.match(out.lines.join('\n'), /queued {5}msg=[0-9a-f]{8} {2}via=uds-inbox/);
+    const logged = readFileSync(receiptLogPath(), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(logged.at(-1).via, 'uds-inbox');
+    assert.equal(logged.at(-1).address, 'a/claude:24:3.4', 'the receipt still names the original sender');
+    assert.equal(logged.at(-1).status, 'queued');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb reply: a dead fromSock falls back to the sender session address', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    let seen;
+    const deps = {
+      rows: [],
+      findReceipt: () => ({
+        msgId: MSG_ID, from: 'lead', fromAddress: 'a/claude:24:3.4', fromSock: 'uds:/tmp/cc-socks/9625.sock',
+      }),
+      canConnect: async () => false,
+      sendToInbox: async () => { throw new Error('must not write to a dead socket'); },
+      resolve: async (address) => ({ address, account: 'a', cli: 'claude', paneId: '%30', coord: '24:3.4', claude: {}, codex: undefined }),
+      send: async (target, message) => { seen = { target, message }; return receipt('delivered'); },
+    };
+    const out = await captureLog(() => replyRun([MSG_ID.slice(0, 8), 'done'], deps));
+    assert.equal(out.result, 0);
+    assert.equal(seen.target.address, 'a/claude:24:3.4');
+    assert.equal(seen.message.replyTo, MSG_ID);
+    assert.match(out.lines.join('\n'), /delivered {2}msg=a1b2c3d4 {2}via=uds/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb tell: an unregistered CLI session speaks as 协作方', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const deps = {
+      rows: [row()],
+      paneId: '%30',
+      resolve: async (address) => ({ address, account: 'a', cli: 'claude', paneId: '%30', coord: '24:3.4', claude: {}, codex: undefined }),
+    };
+    const out = await captureLog(() => tellRun(['lead', '--dry-run'], deps));
+    assert.equal(out.result, 0);
+    assert.match(out.lines.join('\n'), /sender\s+\[Claude@a\/claude:24:3\.4\]\[协作方\]/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask --role: the envelope carries the caller role', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const deps = {
+      rows: [],
+      resolve: async (address) => ({ address, account: 'a', cli: 'claude', paneId: '%30', coord: '24:3.4', claude: {}, codex: undefined }),
+      send: async () => receipt('delivered'),
+      msgId: MSG_ID,
+    };
+    const out = await captureLog(() => askRun(['a/claude:lead', 'ping', '--wait', '1s', '--role', '协调方'], deps));
+    assert.equal(out.result, 5, 'no reply arrives, so the wait times out');
+    assert.match(out.lines.join('\n'), /envelope {2}\[user@cli\]\[协调方\] ping/);
+  } finally {
+    restore();
+  }
+});
+
 test('sbb collect: prints unread entries and marks them read', async () => {
   const home = tempDir();
   const restore = withEnv(sbbEnv(home));

@@ -11,6 +11,7 @@ import { deliver, fromModeFromEnv, parseDuration, parsePeerFrame } from '../src/
 import { listInbox, writeInboxEntry } from '../src/registry/inbox.js';
 import { startFakeClaudeServer } from './fixtures/fake-claude-server.js';
 import { send as realSend } from '../src/transports/index.js';
+import { startInbox } from '../src/transports/uds-inbox.js';
 import { readReceiptEntries } from '../src/registry/receipts.js';
 import { captureLog, tempDir, withEnv } from './fixtures/registry/helpers.js';
 
@@ -393,6 +394,45 @@ test('sbb tell: the real uds transport returns on --timeout and persists the rec
     } finally {
       await server.close();
     }
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask + sbb reply: the reply reaches the waiting inbox and ask exits 0', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const askDir = tempDir();
+    const replyDir = tempDir();
+    let askInbox;
+    let askReady;
+    const ready = new Promise((resolve) => { askReady = resolve; });
+
+    const askPromise = captureLog(() => askRun(['a/claude:lead', 'ping', '--wait', '2s'], {
+      rows: [],
+      msgId: MSG_ID,
+      pollMs: 25,
+      resolve: async () => TARGET,
+      send: async () => ({ status: 'delivered', via: 'uds', msgId: MSG_ID, elapsedMs: 5 }),
+      startInbox: async (opts) => { askInbox = await startInbox({ ...opts, dir: askDir }); askReady(); return askInbox; },
+    }));
+    await ready;
+
+    const replyOut = await captureLog(() => replyRun([MSG_ID.slice(0, 8), '好'], {
+      rows: [],
+      findReceipt: () => ({
+        msgId: MSG_ID, from: 'lead', fromAddress: 'a/claude:24:3.4', fromSock: `uds:${askInbox.sockPath}`,
+      }),
+      startInbox: async (opts) => startInbox({ ...opts, dir: replyDir }),
+    }));
+    const askOut = await askPromise;
+
+    assert.equal(replyOut.result, 0);
+    assert.match(replyOut.lines.join('\n'), /via=uds-inbox/, 'the reply goes to the waiting inbox');
+    assert.equal(askOut.result, 0, 'ask exits 0 on the reply');
+    assert.match(askOut.lines.join('\n'), /reply {5}msg=[0-9a-f]{8} from=user {2}via=replyTo/);
+    assert.match(askOut.lines.join('\n'), /\[用户\] 好/, 'the reply text is printed');
   } finally {
     restore();
   }
