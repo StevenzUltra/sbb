@@ -46,9 +46,11 @@ brains are overlaid by matching pane id (or pid for Claude).
    Match to a pane through the `tmux` field (`session:@windowId.%paneId`). Provides `name`,
    `status` (busy/idle), `cwd`, socket path, key file, pid. Skip entries whose pid is dead.
 3. Codex threads: every account's `<codexDir>/state_5.sqlite` `threads` (read-only,
-   `node:sqlite`). Match to a live Codex pane by `cwd` and most recent `updated_at`; the
-   match is a best guess and is marked `thread: uncertain` when two live Codex panes share a
-   cwd. Provides `name` (thread name usable by `codex queue`), `id`, `hasRollout`.
+   `node:sqlite`). Match to a live Codex pane by the brain record's `threadId` when it has
+   one; otherwise by `cwd` and most recent `updated_at`, which is a best guess and is marked
+   `thread: uncertain` when two live Codex panes share a cwd. A record that names a thread is
+   trusted as is, with no fallback to guessing when that thread is gone. Provides `name`
+   (thread name usable by `codex queue`), `id`, `hasRollout`.
 
 Output columns for `sbb ls`:
 

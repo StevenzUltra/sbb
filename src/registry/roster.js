@@ -208,20 +208,31 @@ export async function roster(opts = {}) {
       // pass those through as if they were a known state.
       status = session?.status === 'busy' || session?.status === 'idle' ? session.status : '?';
     } else if (cli === 'codex') {
-      const key = normCwd(pane.path);
-      const candidates = threads.filter((t) => t.account === account && normCwd(t.cwd) === key);
-      thread = candidates.reduce(
-        (best, t) => (best === undefined || t.updatedAtMs > best.updatedAtMs ? t : best),
-        /** @type {import('../types.js').CodexThread|undefined} */ (undefined),
-      );
-      threadUncertain = (codexPanesByCwd.get(key)?.length ?? 0) > 1;
-      if (withStatus) status = screenStatus('codex', await capturePane(pane.paneId), profiles);
+      // Resolved after `brain` below: a recorded threadId outranks the cwd guess.
     } else if (withStatus) {
       status = screenStatus(cli, await capturePane(pane.paneId), profiles);
     }
 
     const brain = brains.find((b) => b.paneId === pane.paneId)
       ?? (cli === 'claude' && session ? brains.find((b) => b.pid === session?.pid) : undefined);
+
+    if (cli === 'codex') {
+      // A brain record that names its thread wins: guessing by cwd once matched an
+      // unrelated older thread in the same account (rehearsal 2026-09-09). When the record
+      // names a thread, do not fall back to guessing even if that thread is gone.
+      if (typeof brain?.threadId === 'string' && brain.threadId !== '') {
+        thread = threads.find((t) => t.id === brain.threadId);
+      } else {
+        const key = normCwd(pane.path);
+        const candidates = threads.filter((t) => t.account === account && normCwd(t.cwd) === key);
+        thread = candidates.reduce(
+          (best, t) => (best === undefined || t.updatedAtMs > best.updatedAtMs ? t : best),
+          /** @type {import('../types.js').CodexThread|undefined} */ (undefined),
+        );
+        threadUncertain = (codexPanesByCwd.get(key)?.length ?? 0) > 1;
+      }
+      if (withStatus) status = screenStatus('codex', await capturePane(pane.paneId), profiles);
+    }
 
     rows.push({
       brain: brain?.name ?? null,
