@@ -1,13 +1,13 @@
 // Per-CLI launch command lines and readiness detection. docs/spec/lifecycle.md
 // sections "sbb spawn" steps 4-5. Command building is pure; readiness polls injected
 // APIs (tmux, the Claude session registry, the Codex thread registry).
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountByName, discoverAccounts, sbbDir } from '../lib/paths.js';
 import * as tmuxLib from '../lib/tmux.js';
 import { listClaudeSessions } from '../registry/claude-sessions.js';
 import { listCodexThreads } from '../registry/codex-threads.js';
-import { profileFor } from '../transports/cli-profiles.js';
+import { collapse, profileFor, probeOf } from '../transports/cli-profiles.js';
 
 /** A brief longer than this goes to a file; the pane gets a two-line pointer instead. */
 export const BRIEF_FILE_LIMIT = 6000;
@@ -185,14 +185,66 @@ function normCwd(path) {
   return String(path ?? '').replace(/\/+$/, '');
 }
 
+/** The only `trust_level` that lets `sbb spawn` start Codex in a directory. */
+export const CODEX_TRUSTED_LEVEL = 'trusted';
+
+/**
+ * Read one account's Codex directory trust for `cwd` from `<CODEX_HOME>/config.toml`
+ * (`[projects."<cwd>"] trust_level = "..."`). Codex trusts exact paths only, so a
+ * trusted parent directory does not cover a subdirectory. A missing file or a missing
+ * section is reported as not trusted, never guessed.
+ * @param {{ dir?: string, cwd?: string, readFile?: (path: string, enc: string) => string }} [input]
+ * @returns {{ configPath?: string, found: boolean, trusted: boolean, level?: string, detail?: string }}
+ */
+export function readCodexTrust({ dir, cwd, readFile = readFileSync } = {}) {
+  const configPath = dir ? join(dir, 'config.toml') : undefined;
+  if (!configPath) return { configPath, found: false, trusted: false };
+  let raw;
+  try {
+    raw = readFile(configPath, 'utf8');
+  } catch (err) {
+    return { configPath, found: false, trusted: false, detail: `cannot read ${configPath}: ${err?.code ?? err?.message ?? err}` };
+  }
+  const wanted = normCwd(cwd);
+  let section = null;
+  let level;
+  for (const line of raw.split(/\r?\n/)) {
+    const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+    if (header) {
+      section = header[1];
+      continue;
+    }
+    if (!section) continue;
+    const project = /^projects\."(.*)"$/.exec(section);
+    if (!project || normCwd(project[1]) !== wanted) continue;
+    const match = /^\s*trust_level\s*=\s*["']([^"']*)["']/.exec(line);
+    if (match) level = match[1];
+  }
+  return { configPath, found: true, level, trusted: level === CODEX_TRUSTED_LEVEL };
+}
+
+/**
+ * Codex readiness: the first turn has been accepted. The pane echoes the brief back on a
+ * `›` line (as the submitted first prompt) or in the composer, so the brief's own text is
+ * the proof that Codex took it. A blank brief proves nothing and never counts.
+ * @param {string|undefined} screen
+ * @param {string|undefined} brief
+ */
+export function briefAccepted(screen, brief) {
+  const probe = probeOf(brief);
+  if (!probe) return false;
+  return collapse(screen).includes(probe);
+}
+
 /**
  * Wait until the spawned CLI is ready to receive work.
- * Claude: a registry file whose `tmux` names the new pane. Codex: an idle composer after
- * the brief turn and a thread row for the pane's cwd written since the spawn started.
- * agy / cursor: an idle composer. Never reports ready from a screen it could not read.
+ * Claude: a registry file whose `tmux` names the new pane. Codex: the brief has been
+ * accepted (its `›` line is on screen) or a thread row for the pane's cwd was written
+ * since the spawn started. agy / cursor: an idle composer. Never reports ready from a
+ * screen it could not read.
  *
  * @param {{ cli: import('../types.js').CliKind, paneId: string,
- *           account?: string, name?: string, cwd?: string }} input
+ *           account?: string, name?: string, cwd?: string, brief?: string }} input
  * @param {{ timeoutMs?: number, pollMs?: number, tmuxApi?: typeof tmuxLib,
  *           listSessions?: Function, listThreads?: Function,
  *           accounts?: import('../types.js').Account[],
@@ -201,7 +253,7 @@ function normCwd(path) {
  *                     session?: import('../types.js').ClaudeSession,
  *                     thread?: import('../types.js').CodexThread }>}
  */
-export async function awaitReady({ cli, paneId, account, name, cwd } = {}, deps = {}) {
+export async function awaitReady({ cli, paneId, account, name, cwd, brief } = {}, deps = {}) {
   const timeoutMs = deps.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
   const pollMs = deps.pollMs ?? DEFAULT_READY_POLL_MS;
   const tmuxApi = deps.tmuxApi ?? tmuxLib;
@@ -233,20 +285,20 @@ export async function awaitReady({ cli, paneId, account, name, cwd } = {}, deps 
           (s) => s.tmux === key && (!account || s.account === account) && (!name || !s.name || s.name === name),
         );
         if (session) return { ready: true, session };
+      } else if (cli === 'codex') {
+        screen = await tmuxApi.capturePane(paneId, 60);
+        if (briefAccepted(screen, brief)) {
+          return { ready: true, screen, detail: 'the brief was accepted as the first turn' };
+        }
+        const thread = listThreads(accounts).find(
+          (t) => (!account || t.account === account)
+            && normCwd(t.cwd) === wantedCwd
+            && t.updatedAtMs >= startedAt - THREAD_MTIME_SLACK_MS,
+        );
+        if (thread) return { ready: true, thread, screen };
       } else {
         screen = await tmuxApi.capturePane(paneId, 60);
-        if (profile.idle(screen)) {
-          if (cli === 'codex') {
-            const thread = listThreads(accounts).find(
-              (t) => (!account || t.account === account)
-                && normCwd(t.cwd) === wantedCwd
-                && t.updatedAtMs >= startedAt - THREAD_MTIME_SLACK_MS,
-            );
-            if (thread) return { ready: true, thread, screen };
-          } else {
-            return { ready: true, screen };
-          }
-        }
+        if (profile.idle(screen)) return { ready: true, screen };
       }
     } catch (err) {
       // A registry read failure is reported, never treated as "not ready yet" silently.

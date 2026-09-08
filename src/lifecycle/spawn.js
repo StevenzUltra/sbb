@@ -6,12 +6,12 @@ import { run as defaultRun } from '../lib/exec.js';
 import { discoverAccounts, sbbDir } from '../lib/paths.js';
 import * as tmuxLib from '../lib/tmux.js';
 import { allocateId, newUuid } from '../registry/brain-id.js';
-import { BRAIN_NAME_RE, getBrain, isValidBrainName, listBrains, saveBrain } from '../registry/brains.js';
+import { BRAIN_NAME_RE, getBrain, isValidBrainName, listBrains, removeBrain, saveBrain } from '../registry/brains.js';
 import { ROLE_LABELS } from '../registry/envelope.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { readQuota } from '../quota/usage-guard.js';
 import { deliver as defaultDeliver } from '../cli/util.js';
-import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief } from './launch.js';
+import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexTrust } from './launch.js';
 import { renderBrief } from './briefing.js';
 
 /** docs/spec/policy.md: refuse an account below this weekly remaining percent. */
@@ -75,7 +75,9 @@ function blocked(reason, detail) {
 }
 
 /**
- * Spawn one brain. Returns `{ brain, notification }` on success, or `{ blocked, paneId?, screen? }`.
+ * Spawn one brain. Returns `{ brain, notification, retiredDuplicates }` on success, or
+ * `{ blocked, paneId?, screen? }`. `retiredDuplicates` lists same-pane records the spawn
+ * superseded (a brain that registered itself with `sbb adopt` despite the brief).
  * @param {{ name: string, role?: 'main'|'sub', parent?: string, account: string,
  *           cli: import('../types.js').CliKind, model?: string, cwd?: string,
  *           brief?: string, briefFile?: string, extraArgs?: string|string[],
@@ -120,6 +122,21 @@ export async function spawnBrain(input = {}, deps = {}) {
     return blocked('cli_missing', `${CLI_BINARIES[cli]} is not on PATH`);
   }
 
+  const cwd = input.cwd ?? process.cwd();
+  if (cli === 'codex') {
+    // docs/spec/lifecycle.md: Codex refuses to run in an untrusted directory, and its
+    // trust is per exact path. Blocking here keeps the failure explainable instead of a
+    // pane that sits on a trust prompt until the readiness timeout.
+    const trust = (deps.readCodexTrust ?? readCodexTrust)({ dir: account.codexDir, cwd });
+    if (!trust.trusted) {
+      const level = trust.level ?? (trust.found ? 'missing' : 'no entry');
+      return blocked(
+        'codex_untrusted_cwd',
+        `codex 未信任 ${cwd}（${trust.configPath ?? 'CODEX_HOME'} 中 trust_level=${level}${trust.detail ? `; ${trust.detail}` : ''}）；先在该账户的 codex 里手动信任此目录再 spawn`,
+      );
+    }
+  }
+
   let quotaNote = 'skipped (--force)';
   if (!input.force) {
     const floor = quotaFloor(deps.config ?? readConfig({ onWarn: deps.onWarn }));
@@ -129,7 +146,6 @@ export async function spawnBrain(input = {}, deps = {}) {
     quotaNote = verdict.note;
   }
 
-  const cwd = input.cwd ?? process.cwd();
   const id = (deps.allocateId ?? allocateId)();
   const uuid = (deps.newUuid ?? newUuid)();
   let briefSource = input.brief;
@@ -177,7 +193,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   }
 
   const ready = await (deps.awaitReady ?? defaultAwaitReady)(
-    { cli, paneId, account: accountName, name, cwd },
+    { cli, paneId, account: accountName, name, cwd, brief: prepared.brief },
     { accounts, ...(deps.readyDeps ?? {}) },
   );
   if (!ready.ready) {
@@ -214,6 +230,15 @@ export async function spawnBrain(input = {}, deps = {}) {
   };
   (deps.saveBrain ?? saveBrain)(brain);
 
+  // A brain that ran `sbb adopt` during its first turn would leave a second record for
+  // this pane. The spawn's own record wins; the extra one is retired, never deleted.
+  const retiredDuplicates = [];
+  for (const other of (deps.listBrains ?? listBrains)()) {
+    if (!other?.id || other.id === id || other.paneId !== paneId) continue;
+    (deps.removeBrain ?? removeBrain)(other.id);
+    retiredDuplicates.push({ id: other.id, name: other.name });
+  }
+
   let notification;
   if (parentBrain) {
     const identity = {
@@ -243,7 +268,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     }
   }
 
-  return { brain, notification, quota: quotaNote, briefFile: prepared.file };
+  return { brain, notification, quota: quotaNote, briefFile: prepared.file, retiredDuplicates };
 }
 
 /**

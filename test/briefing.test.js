@@ -8,6 +8,7 @@ const PARENT = { id: 'SMS-0007', name: 'lead' };
 
 const EXPECTED = [
   '你是 ios#SMS-0012，角色 子脑，上级 lead#SMS-0007，账户 a，CLI claude，模型 claude-haiku-4-5-20251001。',
+  '你已由 SBB 登记为 ios#SMS-0012，不要再执行 `sbb adopt`。',
   '',
   '怎么说话：',
   '- 回一条消息：`sbb reply <msgId8> <一行>`',
@@ -51,6 +52,13 @@ test('renderBrief: a main brain names the user as its superior', () => {
 test('renderBrief: the user label can be overridden and a brain without an id omits it', () => {
   const text = renderBrief({ brain: { name: 'lead', role: 'main', account: 'a', cli: 'claude' }, user: 'Steven' });
   assert.match(text, /^你是 lead，角色 主脑，上级 Steven，账户 a，CLI claude，模型 默认。/);
+});
+
+test('renderBrief: the brief forbids self-registration with the spawn identity', () => {
+  const text = renderBrief({ brain: BRAIN, parent: PARENT });
+  assert.match(text, /你已由 SBB 登记为 ios#SMS-0012，不要再执行 `sbb adopt`。/);
+  const noId = renderBrief({ brain: { name: 'lead', role: 'main', account: 'a', cli: 'claude' } });
+  assert.match(noId, /你已由 SBB 登记为 lead，不要再执行 `sbb adopt`。/);
 });
 
 test('renderBrief: a brain without a name is refused', () => {
