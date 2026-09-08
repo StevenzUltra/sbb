@@ -86,11 +86,18 @@ export function normalizePlan(input, opts = {}) {
     if (opts.accounts?.length && !opts.accounts.some((a) => a.name === account)) {
       throw new PlanError(`brains[${i}]: unknown account "${account}"`, 'unknown_account');
     }
+    // Optional extra CLI flags for this node (e.g. --permission-mode bypassPermissions).
+    // Kept as one string: `sbb spawn --cli-args` owns the splitting and quoting rules.
+    if (node.cliArgs !== undefined && node.cliArgs !== null && typeof node.cliArgs !== 'string') {
+      throw new PlanError(`brains[${i}]: cliArgs must be a string`);
+    }
+    const cliArgs = typeof node.cliArgs === 'string' && node.cliArgs.trim() !== '' ? node.cliArgs.trim() : undefined;
     return {
       name,
       role,
       account,
       cli,
+      cliArgs,
       model: node.model ?? undefined,
       cwd: String(node.cwd ?? parent.cwd ?? ''),
       reason: String(node.reason ?? ''),
@@ -201,11 +208,12 @@ export function rejectPlan(plan, reason, opts = {}) {
 }
 
 /**
- * Default node runner: one `sbb spawn` child process per plan node.
+ * `sbb spawn` argv for one plan node. Exported so tests can pin the flag mapping without
+ * launching a child process.
  * @param {Record<string, any>} node
- * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
+ * @returns {string[]}
  */
-export async function defaultSpawn(node) {
+export function spawnArgs(node) {
   const args = [
     SBB_BIN,
     'spawn',
@@ -219,7 +227,19 @@ export async function defaultSpawn(node) {
   if (node.model) args.push('--model', node.model);
   if (node.cwd) args.push('--cwd', node.cwd);
   if (node.briefFile) args.push('--brief-file', node.briefFile);
-  const result = await runCommand(process.execPath, args, { timeoutMs: 300_000 });
+  // Extra flags carried by the plan node; `sbb spawn --cli-args` does the splitting.
+  // The `=` form is required: `--cli-args --permission-mode ...` is ambiguous to parseArgs.
+  if (node.cliArgs) args.push(`--cli-args=${node.cliArgs}`);
+  return args;
+}
+
+/**
+ * Default node runner: one `sbb spawn` child process per plan node.
+ * @param {Record<string, any>} node
+ * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
+ */
+export async function defaultSpawn(node) {
+  const result = await runCommand(process.execPath, spawnArgs(node), { timeoutMs: 300_000 });
   return { code: result.code, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
 }
 
