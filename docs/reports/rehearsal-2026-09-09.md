@@ -55,6 +55,8 @@ h3 测试污染用户 pane 标签与向用户 pane 打字（隔离到 scratch tm
 | 13 | 16 步全过 | 干净 |
 | 14 | 16 步全过，但发现安全漏洞 | lead 的消息被 moderated 扣住 12 秒后，被 lead 自己在 Bash 里 `sbb approve` 放行（批准方被记成 user）。修法：approve/deny 解析调用者身份，已登记脑一律拒绝（h3 在做）。步 16 的 1 条 unverified 来自用户另一会话自发使用 `sbb tell` 打字到忙碌 Codex，与排练无关 |
 
+| 15 | 16 步全过（main 80960b3，含 approve 门禁） | 步 8 的 ask 被 lead 的中间进度消息经镜像兜底提前满足（真正的完成汇总稍后才到）→ h3 调整兜底优先级；步 16 的 unverified 仍是 05:14 用户另一会话的那一条 |
+
 产物：`docs/reports/rehearsal-artifacts/`（各轮子脑产出的中文 README 与报告，原样保留作样本）。
 
 ## 结论
