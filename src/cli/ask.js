@@ -44,6 +44,8 @@ export async function run(argv, deps = {}) {
     if (values.role) identity.role = values.role;
     const target = await (deps.resolve ?? defaultResolve)(address, { accounts: deps.accounts, onWarn: deps.onWarn, rows: deps.rows });
     const owner = identity.brain ?? 'user';
+    // A reply may land in the brain-id mirror instead of the name-keyed inbox; read both.
+    const owners = [identity.id, owner].filter((v, i, a) => v && a.indexOf(v) === i);
     // The inbox stays open for the whole wait: replies and idle notices arrive while polling.
     const inbox = await openDeliveryInbox({ target, owner, deps });
 
@@ -74,7 +76,11 @@ export async function run(argv, deps = {}) {
       const deadline = now() + waitMs;
       const pollMs = deps.pollMs ?? 500;
       for (;;) {
-        const reply = matchReply(owner, message.msgId, { since, targetSock });
+        const reply = matchReply(owners, message.msgId, {
+          since,
+          targetSock,
+          from: [target?.brain, target?.brainId].filter(Boolean),
+        });
         if (reply) {
           console.log(`reply     msg=${String(reply.entry.msgId).slice(0, 8)} from=${reply.entry.from ?? '-'}  via=${reply.match}`);
           console.log(String(reply.entry.text ?? ''));
@@ -110,23 +116,32 @@ function peerSock(sock) {
 }
 
 /**
- * The peer's answer, three ways. A `sbb reply` carries `replyTo`; a peer answering with
- * Claude's own SendMessage carries no reply id at all (measured 2026-09-09: the frame for
- * "好" had replyTo null), so the first frame in the window from the target's own socket
- * counts, and so does any body carrying the envelope's own `sbb:<msgId first 8>` marker.
- * @param {string} owner
+ * The peer's answer, four ways, strongest first. A `sbb reply` carries `replyTo`; a peer
+ * answering with Claude's own SendMessage carries no reply id at all (measured 2026-09-09:
+ * the frame for "好" had replyTo null), so the first frame in the window from the target's
+ * own socket counts, and so does any body carrying the envelope's own `sbb:<msgId first 8>`
+ * marker. Last, a delivery mirror entry (`~/.sbb/inbox/<brain id>/`) whose `from` is the
+ * target itself: a codex-queue answer arrives that way with no socket and no marker.
+ * @param {string|string[]} owners name-keyed inbox and the brain-id mirror
  * @param {string} msgId
- * @param {{ since?: number, targetSock?: string|null }} [ctx]
- * @returns {{ entry: Record<string, any>, match: 'replyTo'|'fromSock'|'body' }|undefined}
+ * @param {{ since?: number, targetSock?: string|null, from?: string[] }} [ctx]
+ * @returns {{ entry: Record<string, any>, match: 'replyTo'|'fromSock'|'body'|'mirror' }|undefined}
  */
-export function matchReply(owner, msgId, { since = 0, targetSock = null } = {}) {
-  const exact = findReply(owner, msgId);
+export function matchReply(owners, msgId, { since = 0, targetSock = null, from = [] } = {}) {
+  const list = (Array.isArray(owners) ? owners : [owners]).filter(Boolean);
+  const all = list.flatMap((owner) => listInbox(owner));
+  const exact = all.find(({ entry }) => entry.replyTo === msgId);
   if (exact) return { entry: exact.entry, match: 'replyTo' };
   const marker = `sbb:${String(msgId).slice(0, 8)}`;
-  for (const { entry } of listInbox(owner)) {
+  const fromSet = new Set(from.filter(Boolean));
+  for (const { entry } of all) {
     if ((entry.t ?? 0) < since) continue;
     if (targetSock && peerSock(entry.fromSock) === targetSock) return { entry, match: 'fromSock' };
     if (String(entry.text ?? '').includes(marker)) return { entry, match: 'body' };
+  }
+  for (const { entry } of all) {
+    if ((entry.t ?? 0) < since) continue;
+    if (fromSet.has(entry.from) || fromSet.has(entry.fromId)) return { entry, match: 'mirror' };
   }
   return undefined;
 }

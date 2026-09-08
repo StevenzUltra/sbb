@@ -62,7 +62,10 @@ SMS-0007  lead      main  -         a        claude  claude-fable-5-1  busy    2
 -         -         -     -         default  codex   -                 idle    24:2.1  紧急修复学生作业提交故障   ~/developer/eagerstudy
 ```
 
-`PARENT` shows the parent's id. Rows without a brain print `-` in ID/BRAIN/ROLE/PARENT. `--json` prints the raw union.
+`PARENT` shows the parent's id. Rows without a brain print `-` in ID/BRAIN/ROLE/PARENT. A
+codex brain whose record carries a `threadId` shows that thread's name, or
+`thread:<id first 8>` when it has no name; it never shows a thread guessed from the cwd.
+`--json` prints the raw union.
 `--tree` prints brains only, indented by parent.
 
 Status per CLI: Claude from the registry (`busy`/`idle`); Codex, agy, cursor from the screen

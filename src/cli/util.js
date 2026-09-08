@@ -492,6 +492,26 @@ export async function deliver(input) {
     textPreview: text.slice(0, 200),
   };
   if (!input.dryRun) appendReceipt(entry);
+  // Mirror every delivery to a registered brain into that brain's inbox. The transports
+  // cannot tell the recipient's own `ask`/`collect` that a message arrived: a codex-queue
+  // answer lands in the target's session, never on its socket (rehearsal 2026-09-09).
+  // docs/spec/receipts.md "Inbox".
+  if (!input.dryRun && input.target?.brainId && receipt.status !== 'blocked') {
+    (input.deps?.writeInboxEntry ?? writeInboxEntry)({
+      owner: input.target.brainId,
+      entry: {
+        msgId,
+        from: identity.brain ?? identity.sender ?? 'user',
+        fromId: identity.id ?? null,
+        fromAddress: identity.address ?? null,
+        replyTo: input.replyTo ?? null,
+        text,
+        t: Date.now(),
+        via: receipt.via,
+        status: receipt.status,
+      },
+    });
+  }
   return { receipt, text, identity, entry, message };
 }
 
