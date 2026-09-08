@@ -2,7 +2,7 @@
 // `sbb spawn` per node, results recorded and the proposer notified).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run as planRun } from '../src/cli/plan.js';
 import { mergeConfig } from '../src/policy/config.js';
@@ -22,6 +22,7 @@ import {
 import { listInbox } from '../src/registry/inbox.js';
 import { getBrain } from '../src/registry/brains.js';
 import { captureLog, tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
+import { previewTransport } from '../src/cli/util.js';
 
 /** The plan fixture lives under test/fixtures/policy/, not the registry fixture dir. */
 function planFixture() {
@@ -29,6 +30,7 @@ function planFixture() {
 }
 
 const ACCOUNTS = [{ name: 'a' }, { name: 'b' }];
+const NOTIFY_INBOX = '/tmp/cc-socks/4242.sock';
 
 function sbbEnv(home, extra = {}) {
   return { SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb'), TMUX_PANE: undefined, ...extra };
@@ -236,6 +238,8 @@ test('sbb plan propose/ls/show/reject through the CLI', async () => {
 test('sbb plan approve spawns nodes, writes the report and notifies the proposer', async () => {
   const home = tempDir();
   const restore = withEnv(sbbEnv(home));
+  const targetSock = join(tempDir(), 'target.sock');
+  writeFileSync(targetSock, '');
   try {
     team();
     const input = planFixture();
@@ -259,6 +263,9 @@ test('sbb plan approve spawns nodes, writes the report and notifies the proposer
       sbbDir: join(home, '.sbb'),
       readQuota: async () => [{ account: 'a', window: 'weekly', remaining: 80 }],
       spawn: async (node) => ({ code: 0, stdout: `spawned TST-001${node.name === 'fe-a' ? 4 : 5} ${node.name} 24:3.9`, stderr: '' }),
+      resolve: async (address) => ({ address, brain: 'lead-a', brainId: 'TST-0001', account: 'a', cli: 'claude', paneId: '%73', coord: '24:3.4', claude: { sock: targetSock } }),
+      startInbox: async () => ({ sockPath: NOTIFY_INBOX, on() {}, off() {}, async close() {} }),
+      closeInboxes: async () => {},
       send: async (target, message) => {
         frames.push({ target, message });
         return { status: 'delivered', via: 'uds', msgId: message.msgId, elapsedMs: 1 };
@@ -276,6 +283,53 @@ test('sbb plan approve spawns nodes, writes the report and notifies the proposer
     assert.equal(frames[0].target.brainId, 'TST-0001');
     assert.match(frames[0].message.text, new RegExp(`plan ${planId} approved: spawned=2 failed=0`));
     assert.match(frames[0].message.text, new RegExp(`${planId}\\.result\\.json`));
+    assert.equal(frames[0].target.claude.sock, targetSock, 'the proposer is resolved to its live Claude socket');
+    assert.equal(previewTransport(frames[0].target).id, 'uds', 'the notification is routed over uds, not send-keys');
+    assert.equal(frames[0].message.fromSock, `uds:${NOTIFY_INBOX}`, 'the sender delivery inbox is attached');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb plan reject notifies the proposer over uds with the sender inbox attached', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  const targetSock = join(tempDir(), 'target.sock');
+  writeFileSync(targetSock, '');
+  try {
+    team();
+    const file = join(home, 'plan.json');
+    writeFileSync(file, JSON.stringify(planFixture()));
+    const proposerDeps = {
+      paneId: '%73',
+      rows: [callerRow({ brainId: 'TST-0001', brain: 'lead-a', role: 'main' })],
+      accounts: ACCOUNTS,
+      sbbDir: join(home, '.sbb'),
+    };
+    const proposed = await captureLog(() => planRun(['propose', '--file', file], proposerDeps));
+    const planId = /plan\s+(PL-\S+)\s+pending/.exec(proposed.lines[0])[1];
+
+    const frames = [];
+    const deps = {
+      paneId: undefined,
+      rows: [],
+      accounts: ACCOUNTS,
+      sbbDir: join(home, '.sbb'),
+      resolve: async (address) => ({ address, brain: 'lead-a', brainId: 'TST-0001', account: 'a', cli: 'claude', paneId: '%73', coord: '24:3.4', claude: { sock: targetSock } }),
+      startInbox: async () => ({ sockPath: NOTIFY_INBOX, on() {}, off() {}, async close() {} }),
+      closeInboxes: async () => {},
+      send: async (target, message) => {
+        frames.push({ target, message });
+        return { status: 'delivered', via: 'uds', msgId: message.msgId, elapsedMs: 1 };
+      },
+    };
+    const rejected = await captureLog(() => planRun(['reject', planId, '--reason', 'not now'], deps));
+    assert.equal(rejected.result, 0);
+    assert.equal(frames.length, 1, 'the proposer is notified once');
+    assert.equal(frames[0].target.claude.sock, targetSock);
+    assert.equal(previewTransport(frames[0].target).id, 'uds');
+    assert.equal(frames[0].message.fromSock, `uds:${NOTIFY_INBOX}`);
+    assert.match(frames[0].message.text, new RegExp(`plan ${planId} rejected: not now`));
   } finally {
     restore();
   }

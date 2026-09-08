@@ -7,6 +7,8 @@ import { writeInboxEntry } from '../registry/inbox.js';
 import { getBrain as defaultGetBrain, listBrains } from '../registry/brains.js';
 import { readConfig } from '../policy/config.js';
 import { readQuota } from '../quota/usage-guard.js';
+import { resolve as defaultResolve } from '../registry/resolve.js';
+import { closeInboxes } from '../transports/claude-uds.js';
 import {
   PlanError,
   approvePlan,
@@ -17,7 +19,7 @@ import {
   mayPropose,
   rejectPlan,
 } from '../policy/plans.js';
-import { EXIT, UsageError, callerIdentity, deliver, main, parse, renderTable, writeJson } from './util.js';
+import { EXIT, UsageError, callerIdentity, deliver, main, openDeliveryInbox, parse, renderTable, writeJson } from './util.js';
 
 const USAGE = `usage: sbb plan propose --file <plan.json>
        sbb plan ls [--json]
@@ -195,24 +197,33 @@ async function notifyProposer(plan, result, deps) {
   const body = plan.status === 'rejected'
     ? `plan ${plan.planId} rejected: ${plan.rejectionReason}`
     : `plan ${plan.planId} ${plan.status}: spawned=${spawned} failed=${(result.results ?? []).length - spawned}; report ~/.sbb/plans/${plan.planId}.result.json`;
+  // Same path as `sbb tell`: resolve the proposer to a live target (the roster row carries
+  // its Claude socket, which is what makes the uds transport available) and open our own
+  // delivery inbox so the message carries fromSock and the peer's receipt can come back.
+  // The hand-built target used to miss both, fall back to send-keys and get blocked with
+  // reason=target_busy while the receipt showed an empty fromSock (rehearsal run 11).
+  const identity = await callerIdentity(deps);
+  let target;
   try {
-    await deliver({
-      target: {
-        address: proposer.name,
-        brain: proposer.name,
-        brainId: proposer.id,
-        account: proposer.account,
-        cli: proposer.cli,
-        paneId: proposer.paneId,
-        coord: proposer.coord,
-      },
-      body,
-      skipPolicy: true,
-      deps,
-      send: deps.send,
+    target = await (deps.resolve ?? defaultResolve)(proposer.name, {
+      rows: deps.rows,
+      roster: deps.roster,
+      accounts: deps.accounts,
+      resolvePaneId: deps.resolvePaneId,
+      onWarn: deps.onWarn,
     });
   } catch (err) {
     console.error(`sbb: warning: could not notify ${proposer.name}: ${err?.message ?? err}`);
+    return;
+  }
+  const inbox = await openDeliveryInbox({ target, owner: identity.brain ?? 'user', deps });
+  try {
+    await deliver({ target, body, identity, skipPolicy: true, deps, send: deps.send, inbox });
+  } catch (err) {
+    console.error(`sbb: warning: could not notify ${proposer.name}: ${err?.message ?? err}`);
+  } finally {
+    await inbox?.close?.();
+    await (deps.closeInboxes ?? closeInboxes)();
   }
 }
 
