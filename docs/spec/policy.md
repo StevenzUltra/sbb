@@ -108,6 +108,11 @@ sbb plan approve <planId> [--edit <file>] -> spawns each brain in order (quota-c
 sbb plan reject <planId> --reason <text>  -> status rejected, proposer notified
 ```
 
+Approve and reject notify the proposer through the same delivery path as `sbb tell`: the
+proposer is resolved to a live target (its roster row carries the Claude socket, which is
+what makes the uds transport available) and the sender opens its own delivery inbox, so the
+receipt carries `fromSock`. `propose` writes the pending notice into the user inbox.
+
 Proposer must be the `parent` or its ancestor; a parent marked `autonomous` may `approve`
 its own plan (that is what "autonomous" means). `plan approve` shells out to `sbb spawn` for
 each node so lifecycle code stays in one place. An optional per-node `cliArgs` string is
