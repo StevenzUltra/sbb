@@ -11,23 +11,27 @@ sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --
    (`discoverAccounts()`), CLI binary on PATH; quota floor from `~/.sbb/config.json`
    (`quota.floorWeekly`, default 10) unless `--force` (see policy.md).
 2. Allocate the id first (`allocateId()`), so the briefing can contain it.
-3. Create the pane: `tmux new-window -n ai-<acct> -c <cwd> -P -F '#{pane_id}'` in the caller's
-   session (or `split-window` with `--split`, in the caller's window). Set pane options
-   `@ai_account`, `@codex_home`, `@sbb_brain=<id>` on it. Do not rely on `~/bin/ai-*`.
-4. Run the CLI with the account environment inline:
-   `env CLAUDE_CONFIG_DIR=<claudeDir> CODEX_HOME=<codexDir> CLAUDE_CODE_SESSION_NAME=<name> <cmd>`
-   via `tmux send-keys -l` + Enter into the new shell (the shell is the pane's process; the CLI
-   must be started with `exec` so `pane_current_command` reflects it).
+3. Write the briefing to `~/.sbb/briefs/<id>.md` (0600). Never put it on a command line
+   typed into a shell: a several-kilobyte line typed through `send-keys` into a login zsh
+   (autosuggestions, highlighting, bracketed paste) takes longer than the readiness window
+   and was observed stuck half-typed during the 2026-09-09 rehearsal.
+4. Create the pane with the CLI as its command, so no interactive shell is involved and
+   `pane_current_command` is the CLI itself:
+   `tmux new-window -n ai-<acct> -c <cwd> -P -F '#{pane_id}' -- sh -c '<cmd>'` (or
+   `split-window` with `--split`). Set pane options `@ai_account`, `@codex_home`,
+   `@sbb_brain=<id>` right after. Do not rely on `~/bin/ai-*` or `.zshrc`.
 
-   | cli    | command line                                                                  |
-   | ------ | ---------------------------------------------------------------------------- |
-   | claude | `exec claude [--model M] --append-system-prompt "<brief>" [extra]`           |
-   | codex  | `exec codex [-m M] [extra] "<brief>"` (PROMPT arg = first turn, which also makes the thread queueable) |
-   | agy    | `exec agy [--model M] --prompt-interactive "<brief>" [extra]`                |
-   | cursor | `exec cursor-agent [--model M] [extra] "<brief>"`                            |
+   `<cmd>` = `exec env CLAUDE_CONFIG_DIR=<claudeDir> CODEX_HOME=<codexDir> CLAUDE_CODE_SESSION_NAME=<name> <cli line>`:
 
-   The brief is shell-quoted as a single argument. If it exceeds 6000 chars, write it to
-   `~/.sbb/briefs/<id>.md` and pass a two-line brief pointing at the file.
+   | cli    | cli line                                                                          |
+   | ------ | --------------------------------------------------------------------------------- |
+   | claude | `claude [--model M] --append-system-prompt-file ~/.sbb/briefs/<id>.md [extra]`     |
+   | codex  | `codex [-m M] [extra] "$(cat ~/.sbb/briefs/<id>.md)"` (PROMPT arg = first turn, which also makes the thread queueable) |
+   | agy    | `agy [--model M] --prompt-interactive "$(cat ~/.sbb/briefs/<id>.md)" [extra]`       |
+   | cursor | `cursor-agent [--model M] [extra] "$(cat ~/.sbb/briefs/<id>.md)"`                   |
+
+   Quote every path for `sh`. When the CLI exits the pane closes (tmux default); `kill`
+   therefore treats a vanished pane as already dead.
 5. Wait for readiness (60 s, poll 1 s): Claude: a `sessions/<pid>.json` whose `tmux` names the
    new pane; Codex: prompt fingerprint idle after the brief turn (and the thread appears in
    `state_5.sqlite`); agy / cursor: idle fingerprint. Failure: kill the pane, do not register,
