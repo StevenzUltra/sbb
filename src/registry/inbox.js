@@ -5,16 +5,19 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 
 import { join } from 'node:path';
 import { sbbDir } from '../lib/paths.js';
 import { BRAIN_NAME_RE } from './brains.js';
+import { BRAIN_ID_RE } from './brain-id.js';
 
 /** The user is a valid inbox owner next to the brains. */
 export const USER_INBOX = 'user';
 
 /** @param {string} owner */
+/** A brain name, a brain id (`SMS-0012`, the delivery mirror) or `user`. */
 export function assertInboxOwner(owner) {
-  if (owner !== USER_INBOX && !BRAIN_NAME_RE.test(String(owner))) {
+  const value = String(owner);
+  if (value !== USER_INBOX && !BRAIN_NAME_RE.test(value) && !BRAIN_ID_RE.test(value)) {
     throw new Error(`invalid inbox owner "${owner}"`);
   }
-  return owner;
+  return value;
 }
 
 export function inboxRoot() {

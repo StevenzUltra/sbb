@@ -41,6 +41,12 @@ Every send appends one JSON line to `~/.sbb/log/receipts.jsonl`:
 `~/.sbb/inbox/<brain>/*.json` (one file per received reply, written by the inbox server or by
 `sbb reply` when the target is the user).
 
+Every delivery to a registered brain is also mirrored into `~/.sbb/inbox/<brain id>/` with
+`from`, `fromId`, `replyTo`, `t` and the full envelope text, whatever the transport. A
+codex-queue answer lands in the target's session and never reaches its socket, so `sbb ask`
+polls the mirror next to its own inbox and `sbb collect` merges both directories (one line
+per `msgId`).
+
 ## Sender identity and reply routing
 
 Every receipt - sent or blocked - also records the sender's session identity:

@@ -24,7 +24,9 @@ without sending. `--timeout` maps to `SendOptions.verifyTimeoutMs` (default 4000
 ## sbb ask <address> <text...> [--wait <duration>] [--priority ...]
 
 `tell`, then wait up to `--wait` (default `10m`, formats `30s`, `5m`, `1h`) for either a
-reply carrying `replyTo = msgId` (inbox) or, for Claude targets, a `peer_idle_notice`.
+reply carrying `replyTo = msgId` (inbox), a delivery mirrored into the caller's brain-id
+inbox with `from` = the target (a codex-queue answer arrives that way), or, for Claude
+targets, a `peer_idle_notice`.
 Prints the receipt line, then the reply line(s) or `timeout`. Exit 0 on reply, 5 on timeout.
 
 ## sbb reply <msgId8|msgId> <text...>
@@ -35,7 +37,8 @@ user (not a brain), writes to `~/.sbb/inbox/user/` instead.
 
 ## sbb collect [--for <brain>] [--all] [--json]
 
-Prints unread inbox entries for the caller (or `--for`), marks them read unless `--all`.
+Prints unread inbox entries for the caller (or `--for`) from both the name-keyed inbox and
+the brain-id mirror, one line per `msgId`, and marks them read unless `--all`.
 
 ## sbb watch [--json]
 

@@ -30,8 +30,19 @@ function statusCell(row) {
   return pending?.to ? `${base} -> ${pending.to}` : base;
 }
 
-/** @param {import('../registry/roster.js').RosterRow} row */
+/**
+ * A codex brain whose record names its thread must never show another thread's name (a cwd
+ * guess did, rehearsal 2026-09-09): the record's thread name, else `thread:<id first 8>`.
+ * @param {import('../registry/roster.js').RosterRow} row
+ */
 function nameCell(row) {
+  if (row.cli === 'codex') {
+    const threadId = row.brainId ? getBrain(row.brainId)?.threadId : undefined;
+    if (threadId) {
+      const own = row.threadId === threadId ? row.name : null;
+      return own ?? `thread:${String(threadId).slice(0, 8)}`;
+    }
+  }
   if (!row.name) return '-';
   return row.threadUncertain ? `${row.name} (thread: uncertain)` : row.name;
 }

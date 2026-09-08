@@ -487,3 +487,76 @@ test('fromModeFromEnv: only the protocol vocabulary is forwarded', () => {
   assert.equal(fromModeFromEnv({ SBB_FROM_MODE: 'prompting' }), 'prompting');
   assert.equal(fromModeFromEnv({ SBB_FROM_MODE: 'bypass\nx' }), undefined);
 });
+
+test('sbb tell: a delivery to a registered brain is mirrored into its id inbox', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const out = await captureLog(() => tellRun(['lead', 'ping'], deps()));
+    assert.equal(out.result, 0);
+    const mirror = listInbox('TST-0001');
+    assert.equal(mirror.length, 1);
+    const entry = mirror[0].entry;
+    assert.equal(entry.msgId, MSG_ID);
+    assert.equal(entry.from, 'h3');
+    assert.equal(entry.fromId, 'TST-0002');
+    assert.equal(entry.replyTo, null);
+    assert.match(entry.text, /ping/);
+    assert.ok(entry.t > 0);
+
+    const dry = await captureLog(() => tellRun(['lead', 'ping', '--dry-run'], deps()));
+    assert.equal(dry.result, 0);
+    assert.equal(listInbox('TST-0001').length, 1, 'a dry run sends nothing and mirrors nothing');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask: a delivery mirrored into the id inbox is the reply', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    // The asker is h3 (TST-0002); the answer arrives as a delivery to that brain, not on
+    // its socket, and carries neither replyTo nor the body marker.
+    const d = deps({
+      pollMs: 1,
+      sleep: async () => {},
+      send: async () => {
+        writeInboxEntry({
+          owner: 'TST-0002',
+          entry: { msgId: REPLY_ID, from: 'lead', fromId: 'TST-0001', text: 'PONG 已完成，共改 3 处', t: Date.now() + 1000 },
+        });
+        return { status: 'queued', via: 'codex-queue', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping', '--wait', '1s'], d));
+    assert.equal(out.result, 0);
+    assert.match(out.lines.join('\n'), /reply {5}msg=bbbbbbbb from=lead {2}via=mirror/);
+    assert.match(out.lines.join('\n'), /共改 3 处/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask: a mirror entry from another brain is not the reply', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const d = deps({
+      pollMs: 1,
+      sleep: async () => {},
+      send: async () => {
+        writeInboxEntry({
+          owner: 'TST-0002',
+          entry: { msgId: 'cc'.repeat(16), from: 'ios', fromId: 'TST-0003', text: 'unrelated', t: Date.now() + 1000 },
+        });
+        return { status: 'queued', via: 'codex-queue', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping', '--wait', '1s'], d));
+    assert.equal(out.result, 5);
+    assert.equal(out.lines.at(-1), 'timeout');
+  } finally {
+    restore();
+  }
+});

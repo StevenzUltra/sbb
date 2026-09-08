@@ -15,7 +15,7 @@ import { createWatchState, formatEvent, readNewInboxEntries, readNewReceipts } f
 import { getBrain } from '../src/registry/brains.js';
 import { listInbox, writeInboxEntry } from '../src/registry/inbox.js';
 import { receiptLogPath } from '../src/registry/receipts.js';
-import { captureLog, tempDir, withEnv } from './fixtures/registry/helpers.js';
+import { captureLog, tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
 
 const MSG_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
@@ -547,6 +547,47 @@ test('sbb watch helpers: new receipts, new inbox files and one-line events', () 
     assert.equal(inbox.length, 1);
     assert.match(formatEvent(inbox[0]), /^inbox {4}lead {2}msg=a1b2c3d4 {2}from=h3 {2}replyTo=ffeeddcc/);
     assert.deepEqual(readNewInboxEntries(state), [], 'seen files are not repeated');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ls: a codex brain shows its recorded threadId, never a guessed thread name', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead', role: 'main', parent: null, account: 'b' });
+    writeBrain({ id: 'TST-0009', uuid: 'uuid-ios', name: 'ios', role: 'sub', parent: 'TST-0001', account: 'b', cli: 'codex', paneId: '%14', coord: '24:1.1', threadId: '01a08263deadbeef' });
+    const base = { brain: 'ios', brainId: 'TST-0009', role: 'sub', parent: 'TST-0001', account: 'b', cli: 'codex', paneId: '%14', coord: '24:1.1' };
+
+    const unresolved = await captureLog(() => lsRun([], { roster: async () => [row({ ...base, name: null, threadId: null })] }));
+    assert.match(unresolved.lines.join('\n'), /thread:01a08263/);
+
+    const guessed = await captureLog(() => lsRun([], { roster: async () => [row({ ...base, name: '接手24-1-6并审查24-1-3', threadId: 'ffffffff0000' })] }));
+    assert.match(guessed.lines.join('\n'), /thread:01a08263/, 'the record decides, not the resolved thread');
+    assert.doesNotMatch(guessed.lines.join('\n'), /接手24-1-6/);
+
+    const own = await captureLog(() => lsRun([], { roster: async () => [row({ ...base, name: 'real-thread', threadId: '01a08263deadbeef' })] }));
+    assert.match(own.lines.join('\n'), /real-thread/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb collect: reads the brain-id mirror and prints one line per msgId', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    writeBrain({ id: 'TST-0001', uuid: 'uuid-lead', name: 'lead', role: 'main', parent: null, account: 'a' });
+    writeInboxEntry({ owner: 'TST-0001', entry: { msgId: MSG_ID, from: 'h3', text: 'mirrored', t: 1000 } });
+    writeInboxEntry({ owner: 'lead', entry: { msgId: MSG_ID, from: 'h3', text: 'mirrored', t: 1000 } });
+
+    const out = await captureLog(() => collectRun(['--for', 'lead'], { rows: [] }));
+    assert.equal(out.result, 0);
+    assert.equal(out.lines.length, 1, 'the same msgId is printed once');
+    assert.match(out.lines[0], /^msg=a1b2c3d4 {2}from=h3/);
+    assert.equal(listInbox('lead', { unreadOnly: true }).length, 0, 'the name copy is marked read');
+    assert.equal(listInbox('TST-0001', { unreadOnly: true }).length, 0, 'the mirror copy is marked read too');
   } finally {
     restore();
   }
