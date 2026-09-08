@@ -45,7 +45,10 @@ Every delivery to a registered brain is also mirrored into `~/.sbb/inbox/<brain 
 `from`, `fromId`, `replyTo`, `t` and the full envelope text, whatever the transport. A
 codex-queue answer lands in the target's session and never reaches its socket, so `sbb ask`
 polls the mirror next to its own inbox and `sbb collect` merges both directories (one line
-per `msgId`).
+per `msgId`). For `sbb ask` the mirror tier is a fallback, never the answer: a target mirrors
+its intermediate progress notes as well, so a mirror entry is held until `--wait` expires and
+printed as `via=mirror-fallback` only then (rehearsal run 15: a progress note was returned as
+the answer 12 s before the real summary).
 
 ## Sender identity and reply routing
 

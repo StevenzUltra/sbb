@@ -23,11 +23,14 @@ without sending. `--timeout` maps to `SendOptions.verifyTimeoutMs` (default 4000
 
 ## sbb ask <address> <text...> [--wait <duration>] [--priority ...]
 
-`tell`, then wait up to `--wait` (default `10m`, formats `30s`, `5m`, `1h`) for either a
-reply carrying `replyTo = msgId` (inbox), a delivery mirrored into the caller's brain-id
-inbox with `from` = the target (a codex-queue answer arrives that way), or, for Claude
-targets, a `peer_idle_notice`.
-Prints the receipt line, then the reply line(s) or `timeout`. Exit 0 on reply, 5 on timeout.
+`tell`, then wait up to `--wait` (default `10m`, formats `30s`, `5m`, `1h`) for a reply
+carrying `replyTo = msgId` (inbox), a frame from the target's own socket, a body carrying the
+envelope's `sbb:<msgId8>` marker, or, for Claude targets, a `peer_idle_notice`. A delivery
+merely mirrored into the caller's brain-id inbox with `from` = the target is only a fallback
+candidate: a target mirrors its progress notes too, so ask keeps waiting and prints the newest
+candidate as `via=mirror-fallback` only when nothing exact arrives before `--wait` expires.
+Prints the receipt line, then the reply line(s) or `timeout`. Exit 0 on reply, idle or mirror
+fallback, 5 on timeout.
 
 ## sbb reply <msgId8|msgId> <text...>
 
