@@ -125,7 +125,9 @@
  * @property {Priority} priority
  * @property {string|undefined} replyTo   msgId this replies to
  * @property {string} fromBrain           sender brain name or 'user'
- * @property {string|undefined} fromSock  sender inbox socket (uds:/tmp/cc-socks/<pid>.sock) when available
+ * @property {string|undefined} fromSock  sender inbox socket (uds:/tmp/cc-socks/<pid>.sock); required for uds delivery, see protocols.md
+ * @property {string|undefined} fromName  display name for the recipient ('ios#SMS-0012' or 'Claude'); uds wraps the body with it
+ * @property {'bypass'|'prompting'|undefined} fromMode  sender permission mode when known
  */
 
 /**
