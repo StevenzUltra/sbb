@@ -4,7 +4,17 @@ import { writeInboxEntry } from '../registry/inbox.js';
 import { findReceipt } from '../registry/receipts.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { newMsgId, shortId } from '../lib/ids.js';
-import { EXIT, UsageError, callerIdentity, deliver, main, parse, printReceipt, receiptExitCode } from './util.js';
+import {
+  EXIT,
+  UsageError,
+  callerIdentity,
+  deliver,
+  main,
+  openDeliveryInbox,
+  parse,
+  printReceipt,
+  receiptExitCode,
+} from './util.js';
 
 const USAGE = `usage: sbb reply <msgId8|msgId> <text...>
 
@@ -66,15 +76,21 @@ export async function run(argv, deps = {}) {
       onWarn: deps.onWarn,
       rows: deps.rows,
     });
-    const { receipt } = await deliver({
-      target,
-      body: text,
-      replyTo: original.msgId,
-      identity,
-      deps,
-      send: deps.send,
-    });
-    printReceipt(receipt, { json: values.json });
-    return receiptExitCode(receipt);
+    const inbox = await openDeliveryInbox({ target, owner: identity.brain ?? 'user', deps });
+    try {
+      const { receipt } = await deliver({
+        target,
+        body: text,
+        replyTo: original.msgId,
+        identity,
+        deps,
+        send: deps.send,
+        inbox,
+      });
+      printReceipt(receipt, { json: values.json });
+      return receiptExitCode(receipt);
+    } finally {
+      await inbox?.close?.();
+    }
   });
 }

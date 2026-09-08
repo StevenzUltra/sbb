@@ -9,6 +9,7 @@ import {
   callerIdentity,
   deliver,
   main,
+  openDeliveryInbox,
   parse,
   parseDuration,
   previewTransport,
@@ -88,26 +89,32 @@ export async function run(argv, deps = {}) {
       return EXIT.OK;
     }
 
-    const { receipt, text } = await deliver({
-      target,
-      body,
-      priority,
-      verifyTimeoutMs,
-      identity,
-      deps,
-      send: deps.send,
-      msgId: deps.msgId,
-    });
-    if (values.json) writeJson(receipt);
-    else {
-      console.log(`envelope  ${text}`);
-      console.log(formatReceipt(receipt));
+    const inbox = await openDeliveryInbox({ target, owner: identity.brain ?? 'user', deps });
+    try {
+      const { receipt, text } = await deliver({
+        target,
+        body,
+        priority,
+        verifyTimeoutMs,
+        identity,
+        deps,
+        send: deps.send,
+        msgId: deps.msgId,
+        inbox,
+      });
+      if (values.json) writeJson(receipt);
+      else {
+        console.log(`envelope  ${text}`);
+        console.log(formatReceipt(receipt));
+      }
+      return receipt.status === 'delivered' || receipt.status === 'queued'
+        ? EXIT.OK
+        : receipt.status === 'unverified'
+          ? EXIT.UNVERIFIED
+          : EXIT.BLOCKED;
+    } finally {
+      await inbox?.close?.();
     }
-    return receipt.status === 'delivered' || receipt.status === 'queued'
-      ? EXIT.OK
-      : receipt.status === 'unverified'
-        ? EXIT.UNVERIFIED
-        : EXIT.BLOCKED;
   });
 }
 

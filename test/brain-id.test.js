@@ -42,16 +42,23 @@ test('id shape and seq parsing', () => {
 test('allocateId increments, pads to 4 and never pads down', () => {
   const home = tempDir();
   const sbb = join(home, '.sbb');
-  const opts = { sbbDir: sbb, tag: 'TST' };
-  assert.equal(allocateId(opts), 'TST-0001');
-  assert.equal(allocateId(opts), 'TST-0002');
-  assert.equal(readFileSync(join(sbb, 'counter'), 'utf8').trim(), '2');
+  // The receipt-log probe inside allocateId follows SBB_DIR, so isolate it here too:
+  // a unit test must never read (or depend on) the operator's real ~/.sbb log.
+  const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: sbb });
+  try {
+    const opts = { sbbDir: sbb, tag: 'TST' };
+    assert.equal(allocateId(opts), 'TST-0001');
+    assert.equal(allocateId(opts), 'TST-0002');
+    assert.equal(readFileSync(join(sbb, 'counter'), 'utf8').trim(), '2');
 
-  writeFileSync(join(sbb, 'counter'), '41\n');
-  assert.equal(allocateId(opts), 'TST-0042');
+    writeFileSync(join(sbb, 'counter'), '41\n');
+    assert.equal(allocateId(opts), 'TST-0042');
 
-  writeFileSync(join(sbb, 'counter'), '9999\n');
-  assert.equal(allocateId(opts), 'TST-10000', 'past 9999 the number simply grows');
+    writeFileSync(join(sbb, 'counter'), '9999\n');
+    assert.equal(allocateId(opts), 'TST-10000', 'past 9999 the number simply grows');
+  } finally {
+    restore();
+  }
 });
 
 test('a missing counter recovers the max seq from brains, retired records and receipts', () => {
