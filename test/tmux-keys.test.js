@@ -5,9 +5,12 @@
 // on 2026-09-09: claude from panes %30/%74, codex from %20/%21, agy and cursor from scratch
 // sessions. Samples marked "spec" are states no live pane was in (permission dialog,
 // Cursor task queue) and come from docs/spec/protocols.md section 3.
+// test/fixtures/codex-screens.json holds full codex captures from a scratch codex-cli
+// 0.154.0-alpha.6 (same day), including the trust dialog and the screen left behind by it.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { CLI_PROFILES, profileFor } from '../src/transports/cli-profiles.js';
@@ -162,6 +165,58 @@ test('codex profile: live idle and busy samples', () => {
   assert.equal(p.idle(CODEX_BUSY), false);
   assert.equal(p.busy(CODEX_BUSY), true);
   assert.equal(p.acceptsInput(CODEX_BUSY), false);
+});
+
+// Full captures, not trimmed samples: these are the shapes that broke roster status.
+const CODEX_SCREENS = JSON.parse(readFileSync(new URL('./fixtures/codex-screens.json', import.meta.url), 'utf8'));
+
+test('codex profile: a dismissed trust dialog in the scrollback is not an open dialog', () => {
+  // The trust prompt stays in the capture for the rest of the session. Matching the whole
+  // screen kept `prompting` true, so roster showed `?` for a perfectly idle codex brain.
+  const p = CLI_PROFILES.codex;
+  const screen = CODEX_SCREENS.idleWithDismissedDialog;
+  assert.match(screen, /› 1\. Yes, continue/, 'fixture must still contain the dismissed dialog');
+  assert.equal(p.prompting(screen), false);
+  assert.equal(p.busy(screen), false);
+  assert.equal(p.idle(screen), true);
+  assert.equal(p.acceptsInput(screen), true);
+});
+
+test('codex profile: a dialog that is actually open still reads as prompting', () => {
+  const p = CLI_PROFILES.codex;
+  const screen = CODEX_SCREENS.trustDialog;
+  assert.equal(p.prompting(screen), true);
+  assert.equal(p.idle(screen), false);
+  assert.equal(p.acceptsInput(screen), false);
+});
+
+test('codex profile: live busy and finished-turn captures', () => {
+  const p = CLI_PROFILES.codex;
+  assert.match(CODEX_SCREENS.busy, /• Working \(\d+s • esc to interrupt\)/);
+  assert.equal(p.busy(CODEX_SCREENS.busy), true);
+  assert.equal(p.idle(CODEX_SCREENS.busy), false);
+  // The spinner line is redrawn, never left behind: a finished turn is idle again.
+  assert.doesNotMatch(CODEX_SCREENS.turnDone, /• Working \(/);
+  assert.equal(p.busy(CODEX_SCREENS.turnDone), false);
+  assert.equal(p.idle(CODEX_SCREENS.turnDone), true);
+});
+
+test('codex profile: braille padding on the composer line still reads as idle', () => {
+  const p = CLI_PROFILES.codex;
+  const screen = CODEX_SCREENS.brailleIdleComposer;
+  assert.match(screen, /› Ask Codex to do anything[\u2800-\u28ff]/);
+  assert.equal(p.idle(screen), true);
+  assert.equal(p.prompting(screen), false);
+});
+
+test('roster resolves the profile map through its dynamic import', async () => {
+  // src/registry/roster.js does `mod.profiles ?? mod.default ?? mod`; the namespace has no
+  // `codex` key, so a missing `profiles` export silently degrades every status to '?'.
+  const mod = await import('../src/transports/cli-profiles.js');
+  const profiles = mod.profiles ?? mod.default ?? mod;
+  assert.equal(profiles.codex, mod.CLI_PROFILES.codex);
+  assert.equal(profiles.codex.idle(CODEX_SCREENS.idleWithDismissedDialog), true);
+  assert.equal(profiles.codex.busy(CODEX_SCREENS.busy), true);
 });
 
 test('agy profile: spec idle and busy samples', () => {
