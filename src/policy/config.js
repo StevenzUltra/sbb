@@ -29,6 +29,7 @@ export function defaultConfig(opts = {}) {
     brains: {},
     allow: [],
     quota: { ...DEFAULT_QUOTA },
+    spawn: { cliArgs: {} },
   };
 }
 
@@ -61,6 +62,17 @@ export function mergeConfig(raw, opts = {}) {
     .filter((pair) => Array.isArray(pair) && pair.length === 2 && pair.every((x) => typeof x === 'string' && x.trim() !== ''))
     .map(([a, b]) => [String(a).trim(), String(b).trim()]);
   const quota = source.quota && typeof source.quota === 'object' ? source.quota : {};
+  // Default CLI flags per CLI for `sbb spawn` (set with `sbb policy spawn-args`).
+  // Blank or non-string values are dropped rather than passed to a spawn.
+  const cliArgs = {};
+  const rawArgs = source.spawn && typeof source.spawn === 'object' && source.spawn.cliArgs && typeof source.spawn.cliArgs === 'object'
+    ? source.spawn.cliArgs
+    : {};
+  for (const [cli, value] of Object.entries(rawArgs)) {
+    if (typeof value !== 'string') continue;
+    const text = value.trim();
+    if (text !== '') cliArgs[String(cli)] = text;
+  }
   return {
     machineTag: typeof source.machineTag === 'string' && source.machineTag.trim() !== ''
       ? source.machineTag.trim()
@@ -72,6 +84,7 @@ export function mergeConfig(raw, opts = {}) {
       floorWeekly: percent(quota.floorWeekly, base.quota.floorWeekly),
       mainReserve: percent(quota.mainReserve, base.quota.mainReserve),
     },
+    spawn: { cliArgs },
   };
 }
 
@@ -112,4 +125,4 @@ export function updateConfig(mutate, opts = {}) {
   return writeConfig(next, opts);
 }
 
-/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, allow: string[][], quota: { floorWeekly: number, mainReserve: number } }} SbbConfig */
+/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string> } }} SbbConfig */

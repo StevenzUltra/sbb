@@ -362,3 +362,40 @@ test('sbb policy set/allow/deny/quota edit the config file', async () => {
     restore();
   }
 });
+
+test('policy spawn-args writes, shows and removes per-CLI default flags', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    // A value that starts with `-` is the whole point: strict parseArgs would read it as
+    // another option, so the subcommand takes its tail verbatim.
+    assert.equal((await captureLog(() => policyRun(['spawn-args', 'claude', '--permission-mode bypassPermissions']))).result, 0);
+    // Split over argv (as an unquoted shell word) joins back into one string.
+    assert.equal((await captureLog(() => policyRun(['spawn-args', 'codex', '--sandbox', 'workspace-write']))).result, 0);
+    assert.deepEqual(readConfig().spawn.cliArgs, {
+      claude: '--permission-mode bypassPermissions',
+      codex: '--sandbox workspace-write',
+    });
+
+    const shown = await captureLog(() => policyRun(['show']));
+    assert.match(shown.lines.join('\n'), /^spawn\s+claude=--permission-mode bypassPermissions, codex=--sandbox workspace-write$/m);
+    const json = await captureLog(() => policyRun(['show', '--json']));
+    assert.equal(json.lines.join('').includes('"cliArgs"'), true);
+
+    assert.equal((await captureLog(() => policyRun(['spawn-args', 'claude', '']))).result, 0);
+    assert.deepEqual(readConfig().spawn.cliArgs, { codex: '--sandbox workspace-write' });
+    const cleared = await captureLog(() => policyRun(['spawn-args', 'codex', '   ']));
+    assert.equal(cleared.result, 0);
+    assert.deepEqual(readConfig().spawn.cliArgs, {}, 'blank removes the entry');
+
+    assert.equal((await captureLog(() => policyRun(['spawn-args', 'nope', '--x']))).result, 2);
+    assert.equal((await captureLog(() => policyRun(['spawn-args']))).result, 2);
+  } finally {
+    restore();
+  }
+});
+
+test('mergeConfig drops blank or non-string spawn.cliArgs', () => {
+  assert.deepEqual(mergeConfig({ spawn: { cliArgs: { claude: '  --a b  ', codex: '', agy: 7 } } }).spawn.cliArgs, { claude: '--a b' });
+  assert.deepEqual(mergeConfig({}).spawn.cliArgs, {});
+});
