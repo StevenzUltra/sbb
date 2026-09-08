@@ -224,6 +224,8 @@ test('moderated peers: message is held, listed, then approved through the normal
 
     const frames = [];
     const approveDeps = {
+      paneId: null,
+      rows: [],
       resolve: async (address) => (address === 'lead-a' ? TARGET_A : TARGET_B),
       send: async (target, message) => {
         frames.push({ target, message });
@@ -264,6 +266,8 @@ test('sbb approve --deny deletes the hold and tells the sender', async () => {
 
     const frames = [];
     const deps = {
+      paneId: null,
+      rows: [],
       resolve: async (address) => (address === 'lead-a' ? TARGET_A : TARGET_B),
       send: async (target, message) => {
         frames.push({ target, message });
@@ -481,6 +485,8 @@ test('sbb approve resolves the hold brainId and refuses a same-named replacement
     const asked = [];
     const frames = [];
     const deps = {
+      paneId: null,
+      rows: [],
       resolve: async (address) => {
         asked.push(address);
         if (address === 'lead-b') return { ...TARGET_B, brainId: 'TST-0009', paneId: '%31' };
@@ -517,6 +523,8 @@ test('sbb approve refuses a resolver that hands back a different brain', async (
 
     const frames = [];
     const refused = await captureLog(() => approveRun([id8], {
+      paneId: null,
+      rows: [],
       // A resolver that answers a brainId request with somebody else must never be sent to.
       resolve: async () => ({ ...TARGET_B, brainId: 'TST-0009' }),
       send: async (target, message) => {
@@ -530,6 +538,130 @@ test('sbb approve refuses a resolver that hands back a different brain', async (
     assert.equal(refused.result, 4);
     assert.match(refused.lines.join('\n'), /hold targets brain TST-0002, resolved TST-0009/);
     assert.equal(frames.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb approve refuses a brain whose pane carries @sbb_brain, and logs the attempt', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'self serve'], tellDeps(home)));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+
+    let sent = 0;
+    const deps = {
+      // A fake pane with no roster row: only its @sbb_brain tag names the brain, which is how
+      // a spawned brain's pane still looks after its record was retired.
+      paneId: '%98',
+      rows: [],
+      paneOption: async (paneId, name) => (paneId === '%98' && name === 'sbb_brain' ? 'TST-0002' : null),
+      resolve: async () => { throw new Error('a refused approve must not resolve anything'); },
+      send: async () => { sent += 1; return { status: 'delivered', via: 'uds', msgId: 'x', elapsedMs: 1 }; },
+      startInbox: async () => fakeInbox(),
+      closeInboxes: async () => {},
+      sbbDir,
+    };
+    const refused = await captureLog(() => approveRun([id8], deps));
+    assert.equal(refused.result, 4);
+    assert.match(
+      refused.lines.join('\n'),
+      /blocked\s+msg=[0-9a-f]{8}\s+via=approve\s+reason=policy\s+detail=holds are approved by the user only/,
+    );
+    assert.equal(sent, 0, 'nothing is delivered');
+    assert.equal(listHeld({ sbbDir }).length, 1, 'the hold is kept');
+    const entry = readReceiptEntries().find((e) => e.held === 'refused');
+    assert.ok(entry, 'the attempt is logged');
+    assert.equal(entry.fromId, 'TST-0002');
+    assert.equal(entry.reason, 'policy');
+    assert.equal(entry.detail, 'holds are approved by the user only');
+    assert.equal(entry.toId, 'TST-0002');
+
+    const denied = await captureLog(() => approveRun(['--deny', id8], deps));
+    assert.equal(denied.result, 4, 'a brain may not deny a hold either');
+    assert.equal(listHeld({ sbbDir }).length, 1, 'deny did not delete the hold');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb approve refuses a brain resolved from its pane record or its session socket', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'hello'], tellDeps(home)));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+    const base = {
+      rows: [],
+      paneOption: async () => null,
+      resolve: async () => { throw new Error('a refused approve must not resolve anything'); },
+      send: async () => { throw new Error('a refused approve must not send anything'); },
+      startInbox: async () => fakeInbox(),
+      closeInboxes: async () => {},
+      sbbDir,
+    };
+
+    const byPane = await captureLog(() => approveRun([id8], { ...base, paneId: '%73', rows: [SENDER_ROW] }));
+    assert.equal(byPane.result, 4, 'the pane record names a brain');
+    assert.match(byPane.lines.join('\n'), /reason=policy\s+detail=holds are approved by the user only/);
+
+    // Same brain again, this time with no roster row and no pane tag: only the sender session
+    // socket (CLAUDE_CODE_MESSAGING_SOCKET) names it.
+    writeBrain({ id: 'TST-0003', name: 'lead-a-claude', role: 'sub', parent: 'TST-0001', account: 'a', paneId: '%77', pid: 4321 });
+    const bySock = await captureLog(() => approveRun([id8], {
+      ...base,
+      paneId: null,
+      env: { CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/cc-socks/4321.sock' },
+    }));
+    assert.equal(bySock.result, 4, 'the session socket names a brain');
+    const entries = readReceiptEntries().filter((e) => e.held === 'refused');
+    assert.deepEqual(entries.map((e) => e.fromId).sort(), ['TST-0001', 'TST-0003']);
+    assert.equal(listHeld({ sbbDir }).length, 1, 'both attempts left the hold in place');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb approve records the real approver instead of a fixed user', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'hello'], tellDeps(home)));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+
+    const frames = [];
+    const deps = {
+      // An unregistered Claude pane: not a brain, so the decision stands and the notice must
+      // name it rather than claim the user made it.
+      paneId: '%81',
+      rows: [{ ...SENDER_ROW, brain: null, brainId: null, paneId: '%81', role: 'peer' }],
+      paneOption: async () => null,
+      resolve: async (address) => (address === 'lead-a' ? TARGET_A : TARGET_B),
+      send: async (target, message) => {
+        frames.push({ target, message });
+        return { status: 'delivered', via: 'uds', msgId: message.msgId, elapsedMs: 1 };
+      },
+      startInbox: async () => fakeInbox(),
+      closeInboxes: async () => {},
+      sbbDir,
+    };
+    const approved = await captureLog(() => approveRun([id8], deps));
+    assert.equal(approved.result, 0);
+    assert.equal(frames.length, 2);
+    assert.match(frames[1].message.text, /approved and sent by Claude/);
+    const entry = readReceiptEntries().find((e) => e.held === 'released');
+    assert.equal(entry.approvedBy, 'Claude');
+    assert.equal(listHeld({ sbbDir }).length, 0);
   } finally {
     restore();
   }
