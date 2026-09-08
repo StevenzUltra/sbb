@@ -1,0 +1,19 @@
+{
+  "name": "sbb",
+  "version": "0.1.0",
+  "description": "Switch Brain Brain: a tmux-only switchboard that lets AI CLI sessions (Claude Code, Codex, Antigravity, Cursor) across isolated accounts talk to each other with verified delivery.",
+  "type": "module",
+  "bin": {
+    "sbb": "./bin/sbb.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/sbb.js && node -e \"import('./src/transports/index.js').then(()=>console.log('imports ok'))\""
+  },
+  "repository": "github:StevenzUltra/sbb",
+  "license": "MIT",
+  "private": false
+}

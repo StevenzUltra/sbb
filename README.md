@@ -1,0 +1,56 @@
+# SBB
+
+**Switch Brain Brain.** A tmux-only switchboard for AI CLI sessions.
+
+You talk to a *main brain*. Main brains run *sub brains*. Every brain is a real
+CLI session (Claude Code, Codex, Antigravity, Cursor) picked by three choices:
+isolated account, CLI, model. SBB launches them, lets them message each other
+across accounts, and turns "did it actually receive that?" into a receipt.
+
+SBB never calls a model API and never touches credentials. It drives the
+official CLIs and needs nothing but a reachable tmux server. Ghostty, iTerm2,
+Terminal.app, kitty or an SSH session: anything that runs tmux works.
+
+## Status
+
+Design draft v0.6 (2026-09-09). M1 kernel in progress.
+
+- M1 kernel: roster union, `tell / ask / reply / collect / watch`, three
+  transports (Claude Unix socket, `codex queue`, verified `tmux send-keys`),
+  four-state receipts, `quota` and `catalog` readers.
+- M2 lifecycle: `spawn`, `switch`, `move`, `policy`, `claim`, `plan propose`,
+  `account add`.
+- M3 brain map TUI (Ink + React): tree, modals, drag-to-transfer, quota bar.
+- M4 optional: web org chart, terminal adapters.
+
+## Delivery states
+
+| state        | meaning                                                                    |
+| ------------ | -------------------------------------------------------------------------- |
+| `delivered`  | Protocol receipt says delivered, or the screen shows the line was submitted |
+| `queued`     | Target is busy; the message sits in its own queue                           |
+| `unverified` | Typed, but the screen could not confirm submission. One Enter retry, never a resend |
+| `blocked`    | Not sent: copy-mode, permission prompt, `held`/`denied`, policy, unknown target. Reason attached |
+
+## Layout
+
+```
+bin/sbb.js            CLI entry
+src/lib/              paths (account discovery), tmux wrapper, ids, exec
+src/registry/         brain records, roster union, address resolution
+src/transports/       claude-uds, codex-queue, tmux-keys, router
+src/quota/            Usage Guard reader, model catalog
+src/cli/              one file per subcommand
+docs/spec/            protocols, registry, receipts, cli
+docs/tasks/           work briefs for helpers
+test/                 node:test suites and fixtures
+```
+
+Requires Node 22.13 or newer (uses `node:sqlite`, `util.parseArgs`). No runtime
+dependencies in the kernel.
+
+## Run tests
+
+```
+npm test
+```
