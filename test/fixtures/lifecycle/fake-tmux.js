@@ -26,6 +26,7 @@ export function createFakeTmux(opts = {}) {
   let panes = opts.panes ?? [{ paneId, session: '24', windowId: '@16', coord, command: 'zsh' }];
   const screens = opts.screens ?? [];
   let screenIndex = 0;
+  let enterCount = 0;
 
   const nextScreen = () => screens[Math.min(screenIndex++, Math.max(screens.length - 1, 0))] ?? '';
 
@@ -75,7 +76,12 @@ export function createFakeTmux(opts = {}) {
     },
     async sendKey(pane, press) {
       calls.push(['send-key', pane, press]);
-      if (opts.exitAfterEnter && press === 'Enter') panes = [];
+      if (press !== 'Enter') return;
+      if (opts.exitAfterEnter) panes = [];
+      else if (opts.exitAfterEnters) {
+        enterCount += 1;
+        if (enterCount >= opts.exitAfterEnters) panes = [];
+      }
     },
     async selectPane(pane) {
       calls.push(['select-pane', pane]);

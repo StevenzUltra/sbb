@@ -91,6 +91,22 @@ test('gracefulExit: an idle pane that does not exit is killed after the wait', a
   assert.match(result.detail, /alive 5ms after \/exit; kill-pane/);
 });
 
+test('gracefulExit: a pane that swallows the first Enter is exited by the retry', async () => {
+  const tmuxApi = createFakeTmux({ screens: [screen('codex-idle')], exitAfterEnters: 2 });
+  const result = await gracefulExit(BRAINS[2], {
+    tmuxApi,
+    sleep: async () => {},
+    waitMs: 30,
+    pollMs: 1,
+    enterRetryMs: 0,
+  });
+  assert.deepEqual(typedLiterals(tmuxApi), ['/quit']);
+  assert.equal(result.typed, true);
+  assert.equal(result.killed, false);
+  assert.match(result.detail, /exited after \/quit \(second Enter\)/);
+  assert.equal(tmuxApi.calls.filter((c) => c[0] === 'send-key').length, 2);
+});
+
 test('gracefulExit: a gone pane is reported, not typed into', async () => {
   const tmuxApi = createFakeTmux({ panes: [] });
   const result = await gracefulExit(BRAINS[1], { tmuxApi, sleep: async () => {} });

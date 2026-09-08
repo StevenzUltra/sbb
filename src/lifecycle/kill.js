@@ -94,6 +94,12 @@ async function killPane(tmuxApi, paneId) {
  * @param {{ tmuxApi?: typeof tmuxLib, force?: boolean, waitMs?: number, pollMs?: number,
  *           sleep?: (ms: number) => Promise<void> }} [deps]
  */
+/**
+ * Codex's slash-command palette consumes the first Enter (the command stays in the
+ * composer); retry once before falling back to kill-pane.
+ */
+export const EXIT_ENTER_RETRY_MS = 800;
+
 export async function gracefulExit(brain, deps = {}) {
   const tmuxApi = deps.tmuxApi ?? tmuxLib;
   const sleep = deps.sleep ?? defaultSleep;
@@ -120,11 +126,23 @@ export async function gracefulExit(brain, deps = {}) {
     if (profile.idle(screen)) {
       await tmuxApi.sendLiteral(paneId, exitCommand);
       await tmuxApi.sendKey(paneId, 'Enter');
-      const deadline = Date.now() + waitMs;
+      const startedAt = Date.now();
+      const deadline = startedAt + waitMs;
+      const retryMs = Math.min(deps.enterRetryMs ?? EXIT_ENTER_RETRY_MS, Math.floor(waitMs / 2));
+      let retried = false;
       while (Date.now() < deadline) {
         await sleep(pollMs);
         if (!(await paneAlive(tmuxApi, paneId))) {
-          return { paneId, typed: true, killed: false, detail: `exited after ${exitCommand}` };
+          return {
+            paneId,
+            typed: true,
+            killed: false,
+            detail: `exited after ${exitCommand}${retried ? ' (second Enter)' : ''}`,
+          };
+        }
+        if (!retried && Date.now() - startedAt >= retryMs) {
+          retried = true;
+          await tmuxApi.sendKey(paneId, 'Enter');
         }
       }
       await killPane(tmuxApi, paneId);
