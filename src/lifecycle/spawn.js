@@ -7,6 +7,7 @@ import { discoverAccounts, sbbDir } from '../lib/paths.js';
 import * as tmuxLib from '../lib/tmux.js';
 import { allocateId, newUuid } from '../registry/brain-id.js';
 import { BRAIN_NAME_RE, getBrain, isValidBrainName, listBrains, removeBrain, saveBrain } from '../registry/brains.js';
+import { expireHoldsForBrain } from '../policy/held.js';
 import { ROLE_LABELS } from '../registry/envelope.js';
 import { readConfig as readPolicyConfig } from '../policy/config.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
@@ -309,6 +310,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   for (const other of (deps.listBrains ?? listBrains)()) {
     if (!other?.id || other.id === id || other.paneId !== paneId) continue;
     (deps.removeBrain ?? removeBrain)(other.id);
+    (deps.expireHolds ?? expireHoldsForBrain)(other.id, {});
     retiredDuplicates.push({ id: other.id, name: other.name });
   }
 

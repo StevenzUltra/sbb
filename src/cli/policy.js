@@ -2,6 +2,7 @@
 import { BRAIN_CLIS, getBrain } from '../registry/brains.js';
 import { PEER_MODES, readConfig, updateConfig } from '../policy/config.js';
 import { EXIT, UsageError, main, parse, renderTable, writeJson } from './util.js';
+import { heldStatus } from '../policy/held.js';
 
 const USAGE = `usage: sbb policy show [--json]
        sbb policy peers on|off|moderated
@@ -174,13 +175,14 @@ function spawnArgsCommand(tail, deps) {
 /** @param {Record<string, any>[]} holds */
 export function heldTable(holds) {
   return renderTable(
-    ['MSGID', 'HELD', 'FROM', 'TO', 'REASON'],
+    ['MSGID', 'STATUS', 'HELD', 'FROM', 'TO', 'REASON'],
     holds.map((h) => [
       String(h.msgId).slice(0, 8),
+      heldStatus(h),
       new Date(h.heldAt ?? 0).toISOString().replace('T', ' ').slice(0, 19),
       h.sender?.name ?? h.sender?.brain ?? 'user',
       h.target?.brain ?? h.target?.address ?? '-',
-      h.reason ?? 'peers_moderated',
+      h.expiredReason ? `${h.reason ?? 'peers_moderated'}; ${h.expiredReason}` : (h.reason ?? 'peers_moderated'),
     ]),
   );
 }

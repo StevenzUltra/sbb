@@ -50,9 +50,27 @@ export async function run(argv, deps = {}) {
       return EXIT.OK;
     }
 
-    const address = entry.target?.address ?? entry.target?.brain;
+    // Resolve the recorded brainId, never the name: a retired brain's name can already
+    // belong to a replacement (rehearsal 2026-09-09: an old hold landed on the new lead).
+    const brainId = entry.target?.brainId ?? null;
+    const address = brainId ?? entry.target?.address ?? entry.target?.brain;
     if (!address) throw new UsageError(`held message ${shortId(entry.msgId)} has no target address`);
-    const target = await (deps.resolve ?? defaultResolve)(address, { accounts: deps.accounts, onWarn: deps.onWarn });
+    const blocked = (detail) => {
+      if (values.json) writeJson({ msgId: entry.msgId, approved: false, blocked: 'target_not_found', detail });
+      else console.log(`blocked  msg=${shortId(entry.msgId)}  via=approve  reason=target_not_found  detail=${detail}`);
+      return EXIT.BLOCKED;
+    };
+    let target;
+    try {
+      target = await (deps.resolve ?? defaultResolve)(address, { accounts: deps.accounts, onWarn: deps.onWarn });
+    } catch (err) {
+      if (!brainId) throw err;
+      return blocked(err?.detail ? `${err.message} (${err.detail})` : (err?.message ?? String(err)));
+    }
+    if (brainId && target.brainId !== brainId) {
+      // resolve() is exact for an id; a resolver that hands back another brain is refused.
+      return blocked(`hold targets brain ${brainId}, resolved ${target.brainId ?? target.address}`);
+    }
     const inbox = await openDeliveryInbox({ target, owner: entry.sender?.name ?? 'user', deps });
     try {
       const message = { ...entry.message, msgId: entry.msgId };

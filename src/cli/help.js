@@ -35,7 +35,7 @@ export const COMMANDS = Object.freeze([
     'Transfer a brain (with context) under another parent'],
   ['policy', 'sbb policy show [--json] | peers on|off|moderated | set <id|name> [--peers on|off] [--autonomous on|off] | allow <a> <b> | deny <a> <b> | quota [--floor-weekly <n>] [--main-reserve <n>]',
     'Show or change who may talk to whom, quota floors'],
-  ['held', 'sbb held [--json]', 'List messages held for user approval (moderated peers)'],
+  ['held', 'sbb held [--all] [--json]', 'List messages held for user approval; --all includes expired ones'],
   ['approve', 'sbb approve [--deny] [--reason <text>] <msgId8> [--json]',
     'Release or deny a held message'],
   ['claim', 'sbb claim add <resource> [--note <text>] | release <resource> | release --all | ls [--all] [--json]',

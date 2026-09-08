@@ -75,7 +75,7 @@ export async function run(argv, deps = {}) {
       return EXIT.OK;
     }
     for (const item of outcome.results) {
-      console.log(`killed    ${item.brain.id}  ${item.brain.name}  ${item.exit.detail}  claims=${item.claims}`);
+      console.log(`killed    ${item.brain.id}  ${item.brain.name}  ${item.exit.detail}  claims=${item.claims}  holds=${item.expiredHolds ?? 0} expired`);
     }
     for (const child of outcome.reparented) {
       console.log(`reparent  ${child.id}  ${child.name}  parent=${child.parent ?? '-'}  role=${child.role}`);

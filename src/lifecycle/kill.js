@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { sbbDir } from '../lib/paths.js';
 import * as tmuxLib from '../lib/tmux.js';
 import { getBrain, listBrains, removeBrain, saveBrain } from '../registry/brains.js';
+import { expireHoldsForBrain } from '../policy/held.js';
 import { ROLE_LABELS } from '../registry/envelope.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { profileFor } from '../transports/cli-profiles.js';
@@ -254,7 +255,9 @@ export async function killBrains(plan, deps = {}) {
     });
     const retired = (deps.removeBrain ?? removeBrain)(brain.id);
     const claims = (deps.releaseClaims ?? releaseClaims)(brain.id, { dir: deps.claimsDir });
-    results.push({ brain, exit, retired, claims });
+    // A hold that names this brain can never be delivered now: expire it, silently.
+    const expiredHolds = (deps.expireHolds ?? expireHoldsForBrain)(brain.id, { sbbDir: deps.sbbDir });
+    results.push({ brain, exit, retired, claims, expiredHolds });
   }
 
   let notification;
