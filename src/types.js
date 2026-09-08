@@ -64,11 +64,13 @@
  */
 
 /**
- * A brain record persisted at ~/.sbb/brains/<name>.json.
+ * A brain record persisted at ~/.sbb/brains/<id>.json (retired ones under _retired/).
  * @typedef {Object} Brain
- * @property {string} name          unique, [a-z0-9][a-z0-9-]{0,39}
+ * @property {string} id            immutable, unique per machine, never reused: '<TAG>-<seq>' e.g. 'SMS-0012'
+ * @property {string} uuid          global identity (UUID v7 or randomUUID), never reused
+ * @property {string} name          alias, unique among live brains, [a-z0-9][a-z0-9-]{0,39}
  * @property {'main'|'sub'} role
- * @property {string|null} parent   brain name; null for main brains (parent is the user)
+ * @property {string|null} parent   parent brain id (e.g. 'SMS-0007'); null for main brains (parent is the user)
  * @property {string} account
  * @property {CliKind} cli
  * @property {string|undefined} model
@@ -78,6 +80,7 @@
  * @property {number|undefined} pid   CLI process pid when known
  * @property {number} createdAt     epoch ms
  * @property {'spawned'|'adopted'} origin
+ * @property {number|undefined} retiredAt  epoch ms once killed/forgotten; record lives in _retired/
  */
 
 /**
@@ -85,6 +88,7 @@
  * @typedef {Object} Target
  * @property {string} address       the input, e.g. 'ios' or 'b/claude:eagerstudy-b1' or 'default/agy:%29'
  * @property {string|undefined} brain  brain name if the address named a brain
+ * @property {string|undefined} brainId  brain id if the address named a brain
  * @property {string} account
  * @property {CliKind} cli
  * @property {string} paneId        current pane id
@@ -121,7 +125,9 @@
  * @property {Priority} priority
  * @property {string|undefined} replyTo   msgId this replies to
  * @property {string} fromBrain           sender brain name or 'user'
- * @property {string|undefined} fromSock  sender inbox socket (uds:/tmp/cc-socks/<pid>.sock) when available
+ * @property {string|undefined} fromSock  sender inbox socket (uds:/tmp/cc-socks/<pid>.sock); required for uds delivery, see protocols.md
+ * @property {string|undefined} fromName  display name for the recipient ('ios#SMS-0012' or 'Claude'); uds wraps the body with it
+ * @property {'bypass'|'prompting'|undefined} fromMode  sender permission mode when known
  */
 
 /**

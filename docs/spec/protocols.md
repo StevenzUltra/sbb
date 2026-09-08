@@ -41,10 +41,13 @@ arrives within 30 s. The server does not write anything back on the connection.
 - `user`: `message.content` must be a non-empty string. Optional: `msg_id` (32 hex),
   `priority` `now|next|later` (default `next`), `session_id` (dropped on mismatch),
   `uuid`, `from` (a `uds:/tmp/cc-socks/<pid>.sock` address), `file_attachments`.
-- The content may be wrapped as
-  `<cross-session-message from="uds:..." from-session="..." hop-chain="..." from-name="..." from-mode="bypass|prompting">\n<body>\n</cross-session-message>`.
-  The parser is strict (re-serialisation must match); do not hand-craft it in M1. Plain
-  content is displayed as "Another Claude session sent a message".
+- The content should be wrapped as
+  `<cross-session-message from="uds:..." from-name="..." from-mode="bypass|prompting">\n<body>\n</cross-session-message>`
+  (attribute order: from, from-session, hop-chain, from-name, from-mode; omit unknown ones;
+  `from` value chars `[A-Za-z0-9%:_/.\\-]`, `from-name` no `"<>` or newlines). Verified
+  accepted by 2.1.263 and displayed as `Message from @<from-name>: <body>`. Plain content
+  is displayed as "Another Claude session sent a message". Omit `from-mode` unless the
+  sender's own permission mode is known.
 - Verified: a plain `auth` + `user` pair injected from a shell into a busy session was
   delivered mid-turn (not held), and the socket returned zero bytes.
 
@@ -66,6 +69,29 @@ inside its socket namespace.
 `held` = "Your message is held for the recipient user's approval before it reaches their
 Claude session (permission-mode parity)". `denied` = user declined. `refused`/`dropped` =
 rate limit, duplicate, relay loop or full queue; never retry these by typing.
+
+Measured 2026-09-09 (scratch bypass-mode session, foreign sender process, three trials):
+
+| sender                                                        | `from` field                                   | result                    |
+| ------------------------------------------------------------- | ---------------------------------------------- | ------------------------- |
+| foreign process, no `from`                                    | absent                                         | **held** (dialog `Deny / Deliver this message to Claude`, Deny preselected) |
+| foreign process, `from` = another live Claude session's socket | `uds:/tmp/cc-socks/18748.sock` (not the sender) | **held**                  |
+| foreign process listening on its own `<pid>.sock`             | `uds:/tmp/cc-socks/<sender pid>.sock`          | **delivered, no dialog**  |
+| same, content wrapped in `<cross-session-message from=... from-name="sbb-e2e" from-mode="bypass">` | own socket | **delivered, no dialog**, shown as `Message from @sbb-e2e: ...` |
+| child process of the recipient session (`selfSent`)           | absent                                         | delivered, no dialog      |
+
+Rule to implement: always listen on an inbox socket named after the sending process and
+send `from` pointing at it. A missing `from`, or a `from` naming a socket the sending pid
+does not own, is treated as an unverified sender and held for the user. Selecting Deliver
+(Down, Enter) delivers the full body; one approval does not appear to whitelist the sender.
+
+Also measured: **no `peer_message_status` arrives for a normal delivery** (the receiver
+processed the message and answered, the inbox stayed silent for 20 s). Receipts are only
+expected for the held/denied/dropped paths. So a `queued` receipt from this transport means
+"accepted by the socket, not yet observed"; positive confirmation must come from elsewhere:
+the recipient's registry `status` flipping to `busy` within a couple of seconds, or the
+pane showing the `Message from @<name>` line (needs the wrapper). `notify_when_idle` sent
+after the recipient had already gone idle produced no `peer_idle_notice` within 17 s.
 
 ### Idle notification
 
