@@ -164,7 +164,10 @@ export function validateBrain(brain) {
   if (typeof brain.cwd !== 'string' || brain.cwd === '') {
     throw new BrainError('brain.cwd must be a non-empty string', 'invalid_cwd');
   }
-  if (typeof brain.paneId !== 'string' || !/^%\d+$/.test(brain.paneId)) {
+  // `paneId: null` marks a brain whose pane disappeared (docs/spec/lifecycle.md); any
+  // other value must still be a tmux pane id.
+  if (brain.paneId === undefined) brain.paneId = null;
+  if (brain.paneId !== null && (typeof brain.paneId !== 'string' || !/^%\d+$/.test(brain.paneId))) {
     throw new BrainError(`invalid paneId "${brain.paneId}"`, 'invalid_pane');
   }
   if (!Number.isFinite(brain.createdAt)) throw new BrainError('brain.createdAt must be epoch ms', 'invalid_created_at');

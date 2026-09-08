@@ -91,6 +91,23 @@ test('sbb ls --tree: brains only, indented by parent', async () => {
   }
 });
 
+test('sbb ls: a brain whose pane is gone shows STATUS gone in the table, tree and by name', async () => {
+  const goneRow = row({
+    brain: 'ios', brainId: 'TST-0002', role: 'sub', parent: 'TST-0001', paneId: null, coord: null,
+    where: '24:3.5', status: 'stale', source: 'brain',
+  });
+  const deps = { roster: async () => [goneRow], getBrain: () => ({ id: 'TST-0002', name: 'ios' }) };
+
+  const table = await captureLog(() => lsRun([], deps));
+  assert.match(table.lines.join('\n'), /^TST-0002\s+ios\s+sub\s+TST-0001\s+a\s+claude\s+-\s+gone\s/m);
+
+  const tree = await captureLog(() => lsRun(['--tree'], deps));
+  assert.match(tree.lines.join('\n'), /TST-0002  ios  sub  a\/claude  gone  24:3\.5/);
+
+  const one = await captureLog(() => lsRun(['ios'], deps));
+  assert.match(one.lines.join('\n'), /^TST-0002\s+ios\s+sub\s+TST-0001\s+a\s+claude\s+-\s+gone\s/m);
+});
+
 test('sbb adopt: registers a live session and refuses bad input', async () => {
   const home = tempDir();
   const restore = withEnv(sbbEnv(home));
