@@ -83,6 +83,8 @@ export function buildCodexDb(codexDir, threads) {
   db.exec(`CREATE TABLE threads (
     id TEXT PRIMARY KEY,
     rollout_path TEXT NOT NULL,
+    created_at INTEGER,
+    created_at_ms INTEGER,
     updated_at INTEGER NOT NULL,
     updated_at_ms INTEGER,
     cwd TEXT NOT NULL,
@@ -90,10 +92,12 @@ export function buildCodexDb(codexDir, threads) {
     name TEXT
   )`);
   const insert = db.prepare(
-    'INSERT INTO threads (id, rollout_path, updated_at, updated_at_ms, cwd, archived, name) VALUES (?, ?, ?, ?, ?, 0, ?)',
+    'INSERT INTO threads (id, rollout_path, created_at, created_at_ms, updated_at, updated_at_ms, cwd, archived, name)'
+      + ' VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)',
   );
   for (const thread of threads) {
-    insert.run(thread.id, thread.rolloutPath, thread.updatedAt, thread.updatedAt * 1000, thread.cwd, thread.name ?? null);
+    const createdAt = thread.createdAt ?? thread.updatedAt;
+    insert.run(thread.id, thread.rolloutPath, createdAt, createdAt * 1000, thread.updatedAt, thread.updatedAt * 1000, thread.cwd, thread.name ?? null);
   }
   db.close();
   return dbPath;

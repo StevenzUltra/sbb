@@ -26,7 +26,9 @@ id; names are only aliases and may be renamed.
 `~/.sbb/brains/<id>.json` (file name = id), schema `Brain` in `src/types.js`.
 Written by `adopt` (M1) and `spawn` / `move` / `kill` (M2). Names are unique among live
 brains, `[a-z0-9][a-z0-9-]{0,39}`; a retired brain's name may be reused, its id may not.
-`paneId` is a hint; always re-resolve before sending.
+`paneId` is a hint; always re-resolve before sending. For codex brains, `threadId` /
+`threadName` name the thread the spawn created (see lifecycle.md step 6); the roster prefers
+them over matching a thread by cwd when they are present.
 
 Write atomically (temp file + rename). Reads tolerate missing dir (= no brains).
 

@@ -36,8 +36,12 @@ sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --
    new pane; Codex: prompt fingerprint idle after the brief turn (and the thread appears in
    `state_5.sqlite`); agy / cursor: idle fingerprint. Failure: kill the pane, do not register,
    exit 4 with the last screen lines.
-6. `saveBrain({ id, uuid, name, role, parent, account, cli, model, cwd, paneId, coord, pid, origin:'spawned' })`.
-7. Print `spawned <id> <name> <coord>` (or JSON). Notify the parent brain (if any) with one
+6. For codex, resolve the thread this spawn created: the newest `threads` row for the cwd
+   with `created_at` at or after the spawn start, else the newest rollout file written since
+   then (its name carries the thread uuid). Record it as `threadId`, plus `threadName` from
+   `threads.name`. No match means no field; an older thread is never attributed.
+7. `saveBrain({ id, uuid, name, role, parent, account, cli, model, cwd, paneId, coord, pid, threadId, threadName, origin:'spawned' })`.
+8. Print `spawned <id> <name> <coord>` (or JSON). Notify the parent brain (if any) with one
    line via the normal delivery path: `[<name>#<id> …][子脑] 已上线，上级 <parent>`.
 
 ## sbb kill

@@ -58,6 +58,7 @@
  * @property {string|undefined} name  auto-generated session name; usable with `codex queue --thread`
  * @property {string} cwd
  * @property {string} rolloutPath
+ * @property {number} createdAtMs
  * @property {number} updatedAtMs
  * @property {string} account
  * @property {boolean} hasRollout   false means `codex queue` cannot find it yet
@@ -78,6 +79,8 @@
  * @property {string} paneId        '%30' (may be stale; always re-resolve before use)
  * @property {string|undefined} coord  'session:window.pane' at registration time
  * @property {number|undefined} pid   CLI process pid when known
+ * @property {string|undefined} threadId   codex thread this spawn created (codex only)
+ * @property {string|undefined} threadName codex `threads.name` at registration time
  * @property {number} createdAt     epoch ms
  * @property {'spawned'|'adopted'} origin
  * @property {number|undefined} retiredAt  epoch ms once killed/forgotten; record lives in _retired/
