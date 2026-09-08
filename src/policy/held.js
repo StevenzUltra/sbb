@@ -42,11 +42,11 @@ export function writeHold(input) {
 }
 
 /**
- * Every parked message, oldest first.
+ * Every parked message with its file path, oldest first.
  * @param {{ sbbDir?: string }} [opts]
- * @returns {Record<string, any>[]}
+ * @returns {{ file: string, entry: Record<string, any> }[]}
  */
-export function listHeld(opts = {}) {
+export function listHeldFiles(opts = {}) {
   const dir = heldDir(opts);
   let names = [];
   try {
@@ -57,12 +57,70 @@ export function listHeld(opts = {}) {
   const out = [];
   for (const name of names) {
     try {
-      out.push(JSON.parse(readFileSync(join(dir, name), 'utf8')));
+      out.push({ file: join(dir, name), entry: JSON.parse(readFileSync(join(dir, name), 'utf8')) });
     } catch {
       // a half-written hold is not worth failing the listing for
     }
   }
-  return out.sort((a, b) => (a.heldAt ?? 0) - (b.heldAt ?? 0));
+  return out.sort((a, b) => (a.entry.heldAt ?? 0) - (b.entry.heldAt ?? 0));
+}
+
+/**
+ * Every parked message, oldest first.
+ * @param {{ sbbDir?: string }} [opts]
+ * @returns {Record<string, any>[]}
+ */
+export function listHeld(opts = {}) {
+  return listHeldFiles(opts).map((h) => h.entry);
+}
+
+/** `pending` until a retire expires it. @param {Record<string, any>} entry */
+export function heldStatus(entry) {
+  return entry?.expiredAt ? 'expired' : 'pending';
+}
+
+/**
+ * A hold is worth showing while both ends are alive: the brain record still exists and
+ * still has a pane. An end without a brain id (the user, or a bare address) counts as
+ * alive, and a caller with no `getBrainFn` hides nothing.
+ * @param {Record<string, any>} entry
+ * @param {{ getBrainFn?: (ref: string) => Record<string, any>|undefined }} [opts]
+ */
+export function holdAlive(entry, { getBrainFn } = {}) {
+  if (!getBrainFn) return true;
+  const alive = (id) => {
+    if (!id) return true;
+    const brain = getBrainFn(id);
+    return Boolean(brain) && brain.paneId !== null;
+  };
+  return alive(entry?.sender?.id) && alive(entry?.target?.brainId);
+}
+
+/**
+ * Expire every pending hold whose sender or target is this brain. Retiring a brain is
+ * silent for the hold: nobody is notified (docs/spec/policy.md "Moderated holds").
+ * @param {string} brainId
+ * @param {{ now?: number, reason?: string, sbbDir?: string }} [opts]
+ * @returns {number} how many holds were expired
+ */
+export function expireHoldsForBrain(brainId, opts = {}) {
+  const id = String(brainId ?? '').trim();
+  if (!id) return 0;
+  let count = 0;
+  for (const { file, entry } of listHeldFiles(opts)) {
+    if (entry.expiredAt) continue;
+    if (entry.sender?.id !== id && entry.target?.brainId !== id) continue;
+    const next = {
+      ...entry,
+      expiredAt: opts.now ?? Date.now(),
+      expiredReason: opts.reason ?? `brain ${id} retired`,
+    };
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+    renameSync(tmp, file);
+    count += 1;
+  }
+  return count;
 }
 
 /**

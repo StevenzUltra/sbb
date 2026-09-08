@@ -56,7 +56,9 @@ sbb kill <id|name> [--keep-children] [--yes] [--force]
   the pane is idle): claude `/exit`, codex `/quit`, agy `/quit`, cursor `/exit`. Verify the
   exact commands on scratch sessions before relying on them; note the result in the report.
   If the pane is still alive after 3 s, or `--force`, `tmux kill-pane`.
-- Retire records (`removeBrain` moves them to `_retired/` with `retiredAt`), release claims
+- Retire records (`removeBrain` moves them to `_retired/` with `retiredAt`), expire the
+  holds that name a killed brain (policy.md "Moderated holds"; silent, nobody is
+  notified), release claims
   (policy.md), notify the parent with one line through the same delivery path as `sbb tell`
   (an inbox is opened for the send, so the envelope carries `fromSock` and can be replied
   to). `--keep-children` re-parents children to the

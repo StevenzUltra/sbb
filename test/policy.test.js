@@ -13,7 +13,8 @@ import { DEFAULT_QUOTA, mergeConfig, readConfig, writeConfig } from '../src/poli
 import { check } from '../src/policy/rules.js';
 import { checkMainReserve, checkQuotaFloor, weeklyRemaining } from '../src/policy/quota.js';
 import { listHeld } from '../src/policy/held.js';
-import { getBrain } from '../src/registry/brains.js';
+import { killBrains, killPlan } from '../src/lifecycle/kill.js';
+import { getBrain, removeBrain, saveBrain } from '../src/registry/brains.js';
 import { readReceiptEntries } from '../src/registry/receipts.js';
 import { captureLog, tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
 
@@ -398,4 +399,138 @@ test('policy spawn-args writes, shows and removes per-CLI default flags', async 
 test('mergeConfig drops blank or non-string spawn.cliArgs', () => {
   assert.deepEqual(mergeConfig({ spawn: { cliArgs: { claude: '  --a b  ', codex: '', agy: 7 } } }).spawn.cliArgs, { claude: '--a b' });
   assert.deepEqual(mergeConfig({}).spawn.cliArgs, {});
+});
+
+test('retiring a brain expires its holds and sbb held hides them until --all', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    let sent = 0;
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'hello there'], tellDeps(home, {
+      send: async () => { sent += 1; return { status: 'delivered', via: 'uds', msgId: 'x', elapsedMs: 1 }; },
+    })));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+    assert.equal(listHeld({ sbbDir })[0].expiredAt, undefined, 'pending while the target lives');
+
+    const outcome = await killBrains(killPlan('TST-0002'), {
+      force: true,
+      tmuxApi: { resolvePaneId: async () => '%30', tmux: async () => {} },
+      sleep: async () => {},
+    });
+    assert.equal(outcome.results[0].expiredHolds, 1);
+    assert.equal(outcome.notification, undefined, 'a main brain has no parent to notify');
+
+    const [hold] = listHeld({ sbbDir });
+    assert.ok(hold.expiredAt > 0);
+    assert.match(hold.expiredReason, /brain TST-0002 retired/);
+    assert.equal(sent, 0, 'expiry notifies nobody');
+
+    const hidden = await captureLog(() => heldRun([], { sbbDir }));
+    assert.equal(hidden.result, 0);
+    assert.ok(!hidden.lines.some((l) => l.includes(id8)), 'a dead-ended hold is hidden by default');
+    assert.match(hidden.lines.join('\n'), /sbb held --all shows expired ones/);
+
+    const shown = await captureLog(() => heldRun(['--all'], { sbbDir }));
+    assert.ok(shown.lines.some((l) => l.includes(id8)), '--all shows the expired hold');
+    assert.match(shown.lines.join('\n'), /expired/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb held hides a hold whose target record has no pane, without expiring it', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'hello there'], tellDeps(home)));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+
+    // The record stays, its pane is gone: the shape a stale record takes.
+    saveBrain({ ...getBrain('TST-0002'), paneId: null });
+
+    const hidden = await captureLog(() => heldRun([], { sbbDir }));
+    assert.ok(!hidden.lines.some((l) => l.includes(id8)), 'no pane means no delivery path');
+    const shown = await captureLog(() => heldRun(['--all'], { sbbDir }));
+    assert.ok(shown.lines.some((l) => l.includes(id8)));
+    assert.equal(listHeld({ sbbDir })[0].expiredAt, undefined, 'hidden is not expired');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb approve resolves the hold brainId and refuses a same-named replacement', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'hello there'], tellDeps(home)));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+
+    // The recorded target is retired and a replacement takes its name with a new id.
+    removeBrain('TST-0002');
+    writeBrain({ id: 'TST-0009', uuid: 'uuid-lead-b-2', name: 'lead-b', role: 'main', parent: null, account: 'b', paneId: '%31', coord: '24:3.5' });
+
+    const asked = [];
+    const frames = [];
+    const deps = {
+      resolve: async (address) => {
+        asked.push(address);
+        if (address === 'lead-b') return { ...TARGET_B, brainId: 'TST-0009', paneId: '%31' };
+        throw Object.assign(new Error(`unknown brain id "${address}"`), { reason: 'target_not_found' });
+      },
+      send: async (target, message) => {
+        frames.push({ target, message });
+        return { status: 'delivered', via: 'uds', msgId: message.msgId, elapsedMs: 1 };
+      },
+      startInbox: async () => fakeInbox(),
+      closeInboxes: async () => {},
+      sbbDir,
+    };
+    const blocked = await captureLog(() => approveRun([id8], deps));
+    assert.equal(blocked.result, 4);
+    assert.deepEqual(asked, ['TST-0002'], 'the recorded brainId is resolved, never the name');
+    assert.equal(frames.length, 0, 'nothing is delivered to the replacement brain');
+    assert.match(blocked.lines.join('\n'), /blocked\s+msg=[0-9a-f]{8}\s+via=approve\s+reason=target_not_found/);
+    assert.equal(listHeld({ sbbDir }).length, 1, 'the hold is kept for the user to deny');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb approve refuses a resolver that hands back a different brain', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    twoMains();
+    writeConfig(mergeConfig({ peers: 'moderated' }));
+    const sbbDir = join(home, '.sbb');
+    const { lines } = await captureLog(() => tellRun(['lead-b', 'hello there'], tellDeps(home)));
+    const id8 = /msg=([0-9a-f]{8})/.exec(lines.find((l) => l.startsWith('blocked')))[1];
+
+    const frames = [];
+    const refused = await captureLog(() => approveRun([id8], {
+      // A resolver that answers a brainId request with somebody else must never be sent to.
+      resolve: async () => ({ ...TARGET_B, brainId: 'TST-0009' }),
+      send: async (target, message) => {
+        frames.push({ target, message });
+        return { status: 'delivered', via: 'uds', msgId: message.msgId, elapsedMs: 1 };
+      },
+      startInbox: async () => fakeInbox(),
+      closeInboxes: async () => {},
+      sbbDir,
+    }));
+    assert.equal(refused.result, 4);
+    assert.match(refused.lines.join('\n'), /hold targets brain TST-0002, resolved TST-0009/);
+    assert.equal(frames.length, 0);
+  } finally {
+    restore();
+  }
 });

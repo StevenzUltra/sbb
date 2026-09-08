@@ -51,8 +51,16 @@ exit 4. They are logged like any receipt.
 When the verdict is `moderated`, the message is not sent: it is written to
 `~/.sbb/held/<msgId>.json` (full OutboundMessage + target + sender) and the sender gets
 `blocked reason=moderated detail=held for user approval: sbb approve <msgId8>`.
-`sbb held` lists pending holds; `sbb approve <msgId8>` sends it through the normal path and
-deletes the hold; `sbb approve --deny <msgId8>` deletes it and notifies the sender.
+`sbb held` lists holds whose sender and target are both still alive (a brain record that
+exists and still has a pane); `sbb held --all` also shows the rest. `sbb approve <msgId8>`
+sends it through the normal path and deletes the hold; `sbb approve --deny <msgId8>` deletes
+it and notifies the sender.
+
+Retiring a brain (`sbb kill`, or a spawn retiring a duplicate record) marks every pending
+hold whose sender or target is that brain `expired` (`expiredAt` + `expiredReason`); nobody
+is notified. `sbb approve` resolves the hold's recorded `target.brainId`, never its name, so
+a retired brain or a dead pane answers `blocked reason=target_not_found` instead of landing on
+a same-named replacement, and the hold file is kept for `--deny`.
 
 ## sbb policy
 
