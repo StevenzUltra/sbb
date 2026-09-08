@@ -78,6 +78,7 @@
  * @property {string} paneId        '%30' (may be stale; always re-resolve before use)
  * @property {string|undefined} coord  'session:window.pane' at registration time
  * @property {number|undefined} pid   CLI process pid when known
+ * @property {string|undefined} threadId  codex thread this brain was spawned as; roster trusts it over cwd matching
  * @property {number} createdAt     epoch ms
  * @property {'spawned'|'adopted'} origin
  * @property {number|undefined} retiredAt  epoch ms once killed/forgotten; record lives in _retired/

@@ -377,3 +377,49 @@ test('brains: paneId null marks a gone pane, other values must still be pane ids
     restore();
   }
 });
+
+test('roster: a codex brain that records its threadId is not re-guessed by cwd', async () => {
+  const home = tempDir();
+  const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
+  try {
+    const accounts = fakeAccounts(home, ['b']);
+    const rolloutDir = join(home, '.ai-account-b', 'codex', 'sessions', '2026', '09', '09');
+    mkdirSync(rolloutDir, { recursive: true });
+    const older = join(rolloutDir, 'rollout-old.jsonl');
+    const newer = join(rolloutDir, 'rollout-new.jsonl');
+    writeFileSync(older, '');
+    writeFileSync(newer, '');
+    // Two codex threads in the same account and cwd; the newer one is the cwd guess.
+    buildCodexDb(accounts[0].codexDir, [
+      { id: 't1', name: 'old-thread', cwd: '/Users/dev/proj', rolloutPath: older, updatedAt: 100 },
+      { id: 't2', name: 'new-thread', cwd: '/Users/dev/proj', rolloutPath: newer, updatedAt: 200 },
+    ]);
+    const panes = fixtureJson('panes.json');
+    const deps = {
+      accounts,
+      listPanes: async () => panes,
+      exec: fakeExec({ commands: { 9003: 'zsh -l', 9101: 'node /opt/homebrew/bin/codex' }, children: { 9003: ['9101'] } }),
+      withStatus: false,
+      onWarn: () => {},
+    };
+
+    const guessed = (await roster(deps)).find((r) => r.paneId === '%14');
+    assert.equal(guessed.threadId, 't2', 'without a record the newest thread in the cwd wins');
+
+    const record = { id: 'TST-0001', uuid: 'uuid-ios', name: 'ios', role: 'main', parent: null, account: 'b', cli: 'codex', paneId: '%14', coord: '24:1.1', threadId: 't1' };
+    writeBrain(record);
+    const recorded = (await roster(deps)).find((r) => r.paneId === '%14');
+    assert.equal(recorded.threadId, 't1', 'the recorded thread wins even though it is older');
+    assert.equal(recorded.name, 'old-thread');
+    assert.equal(recorded.brain, 'ios');
+    assert.equal(recorded.threadUncertain, false);
+
+    // A record naming a thread that is gone stays null: no fallback to guessing.
+    writeBrain({ ...record, threadId: 't9' });
+    const missing = (await roster(deps)).find((r) => r.paneId === '%14');
+    assert.equal(missing.threadId, null);
+    assert.equal(missing.name, null);
+  } finally {
+    restore();
+  }
+});

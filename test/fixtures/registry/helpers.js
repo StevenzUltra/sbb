@@ -66,6 +66,7 @@ export function writeBrain(over = {}) {
     paneId: over.paneId ?? '%30',
     coord: over.coord ?? '24:3.4',
     pid: over.pid,
+    ...(over.threadId === undefined ? {} : { threadId: over.threadId }),
     createdAt: over.createdAt ?? Date.now(),
     origin: over.origin ?? 'adopted',
   });
