@@ -228,7 +228,8 @@ export function spawnArgs(node) {
   if (node.cwd) args.push('--cwd', node.cwd);
   if (node.briefFile) args.push('--brief-file', node.briefFile);
   // Extra flags carried by the plan node; `sbb spawn --cli-args` does the splitting.
-  if (node.cliArgs) args.push('--cli-args', node.cliArgs);
+  // The `=` form is required: `--cli-args --permission-mode ...` is ambiguous to parseArgs.
+  if (node.cliArgs) args.push(`--cli-args=${node.cliArgs}`);
   return args;
 }
 

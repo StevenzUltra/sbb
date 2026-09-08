@@ -98,8 +98,10 @@ sbb plan reject <planId> --reason <text>  -> status rejected, proposer notified
 Proposer must be the `parent` or its ancestor; a parent marked `autonomous` may `approve`
 its own plan (that is what "autonomous" means). `plan approve` shells out to `sbb spawn` for
 each node so lifecycle code stays in one place. An optional per-node `cliArgs` string is
-passed through as `sbb spawn --cli-args` (whitespace-split, quotes honoured), so a plan can
-start its brains with flags such as `--permission-mode bypassPermissions`.
+passed through as `sbb spawn --cli-args=<text>` (the `=` form: a space-separated value that
+starts with `-` is ambiguous to `parseArgs`; whitespace-split and quotes honoured by
+`sbb spawn`), so a plan can start its brains with flags such as
+`--permission-mode bypassPermissions`.
 
 ## sbb account
 

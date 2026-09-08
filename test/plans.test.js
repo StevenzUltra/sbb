@@ -326,11 +326,11 @@ test('normalizePlan keeps an optional cliArgs string and rejects other types', (
 test('spawnArgs carries cliArgs as --cli-args for sbb spawn', () => {
   const node = { name: 'fe-a', role: 'sub', account: 'a', cli: 'claude', parent: 'TST-0001', cwd: '/tmp/proj' };
   const withArgs = spawnArgs({ ...node, cliArgs: '--permission-mode bypassPermissions' });
-  const at = withArgs.indexOf('--cli-args');
-  assert.ok(at !== -1, `the flag is passed: ${withArgs.join(' ')}`);
-  assert.equal(withArgs[at + 1], '--permission-mode bypassPermissions');
-  assert.equal(withArgs.filter((a) => a === '--cli-args').length, 1, 'exactly once');
-  assert.ok(!spawnArgs(node).includes('--cli-args'), 'no flag without cliArgs');
+  const flag = withArgs.find((a) => a.startsWith('--cli-args'));
+  // `--cli-args --permission-mode ...` is ambiguous to parseArgs, so the `=` form is used.
+  assert.equal(flag, '--cli-args=--permission-mode bypassPermissions');
+  assert.equal(withArgs.filter((a) => a.startsWith('--cli-args')).length, 1, 'exactly once');
+  assert.ok(!spawnArgs(node).some((a) => a.startsWith('--cli-args')), 'no flag without cliArgs');
 });
 
 test('approvePlan hands each node its cliArgs to the spawn runner', async () => {
