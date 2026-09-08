@@ -19,9 +19,15 @@ function shortCwd(cwd) {
   return cwd?.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd ?? '-';
 }
 
-/** A brain whose pane disappeared is `gone` (docs/spec/lifecycle.md), not `stale`. */
+/**
+ * A brain whose pane disappeared is `gone` (docs/spec/lifecycle.md), not `stale`.
+ * A brain waiting for its turn under `sbb move --after-idle` shows where it is headed.
+ * @param {import('../registry/roster.js').RosterRow} row
+ */
 function statusCell(row) {
-  return row.paneId === null ? 'gone' : row.status;
+  const base = row.paneId === null ? 'gone' : row.status;
+  const pending = row.brainId ? getBrain(row.brainId)?.pendingMove : undefined;
+  return pending?.to ? `${base} -> ${pending.to}` : base;
 }
 
 /** @param {import('../registry/roster.js').RosterRow} row */

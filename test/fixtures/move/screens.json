@@ -1,0 +1,15 @@
+{
+  "_comment": "Pane screens for the non-Claude idle path of sbb move. Shapes follow the live samples in docs/spec/protocols.md section 3 and test/tmux-keys.test.js; the composer line is always the last prompt line.",
+  "codex": {
+    "idle": "› Ask Codex to do anything\n  latest · weekly 97% left · gpt-6-astra xhigh · Context 100% left",
+    "busy": "• Working (1m 02s • esc to interrupt)\n› Ask Codex to do anything\n  latest · weekly 97% left · gpt-6-astra xhigh · Context 100% left"
+  },
+  "agy": {
+    "idle": "> Accept-edits mode: file edits auto-approved (shift+tab to cycle)",
+    "busy": "Working (2m 14s)\n> Accept-edits mode: file edits auto-approved (shift+tab to cycle)"
+  },
+  "cursor": {
+    "idle": "→ Plan, search, build anything\n  fake · auto",
+    "busy": "⏺ read file.ts\n1 task\n→ Add a follow-up\n  fake · auto"
+  }
+}
