@@ -13,6 +13,16 @@ const COMMANDS = {
   quota: 'Show remaining quota per account (read-only)',
   catalog: 'Show accounts x CLIs x models available on this machine',
   doctor: 'Check tmux, accounts, sockets and Usage Guard availability',
+  spawn: 'Launch a new brain (account, CLI, model, role) with its briefing',
+  kill: 'Retire a brain and its subtree (graceful exit, then kill-pane)',
+  switch: 'Focus a brain\'s pane in tmux',
+  move: 'Transfer a brain (with context) under another parent',
+  policy: 'Show or change who may talk to whom, quota floors',
+  held: 'List messages held for user approval (moderated peers)',
+  approve: 'Release or deny a held message',
+  claim: 'Register resources a brain is working on; detect conflicts',
+  plan: 'Propose, review, approve or reject a staffing plan',
+  account: 'List isolated accounts or create a new one',
 };
 
 function usage() {
