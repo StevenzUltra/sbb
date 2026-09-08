@@ -2,12 +2,15 @@
 // optional screen confirmation that upgrades a `queued` uds receipt.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run as tellRun } from '../src/cli/tell.js';
 import { run as askRun } from '../src/cli/ask.js';
 import { run as replyRun } from '../src/cli/reply.js';
-import { deliver, fromModeFromEnv, parsePeerFrame } from '../src/cli/util.js';
-import { listInbox } from '../src/registry/inbox.js';
+import { deliver, fromModeFromEnv, parseDuration, parsePeerFrame } from '../src/cli/util.js';
+import { listInbox, writeInboxEntry } from '../src/registry/inbox.js';
+import { startFakeClaudeServer } from './fixtures/fake-claude-server.js';
+import { send as realSend } from '../src/transports/index.js';
 import { readReceiptEntries } from '../src/registry/receipts.js';
 import { captureLog, tempDir, withEnv } from './fixtures/registry/helpers.js';
 
@@ -71,6 +74,52 @@ function deps(over = {}) {
     },
   };
 }
+
+test('parseDuration: a bare number is milliseconds, not seconds', () => {
+  assert.equal(parseDuration('6000'), 6000, '--timeout 6000 is 6 s, not 100 minutes');
+  assert.equal(parseDuration('500ms'), 500);
+  assert.equal(parseDuration('30s'), 30_000);
+  assert.equal(parseDuration('5m'), 300_000);
+  assert.equal(parseDuration('1h'), 3_600_000);
+  assert.throws(() => parseDuration('soon'), /invalid duration/);
+});
+
+test('sbb tell: resolves within a second of the transport and leaves no handle behind', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const inbox = fakeInbox();
+    let seenOpts;
+    let released = 0;
+    const count = (list) => list.reduce((m, k) => ({ ...m, [k]: (m[k] ?? 0) + 1 }), {});
+    const before = count(process.getActiveResourcesInfo());
+    const d = deps({
+      inbox,
+      closeInboxes: async () => {
+        released += 1;
+      },
+      send: async (target, message, opts) => {
+        seenOpts = opts;
+        return { status: 'queued', via: 'uds', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const started = Date.now();
+    const out = await captureLog(() => tellRun(['lead', 'ping', '--timeout', '6000'], d));
+    const elapsed = Date.now() - started;
+    assert.equal(out.result, 0);
+    assert.equal(seenOpts.verifyTimeoutMs, 6000, '--timeout is milliseconds on the wire');
+    assert.ok(elapsed < 1000, `run() must resolve promptly, took ${elapsed}ms`);
+    assert.equal(inbox.closes, 1, 'the sender inbox is closed');
+    assert.equal(released, 1, 'transport-owned inboxes are closed too');
+    const after = count(process.getActiveResourcesInfo());
+    const leaked = Object.entries(after).filter(([kind, n]) => n > (before[kind] ?? 0)).map(([kind, n]) => `${kind}x${n - (before[kind] ?? 0)}`);
+    assert.deepEqual(leaked, [], 'no handle survives the command');
+    assert.equal(readReceiptEntries().at(-1).msgId, MSG_ID, 'the receipt is on disk before run() returns');
+    assert.match(out.lines.join('\n'), /^queued/m);
+  } finally {
+    restore();
+  }
+});
 
 test('sbb tell: uds sends from this process inbox with the brain name', async () => {
   const home = tempDir();
@@ -231,6 +280,119 @@ test('sbb ask: the inbox stays open for the wait and its reply is collected', as
     assert.match(out.lines.join('\n'), /reply {5}msg=bbbbbbbb/);
     assert.match(out.lines.join('\n'), /PONG/);
     assert.equal(inbox.closes, 1);
+  } finally {
+    restore();
+  }
+});
+
+/** @param {string} from @param {string} text */
+function peerFrame(from, text) {
+  return {
+    type: 'user',
+    msg_id: REPLY_ID,
+    message: { role: 'user', content: `<cross-session-message from="${from}" from-name="lead#TST-0001">\n${text}\n</cross-session-message>` },
+  };
+}
+
+test('sbb ask: a frame from the target socket is the reply when reply_to is missing', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const inbox = fakeInbox();
+    const d = deps({
+      inbox,
+      pollMs: 1,
+      sleep: async () => {},
+      send: async () => {
+        inbox.emit('message', peerFrame(`uds:${SOCK}`, '好'));
+        return { status: 'queued', via: 'uds', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping'], d));
+    assert.equal(out.result, 0);
+    assert.match(out.lines.join('\n'), /reply {5}msg=bbbbbbbb from=lead#TST-0001 {2}via=fromSock/);
+    assert.match(out.lines.join('\n'), /好/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask: a body carrying sbb:<msgId first 8> is the reply from any socket', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const inbox = fakeInbox();
+    const d = deps({
+      inbox,
+      pollMs: 1,
+      sleep: async () => {},
+      send: async () => {
+        inbox.emit('message', peerFrame('uds:/tmp/cc-socks/9999.sock', `PONG   (sbb:${MSG_ID.slice(0, 8)})`));
+        return { status: 'queued', via: 'uds', msgId: MSG_ID, elapsedMs: 2 };
+      },
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping'], d));
+    assert.equal(out.result, 0);
+    assert.match(out.lines.join('\n'), /via=body/);
+    assert.match(out.lines.join('\n'), /PONG/);
+  } finally {
+    restore();
+  }
+});
+
+test('sbb ask: a message from the target that predates the wait is not the reply', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    writeInboxEntry({
+      owner: 'h3',
+      entry: { msgId: 'cc'.repeat(16), from: 'lead#TST-0001', fromSock: `uds:${SOCK}`, text: 'older news', t: 1000 },
+    });
+    const d = deps({
+      inbox: fakeInbox(),
+      pollMs: 1,
+      sleep: async () => {},
+      send: async () => ({ status: 'queued', via: 'uds', msgId: MSG_ID, elapsedMs: 2 }),
+    });
+    const out = await captureLog(() => askRun(['lead', 'ping', '--wait', '1'], d));
+    assert.equal(out.result, 5);
+    assert.equal(out.lines.at(-1), 'timeout');
+  } finally {
+    restore();
+  }
+});
+
+test('sbb tell: the real uds transport returns on --timeout and persists the receipt', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    const dir = tempDir();
+    const server = await startFakeClaudeServer({ dir, token: 'tok-real' });
+    const keyFile = join(dir, 'key.json');
+    writeFileSync(keyFile, JSON.stringify({ peerToken: 'tok-real' }));
+    const target = {
+      address: 'lead', account: 'a', cli: 'claude', paneId: null, coord: '24:3.4',
+      claude: { sock: server.sockPath, keyFile }, codex: undefined,
+    };
+    const started = Date.now();
+    const out = await captureLog(() => tellRun(
+      ['lead', 'ping', '--timeout', '300'],
+      { rows: [], msgId: MSG_ID, resolve: async () => target, send: realSend },
+    ));
+    const elapsed = Date.now() - started;
+    try {
+      assert.equal(out.result, 0, 'a delivered-but-unconfirmed message is queued, not an error');
+      assert.ok(elapsed < 3000, `--timeout 300 must return in seconds, took ${elapsed}ms`);
+      assert.match(out.lines.join('\n'), /^queued/m);
+      const receipt = readReceiptEntries().at(-1);
+      assert.equal(receipt.msgId, MSG_ID);
+      assert.equal(receipt.status, 'queued');
+      assert.equal(receipt.via, 'uds');
+      assert.match(receipt.fromSock, /^uds:\/tmp\/cc-socks\/\d+\.sock$/, 'the receipt records this process inbox');
+      assert.equal(existsSync(receipt.fromSock.slice(4)), false, 'the sender socket is unlinked before returning');
+    } finally {
+      await server.close();
+    }
   } finally {
     restore();
   }

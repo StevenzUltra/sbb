@@ -3,6 +3,7 @@ import { getBrain, isValidBrainName } from '../registry/brains.js';
 import { writeInboxEntry } from '../registry/inbox.js';
 import { findReceipt } from '../registry/receipts.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
+import { closeInboxes } from '../transports/claude-uds.js';
 import { newMsgId, shortId } from '../lib/ids.js';
 import {
   EXIT,
@@ -91,6 +92,7 @@ export async function run(argv, deps = {}) {
       return receiptExitCode(receipt);
     } finally {
       await inbox?.close?.();
+      await (deps.closeInboxes ?? closeInboxes)();
     }
   });
 }

@@ -1,5 +1,6 @@
 // sbb ask: tell, then wait for a reply or a peer idle notice. docs/spec/cli.md.
 import { resolve as defaultResolve } from '../registry/resolve.js';
+import { closeInboxes } from '../transports/claude-uds.js';
 import { findReply, listInbox } from '../registry/inbox.js';
 import {
   EXIT,
@@ -13,7 +14,7 @@ import {
   previewTransport,
 } from './util.js';
 
-const USAGE = `usage: sbb ask <address> <text...> [--wait <duration>] [--priority now|next|later]
+const USAGE = `usage: sbb ask <address> <text...> [--wait <ms|30s|5m|1h>] [--priority now|next|later]
 
 Waits (default 10m) for a reply carrying replyTo = the message id, or a Claude
 peer_idle_notice. Exit 0 on reply or idle, 5 on timeout.`;
@@ -47,6 +48,11 @@ export async function run(argv, deps = {}) {
     const idleNotices = [];
     inbox?.on?.('idle', (notice) => idleNotices.push(notice));
 
+    // Only what arrives after this point can be the answer: an older message from the
+    // target is not a reply to this question.
+    const since = now();
+    const targetSock = peerSock(target?.claude?.sock);
+
     try {
       const { receipt, text, message } = await deliver({
         target,
@@ -64,9 +70,9 @@ export async function run(argv, deps = {}) {
       const deadline = now() + waitMs;
       const pollMs = deps.pollMs ?? 500;
       for (;;) {
-        const reply = findReply(owner, message.msgId);
+        const reply = matchReply(owner, message.msgId, { since, targetSock });
         if (reply) {
-          console.log(`reply     msg=${String(reply.entry.msgId).slice(0, 8)} from=${reply.entry.from ?? '-'}`);
+          console.log(`reply     msg=${String(reply.entry.msgId).slice(0, 8)} from=${reply.entry.from ?? '-'}  via=${reply.match}`);
           console.log(String(reply.entry.text ?? ''));
           return EXIT.OK;
         }
@@ -83,8 +89,42 @@ export async function run(argv, deps = {}) {
       }
     } finally {
       await inbox?.close?.();
+      await (deps.closeInboxes ?? closeInboxes)();
     }
   });
+}
+
+/**
+ * A `uds:` address is compared without its prefix: one side may carry it and the other not.
+ * @param {string|undefined} sock
+ * @returns {string|null}
+ */
+function peerSock(sock) {
+  const value = String(sock ?? '');
+  if (!value) return null;
+  return value.startsWith('uds:') ? value.slice('uds:'.length) : value;
+}
+
+/**
+ * The peer's answer, three ways. A `sbb reply` carries `replyTo`; a peer answering with
+ * Claude's own SendMessage carries no reply id at all (measured 2026-09-09: the frame for
+ * "好" had replyTo null), so the first frame in the window from the target's own socket
+ * counts, and so does any body carrying the envelope's own `sbb:<msgId first 8>` marker.
+ * @param {string} owner
+ * @param {string} msgId
+ * @param {{ since?: number, targetSock?: string|null }} [ctx]
+ * @returns {{ entry: Record<string, any>, match: 'replyTo'|'fromSock'|'body' }|undefined}
+ */
+export function matchReply(owner, msgId, { since = 0, targetSock = null } = {}) {
+  const exact = findReply(owner, msgId);
+  if (exact) return { entry: exact.entry, match: 'replyTo' };
+  const marker = `sbb:${String(msgId).slice(0, 8)}`;
+  for (const { entry } of listInbox(owner)) {
+    if ((entry.t ?? 0) < since) continue;
+    if (targetSock && peerSock(entry.fromSock) === targetSock) return { entry, match: 'fromSock' };
+    if (String(entry.text ?? '').includes(marker)) return { entry, match: 'body' };
+  }
+  return undefined;
 }
 
 export { listInbox, previewTransport };

@@ -6,8 +6,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, 
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
-import { brainsDir, sbbDir } from '../lib/paths.js';
-import { receiptLogPath } from './receipts.js';
+import { sbbDir } from '../lib/paths.js';
 
 /** `<TAG>-<seq>`, e.g. `SMS-0012`. Tag is 1..4 upper-case letters/digits. */
 export const BRAIN_ID_RE = /^([A-Z][A-Z0-9]{0,3})-(\d{4,})$/;
@@ -80,8 +79,10 @@ export function tagOf(id) {
  * @returns {number}
  */
 export function maxSeqFromState(tag, opts = {}) {
+  const root = opts.sbbDir ?? sbbDir();
+  const brains = join(root, 'brains');
   let max = 0;
-  for (const dir of [brainsDir(), join(brainsDir(), '_retired')]) {
+  for (const dir of [brains, join(brains, '_retired')]) {
     let files;
     try {
       files = readdirSync(dir);
@@ -95,7 +96,7 @@ export function maxSeqFromState(tag, opts = {}) {
     }
   }
   try {
-    const raw = readFileSync(opts.logPath ?? receiptLogPath(), 'utf8');
+    const raw = readFileSync(opts.logPath ?? join(root, 'log', 'receipts.jsonl'), 'utf8');
     for (const match of raw.matchAll(new RegExp(`\\b${tag}-(\\d{4,})\\b`, 'g'))) {
       max = Math.max(max, Number(match[1]));
     }
