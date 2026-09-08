@@ -231,6 +231,11 @@ export const claudeUds = {
       } catch (err) {
         return finish('blocked', 'transport_unavailable', `inbox unavailable: ${err.message}`);
       }
+      if (from.path !== inbox.sockPath) {
+        // The receipt comes back to `from`; an address we do not listen on means no
+        // receipt can ever arrive, so this must not be reported as queued.
+        return finish('blocked', 'transport_unavailable', `fromSock must be this process inbox: ${inbox.sockPath}`);
+      }
     }
 
     let socket;

@@ -189,6 +189,43 @@ test('a fromSock that peers would ignore is not waited on', async () => {
   }
 });
 
+test('a fromSock that is not this process inbox is blocked before any write', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ fromSock: `uds:${join(dir, '999.sock')}` }), {
+      verifyTimeoutMs: 1000,
+    });
+    assert.equal(receipt.status, 'blocked');
+    assert.equal(receipt.reason, 'transport_unavailable');
+    assert.match(receipt.detail, /fromSock must be this process inbox/);
+    assert.equal(server.frames.length, 0, 'must not write anything');
+  } finally {
+    await server.close();
+    await closeInboxes();
+  }
+});
+
+test('an opts.inbox at another path is blocked too', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  const other = await startInbox({ dir: tmpDir('sbb-other-') });
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ fromSock: fromIn(dir) }), {
+      inbox: other,
+      verifyTimeoutMs: 1000,
+    });
+    assert.equal(receipt.status, 'blocked');
+    assert.equal(receipt.reason, 'transport_unavailable');
+    assert.match(receipt.detail, new RegExp(`fromSock must be this process inbox: ${other.sockPath}`));
+    assert.equal(server.frames.length, 0, 'must not write anything');
+  } finally {
+    await other.close();
+    await server.close();
+    await closeInboxes();
+  }
+});
+
 test('connect failure is blocked/socket_connect_failed', async () => {
   const server = await startFakeClaudeServer();
   const missing = join(tmpdir(), `sbb-missing-${process.pid}.sock`);
