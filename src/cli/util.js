@@ -218,44 +218,6 @@ export function attachInboxHandlers(inbox, { owner, deps = {} }) {
 }
 
 /**
- * uds can only report `queued`: the protocol sends no receipt for a normal delivery, so
- * the peer's screen is the only positive evidence. `src/transports/confirm.js` is an
- * optional transport helper (task h2); when it is absent the receipt stays `queued`.
- * @param {import('../types.js').Receipt} receipt
- * @param {{ target: any, text: string, fromName: string, timeoutMs?: number,
- *           deps?: Record<string, any>, dryRun?: boolean }} input
- */
-export async function confirmOnScreenUpgrade(receipt, input) {
-  if (input.dryRun || receipt.status !== 'queued' || receipt.via !== 'uds') return receipt;
-  let confirm = input.deps?.confirmOnScreen;
-  if (typeof confirm !== 'function') {
-    let mod;
-    try {
-      mod = await import('../transports/confirm.js');
-    } catch {
-      return receipt;
-    }
-    confirm = mod?.confirmOnScreen;
-    if (typeof confirm !== 'function') return receipt;
-  }
-  let result;
-  try {
-    result = await confirm(input.target, { text: input.text, fromName: input.fromName }, { timeoutMs: input.timeoutMs });
-  } catch (err) {
-    return { ...receipt, detail: joinDetail(receipt.detail, `screen confirm failed: ${err?.message ?? err}`) };
-  }
-  const status = typeof result === 'string' ? result : result?.status;
-  if (status === 'delivered') return { ...receipt, status: 'delivered', via: 'uds+screen' };
-  if (status) return { ...receipt, detail: joinDetail(receipt.detail, `screen confirm: ${status}`) };
-  return receipt;
-}
-
-/** @param {string|undefined} detail @param {string} note */
-function joinDetail(detail, note) {
-  return detail ? `${detail}; ${note}` : note;
-}
-
-/**
  * Build the envelope, start the sender inbox, route it and log the receipt.
  * @param {{ target: import('../types.js').Target, body: string, msgId?: string,
  *           priority?: import('../types.js').Priority, replyTo?: string,
@@ -280,15 +242,9 @@ export async function deliver(input) {
     fromName,
     fromMode: fromModeFromEnv(input.deps?.env ?? process.env),
   };
-  let receipt = await send(input.target, message, { verifyTimeoutMs: input.verifyTimeoutMs, inbox });
-  receipt = await confirmOnScreenUpgrade(receipt, {
-    target: input.target,
-    text,
-    fromName,
-    timeoutMs: input.verifyTimeoutMs,
-    deps: input.deps,
-    dryRun: input.dryRun,
-  });
+  // Screen confirmation is the router's job (src/transports/index.js); deliver only
+  // carries the inbox and the from* fields the transports need.
+  const receipt = await send(input.target, message, { verifyTimeoutMs: input.verifyTimeoutMs, inbox });
   const entry = {
     msgId,
     from: identity.brain ?? identity.sender,
