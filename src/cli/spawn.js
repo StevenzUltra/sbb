@@ -4,16 +4,47 @@ import { EXIT, main, parse, UsageError, writeJson } from './util.js';
 
 const USAGE = `usage: sbb spawn --name <name> --role main|sub [--parent <id|name>]
           --account <acct> --cli claude|codex|agy|cursor
-          [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args "<extra>"]
+          [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"]
           [--split] [--force] [--json]
 
 Creates a pane, starts the CLI with the account environment and the briefing, waits for
-readiness and registers the brain. --cli-args is whitespace-split, quotes are honoured.
+readiness and registers the brain. --cli-args is whitespace-split, quotes are honoured;
+--cli-args="<extra>" and --cli-args "<extra>" both work, even when the value starts with
+a dash (for example --cli-args="--permission-mode bypassPermissions").
 Exit 4 when validation, quota or readiness fails.`;
+
+/** Options spawn itself defines. A bare `--cli-args` never swallows one of these. */
+const SPAWN_OPTIONS = new Set([
+  '--name', '--role', '--parent', '--account', '--cli', '--model', '--cwd',
+  '--brief-file', '--cli-args', '--split', '--force', '--json', '--help', '-h',
+]);
+
+/**
+ * `parseArgs` calls a value that starts with `-` ambiguous, so
+ * `--cli-args "--permission-mode bypassPermissions"` fails even though the shell passed
+ * exactly one token. Rewrite that form into `--cli-args=<value>`; the next token is only
+ * left alone when it is one of spawn's own options.
+ * @param {string[]} argv
+ * @returns {string[]}
+ */
+export function normalizeCliArgs(argv) {
+  const out = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    const next = argv[i + 1];
+    if (arg === '--cli-args' && next !== undefined && !SPAWN_OPTIONS.has(next)) {
+      out.push(`--cli-args=${next}`);
+      i += 1;
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
 
 export async function run(argv, deps = {}) {
   return main(async () => {
-    const { values } = parse(argv, {
+    const { values } = parse(normalizeCliArgs(argv), {
       name: { type: 'string' },
       role: { type: 'string' },
       parent: { type: 'string' },
