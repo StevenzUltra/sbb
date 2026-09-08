@@ -70,7 +70,7 @@
  * @property {string} uuid          global identity (UUID v7 or randomUUID), never reused
  * @property {string} name          alias, unique among live brains, [a-z0-9][a-z0-9-]{0,39}
  * @property {'main'|'sub'} role
- * @property {string|null} parent   brain name; null for main brains (parent is the user)
+ * @property {string|null} parent   parent brain id (e.g. 'SMS-0007'); null for main brains (parent is the user)
  * @property {string} account
  * @property {CliKind} cli
  * @property {string|undefined} model
