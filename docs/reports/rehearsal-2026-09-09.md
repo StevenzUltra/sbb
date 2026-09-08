@@ -57,9 +57,13 @@ h3 测试污染用户 pane 标签与向用户 pane 打字（隔离到 scratch tm
 
 | 15 | 16 步全过（main 80960b3，含 approve 门禁） | 步 8 的 ask 被 lead 的中间进度消息经镜像兜底提前满足（真正的完成汇总稍后才到）→ h3 调整兜底优先级；步 16 的 unverified 仍是 05:14 用户另一会话的那一条 |
 
+| 16 | 16 步全过（main 80b3c1d，最终代码） | 步 8 lead 以精确 reply 汇总（via=replyTo）；步 13 ios 未写交接摘要（ask 超时），move 按规格继续；窗口内 unverified 0 |
+
 产物：`docs/reports/rehearsal-artifacts/`（各轮子脑产出的中文 README 与报告，原样保留作样本）。
 
 ## 结论
 
-传话内核、生命周期、转移、策略、提案、额度、编号在真实 Claude 与 Codex（gpt-6 与 DeepSeek 两种后端）
-会话上连续跑通；剩余项只有 approve 的调用者授权（安全修复，已派单）。合入后再跑一轮确认，即请用户验收。
+run 13、14、15、16 连续四轮全 16 步通过（14 轮暴露的 approve 门禁与 15 轮暴露的 ask 兜底已修，16 轮在
+最终代码 80b3c1d 上通过）。传话内核、生命周期、转移、策略、提案、额度、编号在真实 Claude 与 Codex
+（gpt-6 与 DeepSeek 两种后端）会话上零人工按键跑通。已知软项：`--handoff` 依赖脑主动写摘要，脑不配合时
+move 按规格继续；`ask` 在对方只发进度、不发精确回复时要等到 `--wait` 到期才返回兜底候选。可以请用户验收。
