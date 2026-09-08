@@ -1,26 +1,22 @@
 // sbb ask: tell, then wait for a reply or a peer idle notice. docs/spec/cli.md.
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { findReply, listInbox } from '../registry/inbox.js';
-import { EXIT, UsageError, callerIdentity, deliver, main, parse, parseDuration, previewTransport } from './util.js';
+import {
+  EXIT,
+  UsageError,
+  callerIdentity,
+  deliver,
+  main,
+  openDeliveryInbox,
+  parse,
+  parseDuration,
+  previewTransport,
+} from './util.js';
 
 const USAGE = `usage: sbb ask <address> <text...> [--wait <duration>] [--priority now|next|later]
 
 Waits (default 10m) for a reply carrying replyTo = the message id, or a Claude
 peer_idle_notice. Exit 0 on reply or idle, 5 on timeout.`;
-
-/**
- * The receipt inbox (task h1) is optional in M1: without it a Claude message is
- * still delivered but can only be reported as queued.
- */
-async function startInbox(deps) {
-  if (deps.startInbox) return deps.startInbox();
-  try {
-    const mod = await import('../transports/uds-inbox.js');
-    return await mod.startInbox({});
-  } catch {
-    return undefined;
-  }
-}
 
 export async function run(argv, deps = {}) {
   return main(async () => {
@@ -43,8 +39,9 @@ export async function run(argv, deps = {}) {
 
     const identity = await callerIdentity(deps);
     const target = await (deps.resolve ?? defaultResolve)(address, { accounts: deps.accounts, onWarn: deps.onWarn, rows: deps.rows });
-    const inbox = await startInbox(deps);
     const owner = identity.brain ?? 'user';
+    // The inbox stays open for the whole wait: replies and idle notices arrive while polling.
+    const inbox = await openDeliveryInbox({ target, owner, deps });
 
     /** @type {string[]} */
     const idleNotices = [];
@@ -59,7 +56,7 @@ export async function run(argv, deps = {}) {
         deps,
         send: deps.send,
         msgId: deps.msgId,
-        fromSock: target.cli === 'claude' ? inbox?.sockPath : undefined,
+        inbox,
       });
       console.log(`${receipt.status.padEnd(10)} msg=${receipt.msgId.slice(0, 8)}  via=${receipt.via}  ${(receipt.elapsedMs / 1000).toFixed(1)}s${receipt.reason ? `  reason=${receipt.reason}` : ''}`);
       console.log(`envelope  ${text}`);

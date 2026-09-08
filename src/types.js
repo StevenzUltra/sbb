@@ -109,7 +109,7 @@
  * What a transport returns. `reason` is required for blocked and unverified.
  * @typedef {Object} Receipt
  * @property {DeliveryStatus} status
- * @property {string} via           'uds' | 'codex-queue' | 'send-keys'
+ * @property {string} via           'uds' | 'uds+screen' | 'codex-queue' | 'send-keys'
  * @property {string} msgId         32 hex
  * @property {number} elapsedMs
  * @property {string|undefined} reason   machine-readable, e.g. 'pane_in_copy_mode', 'held', 'no_rollout', 'enter_swallowed_twice'
@@ -118,7 +118,8 @@
 
 /**
  * The message a transport is asked to deliver. `text` is the fully rendered single-line body,
- * envelope included. Transports never rewrite text.
+ * envelope included. Transports never alter the body; the uds transport may wrap it verbatim in
+ * a <cross-session-message> envelope when fromName is present (docs/spec/protocols.md section 1).
  * @typedef {Object} OutboundMessage
  * @property {string} msgId
  * @property {string} text
