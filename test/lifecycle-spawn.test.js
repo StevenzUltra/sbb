@@ -36,6 +36,8 @@ function baseDeps(over = {}) {
     tmuxApi,
     awaitReady: async () => ({ ready: true, session: { pid: 4242 } }),
     resolve: async () => ({ address: 'lead', account: 'a', cli: 'claude', paneId: '%29', coord: '24:3.3' }),
+    // No real inbox in unit tests; a test that cares injects its own.
+    openInbox: async () => undefined,
     deliver: async (input) => {
       delivered.push(input);
       return { receipt: { status: 'delivered', via: 'uds', msgId: 'm1', elapsedMs: 1 } };
@@ -67,7 +69,8 @@ test('spawnBrain: happy path registers the brain and notifies the parent', async
   const restore = withEnv({ SBB_DIR: dir });
   try {
     seedParent();
-    const deps = baseDeps();
+    const inbox = { sockPath: '/tmp/cc-socks/999.sock', close: async () => {} };
+    const deps = baseDeps({ openInbox: async () => inbox });
     const result = await spawnBrain(spawnInput(), deps);
 
     assert.ok(result.brain, JSON.stringify(result));
@@ -101,6 +104,7 @@ test('spawnBrain: happy path registers the brain and notifies the parent', async
     assert.equal(deps.delivered[0].body, '已上线，上级 lead');
     assert.equal(deps.delivered[0].identity.id, 'SMS-0042');
     assert.equal(deps.delivered[0].identity.role, '子脑');
+    assert.equal(deps.delivered[0].inbox, inbox, 'the notification carries an inbox, so fromSock is set');
     assert.equal(result.notification.status, 'delivered');
   } finally {
     restore();

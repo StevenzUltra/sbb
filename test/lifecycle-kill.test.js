@@ -132,6 +132,11 @@ test('killBrains: retires the record, releases claims and notifies the parent', 
     writeFileSync(claims, '{"id":"SMS-0012","claims":[]}\n');
 
     const delivered = [];
+    // The notification must go out through the normal delivery path, i.e. with an inbox,
+    // so the envelope carries fromSock (2026-09-09: without it the transport reported
+    // `content not wrapped: no receivable fromSock`).
+    let inboxClosed = false;
+    const inbox = { sockPath: '/tmp/cc-socks/999.sock', close: async () => { inboxClosed = true; } };
     const plan = killPlan('ios', { brains: [parent, child], getBrainFn: () => child });
     const outcome = await killBrains(plan, {
       tmuxApi: createFakeTmux({ screens: [screen('claude-idle')], exitAfterEnter: true }),
@@ -139,6 +144,7 @@ test('killBrains: retires the record, releases claims and notifies the parent', 
       waitMs: 5,
       pollMs: 1,
       resolve: async () => ({ address: 'lead', account: 'a', cli: 'claude', paneId: '%29', coord: '24:3.3' }),
+      openInbox: async () => inbox,
       deliver: async (input) => {
         delivered.push(input);
         return { receipt: { status: 'delivered', via: 'uds', msgId: 'm2', elapsedMs: 1 } };
@@ -153,7 +159,35 @@ test('killBrains: retires the record, releases claims and notifies the parent', 
     assert.equal(delivered.length, 1);
     assert.equal(delivered[0].body, '已下线');
     assert.equal(delivered[0].identity.id, 'SMS-0012');
+    assert.equal(delivered[0].inbox, inbox, 'deliver gets the inbox, so fromSock is set');
+    assert.equal(inboxClosed, true, 'the inbox does not outlive the kill');
     assert.equal(outcome.notification.status, 'delivered');
+  } finally {
+    restore();
+  }
+});
+
+test('killBrains: an unresolvable parent is reported and opens no inbox', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    const parent = writeBrain({ id: 'SMS-0007', name: 'lead', role: 'main', paneId: '%29' });
+    const child = writeBrain({ id: 'SMS-0012', name: 'ios', role: 'sub', parent: parent.id, paneId: '%30' });
+    let opened = 0;
+    const plan = killPlan('ios', { brains: [parent, child], getBrainFn: () => child });
+    const outcome = await killBrains(plan, {
+      tmuxApi: createFakeTmux({ screens: [screen('claude-idle')], exitAfterEnter: true }),
+      sleep: async () => {},
+      waitMs: 5,
+      pollMs: 1,
+      resolve: async () => { throw new Error('unknown account "zz"'); },
+      openInbox: async () => { opened += 1; return undefined; },
+      deliver: async () => { throw new Error('must not be called'); },
+    });
+    assert.equal(opened, 0);
+    assert.equal(outcome.notification.status, 'blocked');
+    assert.equal(outcome.notification.reason, 'target_not_found');
+    assert.match(outcome.notification.detail, /unknown account "zz"/);
   } finally {
     restore();
   }

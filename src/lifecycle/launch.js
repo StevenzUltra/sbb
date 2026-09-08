@@ -7,6 +7,7 @@ import { accountByName, discoverAccounts, sbbDir } from '../lib/paths.js';
 import * as tmuxLib from '../lib/tmux.js';
 import { listClaudeSessions } from '../registry/claude-sessions.js';
 import { listCodexThreads } from '../registry/codex-threads.js';
+import { parseTomlTopLevel } from '../quota/catalog.js';
 import { collapse, profileFor, probeOf } from '../transports/cli-profiles.js';
 
 export const DEFAULT_READY_TIMEOUT_MS = 60000;
@@ -234,6 +235,30 @@ export function readCodexTrust({ dir, cwd, readFile = readFileSync } = {}) {
     if (match) level = match[1];
   }
   return { configPath, found: true, level, trusted: level === CODEX_TRUSTED_LEVEL };
+}
+
+/**
+ * The account-level default model from `<CODEX_HOME>/config.toml` (top-level `model`).
+ * Codex merges a project's `.codex/config.toml` over the account config, so a spawn that
+ * passes no `-m` runs whatever the cwd asks for; `sbb spawn` passes this value explicitly
+ * instead (docs/spec/lifecycle.md step 4). A missing file means "no account default"; a
+ * file that exists but cannot be read is reported in `detail`, never guessed.
+ * @param {{ dir?: string, readFile?: (path: string, enc: string) => string }} [input]
+ * @returns {{ configPath?: string, model?: string, detail?: string }}
+ */
+export function readCodexDefaultModel({ dir, readFile = readFileSync } = {}) {
+  const configPath = dir ? join(dir, 'config.toml') : undefined;
+  if (!configPath) return { configPath };
+  let raw;
+  try {
+    raw = readFile(configPath, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return { configPath };
+    return { configPath, detail: `cannot read ${configPath}: ${err?.code ?? err?.message ?? err}` };
+  }
+  const parsed = parseTomlTopLevel(raw);
+  const model = typeof parsed.model === 'string' ? parsed.model.trim() : '';
+  return model ? { configPath, model } : { configPath };
 }
 
 /**

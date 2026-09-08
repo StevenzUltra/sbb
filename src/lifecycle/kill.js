@@ -9,7 +9,8 @@ import { getBrain, listBrains, removeBrain, saveBrain } from '../registry/brains
 import { ROLE_LABELS } from '../registry/envelope.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { profileFor } from '../transports/cli-profiles.js';
-import { deliver as defaultDeliver } from '../cli/util.js';
+import { deliver as defaultDeliver, openDeliveryInbox } from '../cli/util.js';
+import { closeInboxes } from '../transports/claude-uds.js';
 import { EXIT_COMMANDS } from './launch.js';
 
 export const EXIT_WAIT_MS = 3000;
@@ -176,6 +177,9 @@ export function releaseClaims(id, opts = {}) {
 
 /**
  * Notify a killed brain's parent with one line. A failure is reported, never hidden.
+ * Goes through the same delivery path as `sbb tell`: without an inbox the envelope has no
+ * `fromSock`, peers cannot reply to it and the transport reports `content not wrapped:
+ * no receivable fromSock` (2026-09-09 rehearsal). So open one, and close it after.
  * @param {import('../types.js').Brain} brain
  * @param {Record<string, any>} deps
  */
@@ -192,22 +196,34 @@ async function notifyParent(brain, deps) {
     coord: brain.coord ?? null,
     role: brain.role === 'sub' ? ROLE_LABELS.sub : ROLE_LABELS.main,
   };
+  let target;
   try {
-    const target = await (deps.resolve ?? defaultResolve)(parentBrain.name, {
+    target = await (deps.resolve ?? defaultResolve)(parentBrain.name, {
       accounts: deps.accounts,
       rows: deps.rows,
       onWarn: deps.onWarn,
     });
+  } catch (err) {
+    return { status: 'blocked', reason: 'target_not_found', detail: String(err?.message ?? err) };
+  }
+  const inbox = await (deps.openInbox ?? openDeliveryInbox)({ target, owner: brain.name ?? 'user', deps });
+  try {
     const { receipt } = await (deps.deliver ?? defaultDeliver)({
       target,
       body: '已下线',
       identity,
       deps,
       send: deps.send,
+      inbox,
     });
     return { status: receipt.status, via: receipt.via, reason: receipt.reason, detail: receipt.detail };
   } catch (err) {
     return { status: 'blocked', reason: 'notify_failed', detail: String(err?.message ?? err) };
+  } finally {
+    await inbox?.close?.();
+    // The transport may have opened its own inbox; leaving one listening keeps the
+    // process alive after the kill is reported.
+    await (deps.closeInboxes ?? closeInboxes)();
   }
 }
 

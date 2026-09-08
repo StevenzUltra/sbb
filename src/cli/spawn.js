@@ -96,6 +96,7 @@ export async function run(argv, deps = {}) {
       if (result.briefFile) console.log(`brief     ${result.briefFile}`);
       if (result.quota) console.log(`quota     ${result.quota}`);
       if (result.cliArgs?.length) console.log(`cli-args  ${result.cliArgs.join(' ')}`);
+      if (result.model) console.log(`model     ${result.model}${result.modelSource ? ` (${result.modelSource})` : ''}`);
       if (result.thread) {
         console.log(`thread    ${result.thread.id}${result.thread.name ? ` ${result.thread.name}` : ''} (${result.thread.source})`);
       }
