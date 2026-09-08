@@ -1,0 +1,8 @@
+{
+  "parent": "TST-0001",
+  "reason": "split the web work",
+  "brains": [
+    { "name": "fe-a", "role": "sub", "account": "a", "cli": "claude", "model": "claude-sonnet-5", "reason": "fe work", "load": "medium" },
+    { "name": "fe-b", "role": "sub", "account": "b", "cli": "codex", "reason": "fe work 2", "load": "light" }
+  ]
+}

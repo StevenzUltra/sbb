@@ -2,12 +2,14 @@
 import { homedir } from 'node:os';
 import { getBrain } from '../registry/brains.js';
 import { roster as defaultRoster } from '../registry/roster.js';
+import { conflictedBrainIds } from '../policy/claims.js';
 import { EXIT, main, parse, renderTable, writeJson } from './util.js';
 
-const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>]
+const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>] [--claims]
 
 Rows are live CLI sessions across every account. An id (#SMS-0012) or a brain name
-prints that one row. --tree prints brains only, indented by parent.`;
+prints that one row. --tree prints brains only, indented by parent. --claims marks rows
+whose brain holds a claim conflicting with another brain with a leading !.`;
 
 const HEADERS = ['ID', 'BRAIN', 'ROLE', 'PARENT', 'ACCOUNT', 'CLI', 'MODEL', 'STATUS', 'WHERE', 'NAME/THREAD', 'CWD'];
 
@@ -68,6 +70,7 @@ export async function run(argv, deps = {}) {
       tree: { type: 'boolean' },
       account: { type: 'string' },
       cli: { type: 'string' },
+      claims: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     });
     if (values.help) {
@@ -112,6 +115,10 @@ export async function run(argv, deps = {}) {
     if (filtered.length === 0) {
       console.log('no live sessions');
       return EXIT.OK;
+    }
+    if (values.claims) {
+      const conflicted = (deps.conflictedBrainIds ?? conflictedBrainIds)({ sbbDir: deps.sbbDir });
+      filtered = filtered.map((r) => (conflicted.has(r.brainId) ? { ...r, brainId: `!${r.brainId}` } : r));
     }
     console.log(renderTable(HEADERS, filtered.map(toCells)));
     return EXIT.OK;

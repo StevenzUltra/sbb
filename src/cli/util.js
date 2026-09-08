@@ -3,12 +3,18 @@
 import { parseArgs } from 'node:util';
 import { send as defaultSend, transports as defaultTransports } from '../transports/index.js';
 import { sendToInbox as defaultSendToInbox } from '../transports/claude-uds.js';
-import { newMsgId } from '../lib/ids.js';
+import { newMsgId, shortId } from '../lib/ids.js';
 import { claudeSocksDirs } from '../lib/paths.js';
 import { buildEnvelope, identityFromRows, senderName } from '../registry/envelope.js';
 import { appendReceipt, formatReceiptLine } from '../registry/receipts.js';
 import { writeInboxEntry } from '../registry/inbox.js';
 import { roster as defaultRoster } from '../registry/roster.js';
+import { getBrain as defaultGetBrain } from '../registry/brains.js';
+import { readConfig } from '../policy/config.js';
+import { writeHold } from '../policy/held.js';
+import { checkQuotaFloor } from '../policy/quota.js';
+import { check as checkPolicy } from '../policy/rules.js';
+import { readQuota } from '../quota/usage-guard.js';
 
 /** Exit codes from docs/spec/receipts.md. */
 export const EXIT = Object.freeze({
@@ -26,6 +32,124 @@ export class UsageError extends Error {
     super(message);
     this.name = 'UsageError';
   }
+}
+
+/** A delivery refused by the policy or quota gate. `main` prints the canonical blocked line. */
+export class PolicyBlockedError extends Error {
+  /** @param {import('../types.js').Receipt} receipt */
+  constructor(receipt) {
+    super(`blocked: ${receipt.reason}`);
+    this.name = 'PolicyBlockedError';
+    this.receipt = receipt;
+  }
+}
+
+/** `blocked  msg=… via=policy reason=<why> detail=<detail>; 请向上级或用户上报` (policy.md). */
+export function policyBlockLine(receipt) {
+  const detail = receipt.detail ? `  detail=${receipt.detail}` : '';
+  return `blocked     msg=${shortId(receipt.msgId)}  via=policy  reason=${receipt.reason}${detail}; 请向上级或用户上报`;
+}
+
+/** @param {Record<string, any>} input @param {{reason: string, detail: string}} why */
+function blockResult(input, why, sender, targetInfo) {
+  const receipt = {
+    status: 'blocked',
+    via: 'policy',
+    msgId: input.msgId,
+    elapsedMs: 0,
+    reason: why.reason,
+    detail: why.detail,
+  };
+  return {
+    receipt,
+    entry: {
+      msgId: input.msgId,
+      from: sender.name,
+      fromId: sender.id,
+      fromAddress: sender.address,
+      fromSock: input.message?.fromSock ?? null,
+      to: targetInfo.brain ?? targetInfo.address,
+      toId: targetInfo.brainId,
+      address: targetInfo.address,
+      status: 'blocked',
+      via: 'policy',
+      elapsedMs: 0,
+      reason: why.reason,
+      detail: why.detail,
+      textPreview: String(input.text ?? '').slice(0, 200),
+    },
+  };
+}
+
+/**
+ * The gate every outbound delivery passes: policy verdict first (moderated messages are
+ * parked in ~/.sbb/held), then the weekly quota floor of the target's account. Returns a
+ * `{receipt, entry}` to refuse with, or null to send. `skipPolicy` is for protocol notices
+ * SBB itself sends; `force`/`SBB_FORCE=1` bypasses the quota floor only, never moderation.
+ * @param {{ target: import('../types.js').Target, identity: Record<string, any>,
+ *           message: Record<string, any>, text: string, msgId: string, replyTo?: string,
+ *           force?: boolean, skipPolicy?: boolean, deps?: Record<string, any>, sbbDir?: string }} input
+ */
+export async function enforceDelivery(input) {
+  const deps = input.deps ?? {};
+  const env = deps.env ?? process.env;
+  const target = input.target;
+  const getBrain = deps.getBrain ?? defaultGetBrain;
+  const targetBrain = target?.brainId ? getBrain(target.brainId) ?? null : null;
+  if (!targetBrain) return null;
+  const sender = {
+    name: input.identity?.brain ?? input.identity?.sender ?? 'user',
+    id: input.identity?.id ?? null,
+    address: input.identity?.address ?? null,
+    account: input.identity?.account ?? null,
+    cli: input.identity?.cli ?? null,
+    coord: input.identity?.coord ?? null,
+    role: input.identity?.role ?? null,
+  };
+  const targetInfo = {
+    address: target.address,
+    brain: target.brain ?? null,
+    brainId: target.brainId ?? null,
+    account: target.account,
+    cli: target.cli,
+    paneId: target.paneId,
+    coord: target.coord,
+  };
+  const config = await (deps.readConfig ?? readConfig)({ sbbDir: input.sbbDir });
+
+  if (!input.skipPolicy) {
+    const senderBrain = sender.id ? getBrain(sender.id) ?? null : null;
+    const verdict = (deps.checkPolicy ?? checkPolicy)(senderBrain, targetBrain, config, { getBrain });
+    if (!verdict.ok) {
+      if (verdict.moderated) {
+        writeHold({
+          msgId: input.msgId,
+          message: input.message,
+          target: targetInfo,
+          sender,
+          verdict,
+          sbbDir: input.sbbDir,
+        });
+        return blockResult(input, {
+          reason: 'moderated',
+          detail: `held for user approval: sbb approve ${shortId(input.msgId)}`,
+        }, sender, targetInfo);
+      }
+      return blockResult(input, { reason: 'policy', detail: verdict.detail }, sender, targetInfo);
+    }
+  }
+
+  const force = input.force ?? deps.force ?? env?.SBB_FORCE === '1';
+  if (force || input.replyTo) return null; // answers are not new outbound work
+  let rows = [];
+  try {
+    rows = (await (deps.readQuota ?? readQuota)({ env })) ?? [];
+  } catch {
+    rows = []; // Usage Guard unavailable: an unknown reading never blocks
+  }
+  const quota = checkQuotaFloor({ account: target.account, config, rows });
+  if (!quota.ok) return blockResult(input, { reason: 'quota', detail: quota.detail }, sender, targetInfo);
+  return null;
 }
 
 /**
@@ -248,6 +372,22 @@ export async function deliver(input) {
     fromName,
     fromMode: fromModeFromEnv(input.deps?.env ?? process.env),
   };
+  const blocked = await (input.enforceDelivery ?? enforceDelivery)({
+    target: input.target,
+    identity,
+    message,
+    text,
+    msgId,
+    replyTo: input.replyTo,
+    force: input.force,
+    skipPolicy: input.skipPolicy,
+    deps: input.deps ?? {},
+    sbbDir: input.sbbDir,
+  });
+  if (blocked) {
+    if (!input.dryRun) appendReceipt(blocked.entry);
+    throw new PolicyBlockedError(blocked.receipt);
+  }
   // Screen confirmation is the router's job (src/transports/index.js); deliver only
   // carries the inbox and the from* fields the transports need.
   // `inboxSock` is a waiting listener found in the receipt log (src/cli/reply.js). A plain
@@ -295,6 +435,10 @@ export async function main(fn) {
     if (err instanceof UsageError) {
       console.error(`sbb: ${err.message}`);
       return EXIT.USAGE;
+    }
+    if (err instanceof PolicyBlockedError) {
+      console.log(policyBlockLine(err.receipt));
+      return EXIT.BLOCKED;
     }
     if (err?.name === 'ResolveError') {
       console.error(`sbb: blocked: ${err.reason}: ${err.message}${err.detail ? ` (${err.detail})` : ''}`);

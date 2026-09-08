@@ -1,0 +1,115 @@
+// ~/.sbb/config.json: machine tag, peer policy, allow pairs, quota floors.
+// Reads merge defaults, writes are atomic (temp file + rename), 0600 under a 0700 dir.
+// docs/spec/policy.md section "Config file".
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { hostname as osHostname } from 'node:os';
+import { dirname, join } from 'node:path';
+import { sbbDir } from '../lib/paths.js';
+import { tagFromHostname } from '../registry/brain-id.js';
+
+/** Peer modes the spec defines. */
+export const PEER_MODES = Object.freeze(['on', 'off', 'moderated']);
+
+/** Quota floors in percent of the weekly window. */
+export const DEFAULT_QUOTA = Object.freeze({ floorWeekly: 10, mainReserve: 20 });
+
+/** @param {{ sbbDir?: string }} [opts] */
+export function configPath(opts = {}) {
+  return join(opts.sbbDir ?? sbbDir(), 'config.json');
+}
+
+/**
+ * @param {{ hostname?: string }} [opts]
+ * @returns {import('./config.js').SbbConfig}
+ */
+export function defaultConfig(opts = {}) {
+  return {
+    machineTag: tagFromHostname(opts.hostname ?? osHostname()),
+    peers: 'on',
+    brains: {},
+    allow: [],
+    quota: { ...DEFAULT_QUOTA },
+  };
+}
+
+/** @param {unknown} value @param {number} fallback */
+function percent(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : fallback;
+}
+
+/**
+ * Merge a raw config file over the defaults. Unknown keys are dropped, invalid
+ * values fall back instead of failing a delivery.
+ * @param {Record<string, any>} raw
+ * @param {{ hostname?: string }} [opts]
+ * @returns {import('./config.js').SbbConfig}
+ */
+export function mergeConfig(raw, opts = {}) {
+  const base = defaultConfig(opts);
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const brains = {};
+  for (const [id, value] of Object.entries(source.brains && typeof source.brains === 'object' ? source.brains : {})) {
+    if (!value || typeof value !== 'object') continue;
+    /** @type {Record<string, any>} */
+    const entry = {};
+    if (PEER_MODES.includes(value.peers) && value.peers !== 'on') entry.peers = value.peers;
+    if (value.autonomous === true) entry.autonomous = true;
+    if (Object.keys(entry).length) brains[String(id).toUpperCase()] = entry;
+  }
+  const allow = (Array.isArray(source.allow) ? source.allow : [])
+    .filter((pair) => Array.isArray(pair) && pair.length === 2 && pair.every((x) => typeof x === 'string' && x.trim() !== ''))
+    .map(([a, b]) => [String(a).trim(), String(b).trim()]);
+  const quota = source.quota && typeof source.quota === 'object' ? source.quota : {};
+  return {
+    machineTag: typeof source.machineTag === 'string' && source.machineTag.trim() !== ''
+      ? source.machineTag.trim()
+      : base.machineTag,
+    peers: PEER_MODES.includes(source.peers) ? source.peers : 'on',
+    brains,
+    allow,
+    quota: {
+      floorWeekly: percent(quota.floorWeekly, base.quota.floorWeekly),
+      mainReserve: percent(quota.mainReserve, base.quota.mainReserve),
+    },
+  };
+}
+
+/**
+ * @param {{ sbbDir?: string, hostname?: string }} [opts]
+ * @returns {import('./config.js').SbbConfig}
+ */
+export function readConfig(opts = {}) {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(configPath(opts), 'utf8'));
+  } catch {
+    raw = {}; // missing or corrupt: defaults, never a failed delivery
+  }
+  return mergeConfig(raw, opts);
+}
+
+/**
+ * @param {Record<string, any>} config
+ * @param {{ sbbDir?: string }} [opts]
+ */
+export function writeConfig(config, opts = {}) {
+  const path = configPath(opts);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tmp, path);
+  return config;
+}
+
+/**
+ * Read, mutate, write in one step.
+ * @param {(config: Record<string, any>) => Record<string, any>} mutate
+ * @param {{ sbbDir?: string, hostname?: string }} [opts]
+ */
+export function updateConfig(mutate, opts = {}) {
+  const next = mutate(readConfig(opts));
+  return writeConfig(next, opts);
+}
+
+/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, allow: string[][], quota: { floorWeekly: number, mainReserve: number } }} SbbConfig */
