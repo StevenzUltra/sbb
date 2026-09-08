@@ -8,7 +8,7 @@ import * as tmuxLib from '../lib/tmux.js';
 import { allocateId, newUuid } from '../registry/brain-id.js';
 import { BRAIN_NAME_RE, getBrain, isValidBrainName, listBrains, removeBrain, saveBrain } from '../registry/brains.js';
 import { ROLE_LABELS } from '../registry/envelope.js';
-import { configPath } from '../policy/config.js';
+import { readConfig as readPolicyConfig } from '../policy/config.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { readQuota } from '../quota/usage-guard.js';
 import { deliver as defaultDeliver } from '../cli/util.js';
@@ -43,31 +43,18 @@ export function readConfig({ dir, onWarn = (m) => process.stderr.write(`sbb: war
 }
 
 /**
- * Default `--cli-args` for one CLI, from `~/.sbb/config.json` `spawn.cliArgs[<cli>]`.
- * Read from the raw file on purpose: `policy/config.js` `mergeConfig` drops unknown keys,
- * so routing this through `readConfig()` would silently lose the section.
+ * Default `--cli-args` for one CLI, from `~/.sbb/config.json` `spawn.cliArgs[<cli>]`
+ * (written by `sbb policy spawn-args`). Goes through `policy/config.js` so the value is
+ * merged and validated like every other config read; a missing or corrupt file means no
+ * default rather than a failed spawn.
  * @param {string} cli
- * @param {{ dir?: string, readFile?: (path: string, enc: string) => string,
+ * @param {{ dir?: string,
+ *           readConfig?: (opts: { sbbDir?: string }) => import('../policy/config.js').SbbConfig,
  *           onWarn?: (message: string) => void }} [opts]
  * @returns {string|undefined}
  */
-export function spawnCliArgs(cli, { dir, readFile = readFileSync, onWarn } = {}) {
-  const path = configPath({ sbbDir: dir });
-  let raw;
-  try {
-    raw = readFile(path, 'utf8');
-  } catch (err) {
-    if (err?.code !== 'ENOENT') onWarn?.(`cannot read ${path}: ${err?.message ?? err}`);
-    return undefined;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    onWarn?.(`cannot parse ${path}: ${err?.message ?? err}`);
-    return undefined;
-  }
-  const value = parsed?.spawn?.cliArgs?.[cli];
+export function spawnCliArgs(cli, { dir, readConfig = readPolicyConfig, onWarn } = {}) {
+  const value = readConfig({ sbbDir: dir, onWarn })?.spawn?.cliArgs?.[cli];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
