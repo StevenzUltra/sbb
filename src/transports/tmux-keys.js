@@ -11,8 +11,10 @@ import { profileFor } from './cli-profiles.js';
 
 /** Composer text longer than this is refused instead of typed. */
 export const MAX_TEXT_CHARS = 4000;
-/** Wait after Enter before reading the screen (spec: 2 s). */
+/** Verification window after Enter (spec: 2 s), polled rather than sampled once. */
 export const SETTLE_MS = 2000;
+/** How often the pane is re-read inside that window. */
+export const VERIFY_POLL_MS = 250;
 const CAPTURE_LINES = 60;
 
 // pane_current_command values that mean something other than a CLI owns the keyboard.
@@ -48,6 +50,28 @@ export function createTmuxKeys({ tmuxApi = tmuxLib, sleep = defaultSleep, settle
   /** @param {string} reason @param {number} started @param {string} msgId @param {string} [detail] */
   function blocked(reason, started, msgId, detail) {
     return { status: 'blocked', via: 'send-keys', msgId, elapsedMs: Date.now() - started, reason, detail };
+  }
+
+  /**
+   * Read the pane until the profile stops reporting pending, or the window closes.
+   * A single fixed wait is not enough: on a loaded machine the CLI may not have echoed the
+   * submission yet when the window opens, and one premature pending costs an extra Enter.
+   * @param {string} paneId
+   * @param {string} before
+   * @param {import('./cli-profiles.js').CliProfile} profile
+   * @param {string} text
+   * @returns {Promise<{ verdict: import('./cli-profiles.js').ScreenVerdict, screen: string }>}
+   */
+  async function waitForVerdict(paneId, before, profile, text) {
+    const deadline = Date.now() + settleMs;
+    let screen = await tmuxApi.capturePane(paneId, captureLines);
+    let verdict = profile.submitted(before, screen, text);
+    while (verdict === 'pending' && Date.now() < deadline) {
+      await sleep(Math.min(VERIFY_POLL_MS, deadline - Date.now()));
+      screen = await tmuxApi.capturePane(paneId, captureLines);
+      verdict = profile.submitted(before, screen, text);
+    }
+    return { verdict, screen };
   }
 
   /**
@@ -107,10 +131,8 @@ export function createTmuxKeys({ tmuxApi = tmuxLib, sleep = defaultSleep, settle
       await tmuxApi.sendLiteral(paneId, text);
       typed = true;
       for (let i = 0; i < profile.enters; i += 1) await tmuxApi.sendKey(paneId, 'Enter');
-      await sleep(settleMs);
 
-      let screen = await tmuxApi.capturePane(paneId, captureLines);
-      let verdict = profile.submitted(before, screen, text);
+      let { verdict } = await waitForVerdict(paneId, before, profile, text);
       if (verdict !== 'pending') {
         return {
           status: verdict === 'queued' ? 'queued' : 'delivered',
@@ -123,9 +145,7 @@ export function createTmuxKeys({ tmuxApi = tmuxLib, sleep = defaultSleep, settle
 
       // The text is still on the composer: one extra Enter, never a resend, never Esc.
       await tmuxApi.sendKey(paneId, 'Enter');
-      await sleep(settleMs);
-      screen = await tmuxApi.capturePane(paneId, captureLines);
-      verdict = profile.submitted(before, screen, text);
+      ({ verdict } = await waitForVerdict(paneId, before, profile, text));
       if (verdict === 'pending') {
         return {
           status: 'unverified',

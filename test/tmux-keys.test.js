@@ -383,7 +383,10 @@ const HAS_TMUX = (() => {
   }
 })();
 
-const TMUX_SOCKET = 'sbb-test';
+// Unique per process. Several agents share this machine and each `npm test` run owns its
+// own server because after() kills it: with one fixed name, a concurrent run's kill-server
+// deleted this run's panes mid-test ("no current target" / "can't find pane").
+const TMUX_SOCKET = `sbb-test-${process.pid}`;
 const TMUX_ARGS = ['-L', TMUX_SOCKET];
 // src/lib/tmux.js reads this for every call, so the real transport talks to the scratch server.
 process.env.SBB_TMUX_ARGS = TMUX_ARGS.join(' ');
@@ -410,6 +413,16 @@ async function startFakeSession(name, extra = []) {
   }
 }
 
+/** Poll the pane for a pattern instead of waiting a fixed number of seconds. */
+async function waitForPane(paneId, re, timeoutMs = 6000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (re.test(tmuxCli(['capture-pane', '-p', '-t', paneId]))) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => { setTimeout(resolve, 100); });
+  }
+}
+
 after(() => {
   if (!HAS_TMUX) return;
   try {
@@ -421,21 +434,24 @@ after(() => {
 
 test('integration: real send-keys against the fake CLI in tmux', { skip: HAS_TMUX ? false : 'tmux not available' }, async () => {
   const paneId = await startFakeSession('h2-fake-plain');
-  const receipt = await createTmuxKeys().send(
+  const receipt = await createTmuxKeys({ settleMs: 3000 }).send(
     { address: 'fake', account: 'default', cli: 'codex', paneId, coord: 'h2-fake-plain:1.1' },
     message('hello h2 integration'),
   );
   assert.equal(receipt.status, 'delivered');
   assert.equal(receipt.via, 'send-keys');
+  assert.ok(await waitForPane(paneId, /hello h2 integration/), 'the echo is on the pane');
 });
 
 test('integration: swallowed first Enter is retried and delivered', { skip: HAS_TMUX ? false : 'tmux not available' }, async () => {
   const paneId = await startFakeSession('h2-fake-swallow', ['--swallow-first-enter']);
-  const receipt = await createTmuxKeys().send(
+  const receipt = await createTmuxKeys({ settleMs: 3000 }).send(
     { address: 'fake', account: 'default', cli: 'codex', paneId, coord: 'h2-fake-swallow:1.1' },
     message('hello h2 retry'),
   );
   assert.equal(receipt.status, 'delivered');
-  // Two settle waits means the extra Enter was actually spent (2 s + 2 s by default).
-  assert.ok(receipt.elapsedMs >= 3500, `expected the retry path, got ${receipt.elapsedMs}ms`);
+  assert.ok(await waitForPane(paneId, /hello h2 retry/), 'the echo is on the pane');
+  // The first verification window (3 s) had to expire before the retry: that only happens
+  // when the swallowed Enter left the text on the composer. Polling then delivered fast.
+  assert.ok(receipt.elapsedMs >= 3000, `expected the retry path, got ${receipt.elapsedMs}ms`);
 });
