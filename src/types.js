@@ -88,6 +88,7 @@
  * @typedef {Object} Target
  * @property {string} address       the input, e.g. 'ios' or 'b/claude:eagerstudy-b1' or 'default/agy:%29'
  * @property {string|undefined} brain  brain name if the address named a brain
+ * @property {string|undefined} brainId  brain id if the address named a brain
  * @property {string} account
  * @property {CliKind} cli
  * @property {string} paneId        current pane id
