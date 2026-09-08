@@ -18,7 +18,9 @@ import {
   writeJson,
 } from './util.js';
 
-const USAGE = `usage: sbb tell <address> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms|30s|5m|1h>] [--dry-run]`;
+const USAGE = `usage: sbb tell <address> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms|30s|5m|1h>] [--force] [--dry-run]
+
+--force bypasses the weekly quota floor for this send; it never bypasses moderation.`;
 
 const PRIORITIES = ['now', 'next', 'later'];
 
@@ -29,6 +31,7 @@ export async function run(argv, deps = {}) {
       role: { type: 'string' },
       file: { type: 'string' },
       timeout: { type: 'string' },
+      force: { type: 'boolean' },
       'dry-run': { type: 'boolean' },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
@@ -98,6 +101,7 @@ export async function run(argv, deps = {}) {
         priority,
         verifyTimeoutMs,
         identity,
+        force: values.force,
         deps,
         send: deps.send,
         msgId: deps.msgId,

@@ -34,12 +34,40 @@ may or may not have landed).
 Every send appends one JSON line to `~/.sbb/log/receipts.jsonl`:
 
 ```
-{"t":1788881135650,"msgId":"...","from":"lead","to":"ios","address":"ios","status":"delivered","via":"uds","elapsedMs":312,"reason":null,"textPreview":"[lead@a/claude:24:8.1][主脑] 复核 PR ..."}
+{"t":1788881135650,"msgId":"...","from":"lead","to":"ios","address":"ios","fromSock":"uds:/tmp/cc-socks/4242.sock","senderSock":"uds:/tmp/cc-socks/6901.sock","senderPid":6901,"fromCoordFull":"/private/tmp/tmux-501/default@24:8.1","toCoordFull":"/private/tmp/tmux-501/default@24:3.4","status":"delivered","via":"uds","elapsedMs":312,"reason":null,"textPreview":"[lead@a/claude:24:8.1][主脑] 复核 PR ..."}
 ```
 
 `sbb watch` tails this file plus the inbox events. `sbb collect` reads
 `~/.sbb/inbox/<brain>/*.json` (one file per received reply, written by the inbox server or by
 `sbb reply` when the target is the user).
+
+## Sender identity and reply routing
+
+Every receipt - sent or blocked - also records the sender's session identity:
+
+| field | meaning |
+| --- | --- |
+| `senderSock` | the sender's own Claude session socket (`CLAUDE_CODE_MESSAGING_SOCKET`), `uds:<path>`; null outside a session |
+| `senderPid` | the pid parsed from that socket name; null when it cannot be read |
+| `fromCoordFull` | `<tmux server socket path>@<coord>` for the sender; `fromAddress` keeps the bare coord for display |
+| `toCoordFull` | the same for the target |
+
+The tmux server path comes from `$TMUX`, or from `tmux display-message -p '#{socket_path}'` when
+`SBB_TMUX_ARGS` points at another server. Only the log carries it: two servers can host the same
+`session:window.pane`, so the path is what makes a coord unambiguous.
+
+`sbb reply` resolves the original sender in this order, stopping at the first step that works:
+
+1. `fromSock` - the waiting `ask`/`tell` inbox recorded on the receipt, while that process is
+   still listening.
+2. `senderSock` - the sender session's own socket, if it still exists and connects; the account
+   comes from the matching `<pid>.*.key` file so the uds transport can authenticate.
+3. the brain record, or the `fromAddress` recorded at send time.
+4. the bare coord, only when `fromCoordFull` names this tmux server (or the receipt has no server
+   path). Refused otherwise: a coord alone may name a pane on another server.
+
+`tell --force` / `ask --force` (or `SBB_FORCE=1`) bypasses the weekly quota floor only; it never
+bypasses moderation.
 
 ## Envelope
 

@@ -14,7 +14,7 @@ import {
   previewTransport,
 } from './util.js';
 
-const USAGE = `usage: sbb ask <address> <text...> [--wait <ms|30s|5m|1h>] [--priority now|next|later] [--role <text>]
+const USAGE = `usage: sbb ask <address> <text...> [--wait <ms|30s|5m|1h>] [--priority now|next|later] [--role <text>] [--force]
 
 Waits (default 10m) for a reply carrying replyTo = the message id, or a Claude
 peer_idle_notice. Exit 0 on reply or idle, 5 on timeout.`;
@@ -25,6 +25,7 @@ export async function run(argv, deps = {}) {
       wait: { type: 'string' },
       priority: { type: 'string' },
       role: { type: 'string' },
+      force: { type: 'boolean' },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     });
@@ -61,6 +62,7 @@ export async function run(argv, deps = {}) {
         body,
         priority: values.priority ?? 'next',
         identity,
+        force: values.force,
         deps,
         send: deps.send,
         msgId: deps.msgId,

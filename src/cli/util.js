@@ -4,7 +4,10 @@ import { parseArgs } from 'node:util';
 import { send as defaultSend, transports as defaultTransports } from '../transports/index.js';
 import { sendToInbox as defaultSendToInbox } from '../transports/claude-uds.js';
 import { newMsgId, shortId } from '../lib/ids.js';
-import { claudeSocksDirs } from '../lib/paths.js';
+import { claudeSocksDirs, claudeSessionsDir, discoverAccounts } from '../lib/paths.js';
+import { formatCoordFull } from '../lib/coord.js';
+import { serverSocketPath } from '../lib/tmux.js';
+import { findKeyFile } from '../registry/claude-sessions.js';
 import { buildEnvelope, identityFromRows, senderName } from '../registry/envelope.js';
 import { appendReceipt, formatReceiptLine } from '../registry/receipts.js';
 import { writeInboxEntry } from '../registry/inbox.js';
@@ -77,6 +80,10 @@ function blockResult(input, why, sender, targetInfo) {
       reason: why.reason,
       detail: why.detail,
       textPreview: String(input.text ?? '').slice(0, 200),
+      senderSock: input.senderSession?.senderSock ?? null,
+      senderPid: input.senderSession?.senderPid ?? null,
+      fromCoordFull: formatCoordFull(sender.coord, input.serverPath),
+      toCoordFull: formatCoordFull(targetInfo.coord, input.serverPath),
     },
   };
 }
@@ -85,10 +92,14 @@ function blockResult(input, why, sender, targetInfo) {
  * The gate every outbound delivery passes: policy verdict first (moderated messages are
  * parked in ~/.sbb/held), then the weekly quota floor of the target's account. Returns a
  * `{receipt, entry}` to refuse with, or null to send. `skipPolicy` is for protocol notices
- * SBB itself sends; `force`/`SBB_FORCE=1` bypasses the quota floor only, never moderation.
+ * SBB itself sends; `force` (CLI `--force` or `SBB_FORCE=1`) bypasses the quota floor only,
+ * never moderation. `senderSession`/`serverPath` are recorded on the blocked receipt exactly
+ * as `deliver` records them on a sent one.
  * @param {{ target: import('../types.js').Target, identity: Record<string, any>,
  *           message: Record<string, any>, text: string, msgId: string, replyTo?: string,
- *           force?: boolean, skipPolicy?: boolean, deps?: Record<string, any>, sbbDir?: string }} input
+ *           force?: boolean, skipPolicy?: boolean, deps?: Record<string, any>, sbbDir?: string,
+ *           senderSession?: { senderSock: string|null, senderPid: number|null },
+ *           serverPath?: string|null }} input
  */
 export async function enforceDelivery(input) {
   const deps = input.deps ?? {};
@@ -229,6 +240,67 @@ export function previewTransport(target, transports = defaultTransports) {
 }
 
 /**
+ * The sending session's own Claude socket. `CLAUDE_CODE_MESSAGING_SOCKET` is set inside a
+ * Claude session's Bash and outlives the transient ask/tell inbox a receipt records as
+ * `fromSock`, so it survives a restarted ask and a stale coord.
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {{ senderSock: string|null, senderPid: number|null }}
+ */
+export function senderSessionFromEnv(env = process.env) {
+  const raw = env?.CLAUDE_CODE_MESSAGING_SOCKET;
+  const path = typeof raw === 'string' ? raw.trim() : '';
+  if (!path) return { senderSock: null, senderPid: null };
+  const sock = path.startsWith('uds:') ? path : `uds:${path}`;
+  const match = /(\d+)\.sock$/.exec(path);
+  return { senderSock: sock, senderPid: match ? Number(match[1]) : null };
+}
+
+/**
+ * A Claude target built from a live session socket: the account whose sessions directory
+ * holds `<pid>.*.key` names the account, and that key file carries the peer token the uds
+ * transport authenticates with. Null when no account owns the pid.
+ * @param {string} sockPath
+ * @param {{ accounts?: import('../types.js').Account[] }} [opts]
+ * @returns {import('../types.js').Target|null}
+ */
+export function targetFromSessionSock(sockPath, opts = {}) {
+  const path = String(sockPath ?? '').trim();
+  if (!path) return null;
+  const pid = Number(/(\d+)\.sock$/.exec(path)?.[1]);
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  for (const account of opts.accounts ?? discoverAccounts()) {
+    const dir = claudeSessionsDir(account);
+    const keyFile = dir ? findKeyFile(dir, pid) : undefined;
+    if (!keyFile) continue;
+    return {
+      address: `uds:${path}`,
+      account: account.name,
+      cli: 'claude',
+      paneId: null,
+      coord: null,
+      claude: { sock: path, keyFile },
+    };
+  }
+  return null;
+}
+
+/**
+ * The tmux server this process talks to, or null. `input.serverPath` / `deps.serverPath`
+ * (string or null) win so tests never have to reach a real tmux server.
+ * @param {Record<string, any>} input
+ * @returns {Promise<string|null>}
+ */
+async function resolveServerPath(input) {
+  const dep = input.serverPath ?? input.deps?.serverPath;
+  if (dep !== undefined) return dep ?? null;
+  try {
+    return await serverSocketPath();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The caller's identity from $TMUX_PANE, or the user when not inside tmux.
  * @param {{ rows?: any[], roster?: Function, paneId?: string }} [deps]
  */
@@ -359,6 +431,9 @@ export async function deliver(input) {
   const send = input.send ?? defaultSend;
   const msgId = input.msgId ?? newMsgId();
   const identity = input.identity ?? (await callerIdentity(input.deps ?? {}));
+  const env = input.deps?.env ?? process.env;
+  const senderSession = input.senderSession ?? senderSessionFromEnv(env);
+  const serverPath = await resolveServerPath(input);
   const text = buildEnvelope({ ...identity, body: input.body, msgId });
   const fromName = senderName(identity);
   const inbox = input.inbox;
@@ -370,7 +445,7 @@ export async function deliver(input) {
     fromBrain: identity.brain ?? 'user',
     fromSock: inbox?.sockPath ? `uds:${inbox.sockPath}` : undefined,
     fromName,
-    fromMode: fromModeFromEnv(input.deps?.env ?? process.env),
+    fromMode: fromModeFromEnv(env),
   };
   const blocked = await (input.enforceDelivery ?? enforceDelivery)({
     target: input.target,
@@ -381,6 +456,8 @@ export async function deliver(input) {
     replyTo: input.replyTo,
     force: input.force,
     skipPolicy: input.skipPolicy,
+    senderSession,
+    serverPath,
     deps: input.deps ?? {},
     sbbDir: input.sbbDir,
   });
@@ -401,9 +478,13 @@ export async function deliver(input) {
     fromId: identity.id ?? null,
     fromAddress: identity.address ?? null,
     fromSock: message.fromSock ?? null,
+    senderSock: senderSession.senderSock,
+    senderPid: senderSession.senderPid,
+    fromCoordFull: formatCoordFull(identity.coord, serverPath),
     to: input.target.brain ?? input.target.address,
     toId: input.target.brainId ?? null,
     address: input.target.address,
+    toCoordFull: formatCoordFull(input.target.coord, serverPath),
     status: receipt.status,
     via: receipt.via,
     elapsedMs: receipt.elapsedMs,
