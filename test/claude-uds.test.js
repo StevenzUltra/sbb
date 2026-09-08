@@ -101,6 +101,106 @@ test('includes from in the user line when the message carries a fromSock', async
   }
 });
 
+test('wraps the body as cross-session-message when fromName is present', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  const fromSock = fromIn(dir);
+  try {
+    const receipt = await claudeUds.send(
+      targetFor(server),
+      msg({ text: 'ping', fromSock, fromName: 'sbb-e2e', fromMode: 'bypass' }),
+      { verifyTimeoutMs: 1000 },
+    );
+    assert.equal(receipt.status, 'delivered');
+    assert.equal(receipt.detail, undefined);
+    await server.waitForFrames(2);
+    const wrapped = `<cross-session-message from="${fromSock}" from-name="sbb-e2e" from-mode="bypass">\nping\n</cross-session-message>`;
+    assert.equal(
+      server.raw.split('\n')[1],
+      `{"type":"user","message":{"role":"user","content":${JSON.stringify(wrapped)}},"msg_id":"${MSG_ID}","priority":"next","from":"${fromSock}"}`,
+    );
+  } finally {
+    await server.close();
+    await closeInboxes();
+  }
+});
+
+test('omits from-mode when the sender mode is unknown', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  const fromSock = fromIn(dir);
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ text: 'ping', fromSock, fromName: 'sbb-e2e' }), {
+      verifyTimeoutMs: 1000,
+    });
+    assert.equal(receipt.status, 'delivered');
+    await server.waitForFrames(2);
+    assert.equal(
+      server.frames[1].message.content,
+      `<cross-session-message from="${fromSock}" from-name="sbb-e2e">\nping\n</cross-session-message>`,
+    );
+  } finally {
+    await server.close();
+    await closeInboxes();
+  }
+});
+
+test('keeps plain content when fromName is missing', async () => {
+  const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+  const dir = tmpDir('sbb-inbox-');
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ text: 'ping', fromSock: fromIn(dir) }), {
+      verifyTimeoutMs: 1000,
+    });
+    assert.equal(receipt.status, 'delivered');
+    assert.equal(receipt.detail, undefined);
+    await server.waitForFrames(2);
+    assert.equal(server.frames[1].message.content, 'ping');
+  } finally {
+    await server.close();
+    await closeInboxes();
+  }
+});
+
+for (const [label, badName] of [
+  ['a double quote', 'bad"name'],
+  ['an angle bracket', 'bad<name>'],
+  ['a newline', 'bad\nname'],
+]) {
+  test(`falls back to plain content when from-name contains ${label}`, async () => {
+    const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
+    const dir = tmpDir('sbb-inbox-');
+    try {
+      const receipt = await claudeUds.send(
+        targetFor(server),
+        msg({ text: 'ping', fromSock: fromIn(dir), fromName: badName }),
+        { verifyTimeoutMs: 1000 },
+      );
+      assert.equal(receipt.status, 'delivered');
+      assert.match(receipt.detail, /content not wrapped: from-name has forbidden characters/);
+      await server.waitForFrames(2);
+      assert.equal(server.frames[1].message.content, 'ping');
+    } finally {
+      await server.close();
+      await closeInboxes();
+    }
+  });
+}
+
+test('notes that fromName cannot be wrapped without a fromSock', async () => {
+  const server = await startFakeClaudeServer();
+  try {
+    const receipt = await claudeUds.send(targetFor(server), msg({ text: 'ping', fromName: 'sbb-e2e' }), {});
+    assert.equal(receipt.status, 'queued');
+    assert.match(receipt.detail, /content not wrapped: no receivable fromSock/);
+    await server.waitForFrames(2);
+    assert.equal(server.frames[1].message.content, 'ping');
+    assert.equal(server.frames[1].from, undefined);
+  } finally {
+    await server.close();
+  }
+});
+
 test('maps a delivered receipt', async () => {
   const server = await startFakeClaudeServer({ autoStatus: 'delivered' });
   const dir = tmpDir('sbb-inbox-');

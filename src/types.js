@@ -118,7 +118,8 @@
 
 /**
  * The message a transport is asked to deliver. `text` is the fully rendered single-line body,
- * envelope included. Transports never rewrite text.
+ * envelope included. Transports never alter the body; the uds transport may wrap it verbatim in
+ * a <cross-session-message> envelope when fromName is present (docs/spec/protocols.md section 1).
  * @typedef {Object} OutboundMessage
  * @property {string} msgId
  * @property {string} text
