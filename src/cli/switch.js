@@ -5,8 +5,9 @@ import { EXIT, main, parse, UsageError, writeJson } from './util.js';
 
 const USAGE = `usage: sbb switch <id|name|#id>
 
-Focuses the brain's current pane (select-window + select-pane), switching the client
-first when it is attached to another session. Exit 4 when the pane is gone.`;
+Focuses the brain's current pane (select-window + select-pane). Only the caller's own
+tmux client is moved; when this process has no client, it prints an "attach:" hint instead
+of touching anybody else's. Exit 4 when the pane is gone.`;
 
 export async function run(argv, deps = {}) {
   return main(async () => {
@@ -38,7 +39,10 @@ export async function run(argv, deps = {}) {
       return EXIT.BLOCKED;
     }
     if (values.json) writeJson(result);
-    else console.log(`switched ${result.brain.id} ${result.brain.name} ${result.coord}`);
+    else {
+      console.log(`switched ${result.brain.id} ${result.brain.name} ${result.coord}`);
+      if (result.attach) console.log(result.attach);
+    }
     return EXIT.OK;
   });
 }

@@ -61,9 +61,13 @@ sbb kill <id|name> [--keep-children] [--yes] [--force]
 sbb switch <id|name|#id>
 ```
 
-`tmux select-window` + `select-pane` on the brain's current pane; if the caller's client is
-attached to another session, `switch-client` first. Prints `switched <id> <name> <coord>`.
-Exit 4 when the pane is gone (and mark the record `paneId: null` so `ls` shows `gone`).
+`tmux select-window` + `select-pane` on the brain's current pane. Only the caller's own
+client is ever moved: the caller's tty (stdin/stdout, `$SSH_TTY`, or the `tty` command) is
+matched against `tmux list-clients`, and only on a match is
+`switch-client -c <tty> -t <session>` issued. Without a match nothing but the pane
+selection happens and the CLI prints `attach: tmux switch-client -t <session>`. Prints
+`switched <id> <name> <coord>`. Exit 4 when the pane is gone (and mark the record
+`paneId: null` so `ls` shows `gone`).
 
 ## Briefing
 
