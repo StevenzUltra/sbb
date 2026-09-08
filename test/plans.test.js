@@ -361,3 +361,79 @@ test('approvePlan hands each node its cliArgs to the spawn runner', async () => 
     restore();
   }
 });
+
+test('parseSpawnOutput reads the brain out of the multi-line --json result', () => {
+  // The rehearsal saw exactly this shape: `sbb spawn --json` prints the whole result,
+  // the brain nested under `.brain`, so the top-level object has no `id`.
+  const stdout = JSON.stringify(
+    {
+      brain: { id: 'TST-0009', name: 'iso-a', coord: '24:3.9', paneId: '%99' },
+      briefFile: '/tmp/brief.md',
+      quota: null,
+      cliArgs: ['--permission-mode', 'bypassPermissions'],
+      retiredDuplicates: [],
+      notification: { status: 'delivered' },
+    },
+    null,
+    2,
+  );
+  assert.deepEqual(parseSpawnOutput(stdout), { id: 'TST-0009', name: 'iso-a', coord: '24:3.9' });
+  assert.deepEqual(parseSpawnOutput('spawned TST-0009 iso-a 24:3.9\n'), { id: 'TST-0009', name: 'iso-a', coord: '24:3.9' });
+  assert.equal(parseSpawnOutput('not json at all'), null);
+  assert.equal(parseSpawnOutput(''), null);
+});
+
+test('approvePlan records a node spawned when spawn prints the multi-line JSON', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    team();
+    const plan = createPlan(planFixture(), { proposer: null, getBrain, accounts: ACCOUNTS });
+    const { result } = await approvePlan(plan, {
+      approver: null,
+      config: mergeConfig({}),
+      rows: [{ account: 'a', window: 'weekly', remaining: 90 }, { account: 'b', window: 'weekly', remaining: 90 }],
+      brains: [],
+      spawn: async (node) => ({
+        code: 0,
+        stderr: '',
+        stdout: JSON.stringify(
+          { brain: { id: 'TST-0009', name: node.name, coord: '24:3.9' }, retiredDuplicates: [], notification: { status: 'delivered' } },
+          null,
+          2,
+        ),
+      }),
+      getBrain,
+      accounts: ACCOUNTS,
+    });
+    assert.equal(result.results[0].status, 'spawned');
+    assert.equal(result.results[0].id, 'TST-0009');
+    assert.equal(result.results[0].coord, '24:3.9');
+    assert.equal(result.planId, plan.planId);
+  } finally {
+    restore();
+  }
+});
+
+test('approvePlan keeps the raw output when spawn prints something unparseable', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    team();
+    const plan = createPlan(planFixture(), { proposer: null, getBrain, accounts: ACCOUNTS });
+    const raw = 'warning: first line\n{\"broken\": [\n  1,\n}';
+    const { result } = await approvePlan(plan, {
+      approver: null,
+      config: mergeConfig({}),
+      rows: [{ account: 'a', window: 'weekly', remaining: 90 }, { account: 'b', window: 'weekly', remaining: 90 }],
+      brains: [],
+      spawn: async () => ({ code: 0, stderr: '', stdout: raw }),
+      getBrain,
+      accounts: ACCOUNTS,
+    });
+    assert.equal(result.results[0].status, 'failed');
+    assert.equal(result.results[0].detail, raw, 'the whole payload is attached, not the last lines');
+  } finally {
+    restore();
+  }
+});

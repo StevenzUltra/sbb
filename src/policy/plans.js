@@ -243,14 +243,19 @@ export async function defaultSpawn(node) {
   return { code: result.code, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
 }
 
-/** `spawned <id> <name> <coord>` or a JSON object with `id`. */
+/**
+ * `sbb spawn --json` prints its whole result object (multi-line, brain nested under
+ * `.brain`); the text form `spawned <id> <name> <coord>` is still accepted.
+ * @param {string} stdout
+ */
 export function parseSpawnOutput(stdout) {
   const text = String(stdout ?? '').trim();
   const jsonStart = text.indexOf('{');
   if (jsonStart !== -1) {
     try {
       const parsed = JSON.parse(text.slice(jsonStart));
-      if (parsed?.id) return { id: parsed.id, name: parsed.name, coord: parsed.coord };
+      const brain = parsed?.brain ?? parsed;
+      if (brain?.id) return { id: brain.id, name: brain.name, coord: brain.coord };
     } catch {
       // fall through to the text form
     }
@@ -302,7 +307,9 @@ export async function approvePlan(plan, opts = {}) {
           account: node.account,
           status: 'failed',
           exitCode: out.code,
-          detail: (out.stderr || out.stdout || '').trim().split('\n').slice(-3).join(' | '),
+          // The raw output, not its last lines: a parse failure needs the whole payload
+          // (the rehearsal showed only `], "retiredDuplicates": [] }`).
+          detail: (out.stderr || out.stdout || '').trim().slice(0, 500),
         });
       }
     } catch (err) {
