@@ -56,6 +56,14 @@ exists and still has a pane); `sbb held --all` also shows the rest. `sbb approve
 sends it through the normal path and deletes the hold; `sbb approve --deny <msgId8>` deletes
 it and notifies the sender.
 
+Approving or denying a hold is the user's decision, never a brain's. Both resolve the
+caller's identity the way `sbb tell` resolves a sender (the pane's brain record, then the
+pane's own `@sbb_brain` tag, then `CLAUDE_CODE_MESSAGING_SOCKET`), and a caller that resolves
+to a registered brain is refused: `blocked reason=policy detail=holds are approved by the user
+only`, exit 4, nothing sent, the hold left in place, and the attempt logged as a receipt with
+`held: refused` and `fromId` set to that brain. The notice to the sender records the real
+approver in `approvedBy`, not a fixed `user`.
+
 Retiring a brain (`sbb kill`, or a spawn retiring a duplicate record) marks every pending
 hold whose sender or target is that brain `expired` (`expiredAt` + `expiredReason`); nobody
 is notified. `sbb approve` resolves the hold's recorded `target.brainId`, never its name, so

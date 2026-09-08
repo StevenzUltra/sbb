@@ -69,6 +69,20 @@ export async function paneInMode(paneId) {
 }
 
 /**
+ * A pane's user option, or null when unset or the server is unreachable. `@sbb_brain` is
+ * written at spawn (src/lifecycle/spawn.js) and stays on the pane after the brain record is
+ * gone, so `sbb approve` can still recognise a brain whose record was retired.
+ * @param {string} paneId @param {string} name
+ */
+export async function paneOption(paneId, name) {
+  try {
+    return (await tmux(['display-message', '-p', '-t', paneId, `#{@${name}}`])).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Visible screen of a pane, bottom `lines` lines, without trailing blank lines.
  * @param {string} paneId
  * @param {number} [lines]
