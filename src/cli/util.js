@@ -64,11 +64,15 @@ export function renderTable(headers, rows, opts = {}) {
   return [line(headers), ...cells.map(line)].join('\n');
 }
 
-/** `30s`, `5m`, `1h`, `500ms` -> milliseconds. */
+/**
+ * `6000` (milliseconds: docs/spec/cli.md documents `--timeout <ms>`), `500ms`, `30s`, `5m`,
+ * `1h` -> milliseconds. A bare number is milliseconds, never seconds: `--timeout 6000` means
+ * 6 s, and reading it as 6000 s once left `sbb tell` waiting 100 minutes for a receipt.
+ */
 export function parseDuration(text) {
   const match = /^(\d+)(ms|s|m|h)?$/.exec(String(text).trim());
-  if (!match) throw new UsageError(`invalid duration "${text}" (use 30s, 5m, 1h)`);
-  const unit = match[2] ?? 's';
+  if (!match) throw new UsageError(`invalid duration "${text}" (use 6000, 30s, 5m, 1h)`);
+  const unit = match[2] ?? 'ms';
   const factor = { ms: 1, s: 1000, m: 60000, h: 3600000 }[unit];
   return Number(match[1]) * factor;
 }

@@ -80,6 +80,28 @@ test('a missing counter recovers the max seq from brains, retired records and re
   }
 });
 
+test('maxSeqFromState follows opts.sbbDir, never the global state', () => {
+  const globalHome = tempDir();
+  const ownHome = tempDir();
+  const restore = withEnv({ SBB_HOME_OVERRIDE: globalHome, SBB_DIR: join(globalHome, '.sbb') });
+  try {
+    mkdirSync(join(globalHome, '.sbb', 'brains'), { recursive: true });
+    writeFileSync(join(globalHome, '.sbb', 'brains', 'TST-0009.json'), '{}\n');
+    const opts = { sbbDir: join(ownHome, '.sbb') };
+    assert.equal(maxSeqFromState('TST', opts), 0, 'the global brains dir is not ours to read');
+
+    mkdirSync(join(ownHome, '.sbb', 'brains', '_retired'), { recursive: true });
+    writeFileSync(join(ownHome, '.sbb', 'brains', '_retired', 'TST-0004.json'), '{}\n');
+    assert.equal(maxSeqFromState('TST', opts), 4);
+
+    mkdirSync(join(ownHome, '.sbb', 'log'), { recursive: true });
+    writeFileSync(join(ownHome, '.sbb', 'log', 'receipts.jsonl'), '{"fromId":"TST-0006"}\n');
+    assert.equal(maxSeqFromState('TST', opts), 6, 'our own receipt log counts');
+  } finally {
+    restore();
+  }
+});
+
 test('20 concurrent allocations never repeat an id', async () => {
   const home = tempDir();
   const dir = join(home, '.sbb');

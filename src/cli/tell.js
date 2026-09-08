@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { bodyFromFile, senderPrefix } from '../registry/envelope.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
+import { closeInboxes } from '../transports/claude-uds.js';
 import { shortId } from '../lib/ids.js';
 import {
   EXIT,
@@ -17,7 +18,7 @@ import {
   writeJson,
 } from './util.js';
 
-const USAGE = `usage: sbb tell <address> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms>] [--dry-run]`;
+const USAGE = `usage: sbb tell <address> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms|30s|5m|1h>] [--dry-run]`;
 
 const PRIORITIES = ['now', 'next', 'later'];
 
@@ -114,6 +115,9 @@ export async function run(argv, deps = {}) {
           : EXIT.BLOCKED;
     } finally {
       await inbox?.close?.();
+      // The transport may have opened its own inbox; leaving one listening keeps the
+      // process alive after the receipt is printed.
+      await (deps.closeInboxes ?? closeInboxes)();
     }
   });
 }

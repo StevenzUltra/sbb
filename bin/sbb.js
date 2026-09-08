@@ -38,10 +38,33 @@ async function main(argv) {
   return mod.run(rest);
 }
 
+/**
+ * Leave with `code` once stdout and stderr have drained. Explicit, because a handle nobody
+ * closed (a cached transport inbox, a peer socket the OS has not released) must not keep
+ * `sbb` alive after the receipt is on disk. Flushed first, because stdout is a pipe
+ * whenever `sbb` runs inside a pipeline and process.exit() drops buffered writes.
+ * @param {number} code
+ */
+function exitNow(code) {
+  process.exitCode = code;
+  let pending = 2;
+  const done = () => {
+    if (--pending === 0) process.exit(code);
+  };
+  for (const stream of [process.stdout, process.stderr]) {
+    try {
+      if (stream.writableLength === 0) done();
+      else stream.write('', done);
+    } catch {
+      done();
+    }
+  }
+}
+
 main(process.argv.slice(2)).then(
-  (code) => process.exit(typeof code === 'number' ? code : 0),
+  (code) => exitNow(typeof code === 'number' ? code : 0),
   (err) => {
     console.error(`sbb: ${err?.stack ?? err}`);
-    process.exit(1);
+    exitNow(1);
   },
 );
