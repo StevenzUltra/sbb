@@ -10,6 +10,7 @@ import { BRAIN_NAME_RE, getBrain, isValidBrainName, listBrains, removeBrain, sav
 import { ROLE_LABELS } from '../registry/envelope.js';
 import { readConfig as readPolicyConfig } from '../policy/config.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
+import { findSpawnedThread } from '../registry/codex-threads.js';
 import { readQuota } from '../quota/usage-guard.js';
 import { deliver as defaultDeliver } from '../cli/util.js';
 import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexTrust, splitArgs } from './launch.js';
@@ -149,6 +150,8 @@ export async function spawnBrain(input = {}, deps = {}) {
     return blocked('cli_missing', `${CLI_BINARIES[cli]} is not on PATH`);
   }
 
+  // Everything a codex thread does from here on belongs to this spawn.
+  const startedAt = Date.now();
   const cwd = input.cwd ?? process.cwd();
   if (cli === 'codex') {
     // docs/spec/lifecycle.md: Codex refuses to run in an untrusted directory, and its
@@ -244,6 +247,24 @@ export async function spawnBrain(input = {}, deps = {}) {
     coord = null; // the record tolerates a missing coord; the pane id is the truth
   }
 
+  // Codex creates its thread during the brief turn; record which one, so the roster can
+  // address the session by thread instead of guessing from cwd. Never guessed: no thread
+  // means no field, and a failed lookup is reported, not hidden.
+  let thread;
+  let threadError;
+  if (cli === 'codex') {
+    try {
+      thread = (deps.findSpawnedThread ?? findSpawnedThread)({
+        account: accountName,
+        cwd,
+        sinceMs: startedAt,
+        accounts,
+      });
+    } catch (err) {
+      threadError = String(err?.message ?? err);
+    }
+  }
+
   const brain = {
     id,
     uuid,
@@ -257,6 +278,8 @@ export async function spawnBrain(input = {}, deps = {}) {
     paneId,
     coord: coord ?? undefined,
     pid: ready.session?.pid,
+    threadId: thread?.id,
+    threadName: thread?.name,
     createdAt: Date.now(),
     origin: 'spawned',
   };
@@ -300,7 +323,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     }
   }
 
-  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, retiredDuplicates };
+  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, thread: thread ?? null, threadError, retiredDuplicates };
 }
 
 /**

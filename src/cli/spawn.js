@@ -96,6 +96,10 @@ export async function run(argv, deps = {}) {
       if (result.briefFile) console.log(`brief     ${result.briefFile}`);
       if (result.quota) console.log(`quota     ${result.quota}`);
       if (result.cliArgs?.length) console.log(`cli-args  ${result.cliArgs.join(' ')}`);
+      if (result.thread) {
+        console.log(`thread    ${result.thread.id}${result.thread.name ? ` ${result.thread.name}` : ''} (${result.thread.source})`);
+      }
+      if (result.threadError) console.error(`sbb: warning: codex thread lookup failed: ${result.threadError}`);
       for (const extra of result.retiredDuplicates ?? []) {
         console.log(`retired   ${extra.id} ${extra.name} (same pane, superseded by ${brain.id})`);
       }
