@@ -25,6 +25,8 @@ function nameCell(row) {
 
 /** @param {import('../registry/roster.js').RosterRow} row */
 function toCells(row) {
+  // A brain waiting for its turn under `sbb move --after-idle` shows where it is headed.
+  const pending = row.brainId ? getBrain(row.brainId)?.pendingMove : undefined;
   return [
     row.brainId,
     row.brain,
@@ -33,7 +35,7 @@ function toCells(row) {
     row.account,
     row.cli,
     row.model,
-    row.status,
+    pending?.to ? `${row.status} -> ${pending.to}` : row.status,
     row.where,
     nameCell(row),
     shortCwd(row.cwd),
