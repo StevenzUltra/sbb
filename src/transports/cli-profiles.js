@@ -19,6 +19,16 @@ export function stripGlyphs(text) {
 }
 
 /**
+ * One screen line as the matchers see it: spinner glyphs gone, runs of spaces and tabs
+ * collapsed. Codex draws its spinner into the composer line itself and pads with spaces,
+ * so `› Ask Codex to do anything⡀   ⠈  ⠁` and `› Ask Codex to do anything` are the same
+ * state (live sample: test/fixtures/codex-screens.json).
+ */
+export function normalizeLine(text) {
+  return collapse(stripGlyphs(text));
+}
+
+/**
  * Index of the last line that looks like the CLI's composer (input) line, or -1.
  * The composer is always the last prompt-prefixed line: earlier ones are transcript echoes.
  * @param {string} screen
@@ -74,16 +84,28 @@ export function probeOf(text) {
  * @param {1|2} spec.enters
  * @param {RegExp} [spec.queuedRe]      badge meaning "accepted as a follow-up"
  * @param {boolean} [spec.followUpQueue] CLI queues follow-ups while a turn is running
+ * @param {'screen'|'input'} [spec.promptingScope]  where to look for a dialog (default screen)
  * @returns {CliProfile}
  */
 function defineProfile(spec) {
   const busy = (screen) => spec.busyRe.some((re) => re.test(String(screen ?? '')));
-  const prompting = (screen) => spec.promptingRe.some((re) => re.test(String(screen ?? '')));
+
+  // A dismissed dialog stays in the scrollback forever, so matching the whole capture
+  // would report "prompting" for the rest of the session. With scope 'input' only the
+  // composer line and below count, which is where an open dialog is drawn (the trust
+  // dialog replaces the composer entirely; its own `› 1. Yes` line is the last prompt
+  // line, so it still lands inside the region). No prompt line at all falls back to the
+  // whole screen.
+  const prompting = (screen) => {
+    const text = String(screen ?? '');
+    const region = spec.promptingScope === 'input' ? (inputRegion(text, spec.promptRe) || text) : text;
+    return spec.promptingRe.some((re) => re.test(region));
+  };
 
   const composerEmpty = (screen) => {
     const lines = String(screen ?? '').split('\n');
     const i = lastPromptIndex(screen, spec.promptRe);
-    return i !== -1 && spec.emptyComposer.test(stripGlyphs(lines[i]));
+    return i !== -1 && spec.emptyComposer.test(normalizeLine(lines[i]));
   };
 
   const idle = (screen) => composerEmpty(screen) && !busy(screen) && !prompting(screen);
@@ -134,7 +156,11 @@ const claude = defineProfile({
 const codex = defineProfile({
   id: 'codex',
   promptRe: /^\s*›/,
-  emptyComposer: /^\s*›\s*(?:Ask Codex to do anything)?\s*$/,
+  // normalizeLine() strips the spinner braille and collapses padding first.
+  emptyComposer: /^›(?:\s*Ask Codex to do anything)?$/,
+  // Codex keeps a dismissed dialog in the scrollback (live sample: trust prompt), and its
+  // approval dialog replaces the composer, so only the input region can hold an open one.
+  promptingScope: 'input',
   busyRe: [
     /(?:^|\n)\s*•\s+Working\b/,
     /(?:esc|Esc) to interrupt/,
@@ -195,6 +221,13 @@ const other = defineProfile({
 
 /** @type {Record<CliKind, CliProfile>} */
 export const CLI_PROFILES = { claude, codex, agy, cursor, other };
+
+/**
+ * Alias the dynamic importer in src/registry/roster.js resolves (`mod.profiles ?? …`).
+ * Without it roster fell through to the module namespace, found no `codex` key and
+ * reported `?` for every non-Claude pane.
+ */
+export const profiles = CLI_PROFILES;
 
 /**
  * @param {CliKind|string|undefined} cli
