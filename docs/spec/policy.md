@@ -27,6 +27,10 @@
 - `spawn.cliArgs.<cli>`: default extra flags for `sbb spawn` of that CLI, written by
   `sbb policy spawn-args` and passed through as `--cli-args=<text>` (whitespace-split by
   `sbb spawn`; a plan node's own `cliArgs` is appended after them). Blank entries are dropped.
+- `spawn.preamble.<cli>`: a shell line run in the new pane before the CLI starts (a proxy
+  script, extra environment); `spawn.command.<cli>`: a launcher that replaces the CLI binary
+  and must forward its arguments; `spawn.shell`: the shell that runs the pane line (default
+  `sh`; set your own shell when the preamble uses `source`). See lifecycle.md "Launcher".
 
 ## Who may talk to whom
 
@@ -76,6 +80,9 @@ sbb policy set <id|name> --peers on|off | --autonomous on|off
 sbb policy allow <a> <b>   |   sbb policy deny <a> <b>
 sbb policy quota --floor-weekly <n> | --main-reserve <n>
 sbb policy spawn-args <cli> "<args>"     -> spawn.cliArgs[<cli>]; an empty string removes it
+sbb policy spawn-preamble <cli> "<line>" -> spawn.preamble[<cli>]; an empty string removes it
+sbb policy spawn-command <cli> <launcher> -> spawn.command[<cli>]; an empty string removes it
+sbb policy spawn-shell <path>            -> spawn.shell; an empty string removes it (sh)
 ```
 
 ## Claims

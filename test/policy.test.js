@@ -712,3 +712,26 @@ test('sbb approve records the real approver instead of a fixed user', async () =
     restore();
   }
 });
+
+test('policy spawn-preamble / spawn-command / spawn-shell write the launcher settings', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    assert.deepEqual(readConfig().spawn, { cliArgs: {}, preamble: {}, command: {} });
+    assert.equal((await captureLog(() => policyRun(['spawn-preamble', 'claude', 'source', '/x/spxy.sh', 'on']))).result, 0);
+    assert.equal((await captureLog(() => policyRun(['spawn-command', 'codex', '/x/bin/codex-launch']))).result, 0);
+    assert.equal((await captureLog(() => policyRun(['spawn-shell', '/bin/zsh']))).result, 0);
+    assert.deepEqual(readConfig().spawn, {
+      cliArgs: {}, preamble: { claude: 'source /x/spxy.sh on' }, command: { codex: '/x/bin/codex-launch' }, shell: '/bin/zsh',
+    });
+    // junk in the file is dropped, valid entries kept
+    writeConfig({ ...mergeConfig({}), spawn: { cliArgs: {}, preamble: { claude: 7, codex: ' ' }, command: 'nope', shell: '' } });
+    assert.deepEqual(readConfig().spawn, { cliArgs: {}, preamble: {}, command: {} });
+    assert.equal((await captureLog(() => policyRun(['spawn-shell', '']))).result, 0);
+    assert.equal('shell' in readConfig().spawn, false);
+    const bad = await captureLog(() => policyRun(['spawn-command', 'kitty', 'x']));
+    assert.notEqual(bad.result, 0);
+  } finally {
+    restore();
+  }
+});

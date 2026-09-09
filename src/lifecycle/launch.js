@@ -132,14 +132,19 @@ export function prepareBrief({ id, brief, dir } = {}) {
  * `claude --append-system-prompt-file <file>`, and `"$(cat <file>)"` as the prompt for
  * codex / agy / cursor. `paneCommand` is what tmux runs directly, so a multi-kilobyte
  * brief never has to be typed into an interactive shell (docs/spec/lifecycle.md step 4).
+ * Launcher settings (docs/spec/lifecycle.md "Launcher"): `preamble` is a shell snippet run
+ * in the pane before the CLI (a proxy script, extra env), `command` replaces the CLI binary
+ * with the user's own launcher (it must forward its arguments), `shell` runs the pane line
+ * (default `sh`; set it to the user's shell when the preamble needs `source`).
  * @param {{ cli: import('../types.js').CliKind, model?: string, briefFile: string,
  *           extraArgs?: string|string[], account: string|import('../types.js').Account,
- *           name?: string, accounts?: import('../types.js').Account[] }} input
+ *           name?: string, accounts?: import('../types.js').Account[],
+ *           preamble?: string, command?: string, shell?: string }} input
  * @returns {{ env: Record<string,string>, argv: string[], shellLine: string, paneCommand: string[] }}
  */
-export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts } = {}) {
-  const binary = CLI_BINARIES[cli];
-  if (!binary) throw new Error(`unknown cli "${cli}"`);
+export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts, preamble, command, shell } = {}) {
+  if (!CLI_BINARIES[cli]) throw new Error(`unknown cli "${cli}"`);
+  const binary = typeof command === 'string' && command.trim() !== '' ? command.trim() : CLI_BINARIES[cli];
   if (!briefFile) throw new Error('buildCommand: briefFile is required');
   const acct = resolveAccount(account, accounts);
 
@@ -179,8 +184,12 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
   for (const arg of extra) push(arg);
 
   const assignments = Object.entries(env).map(([key, value]) => shellQuote(`${key}=${value}`));
-  const shellLine = ['exec', ...(assignments.length ? ['env', ...assignments] : []), ...shellArgs].join(' ');
-  return { env, argv, shellLine, paneCommand: ['sh', '-c', shellLine] };
+  const execLine = ['exec', ...(assignments.length ? ['env', ...assignments] : []), ...shellArgs].join(' ');
+  // The preamble runs first as its own statement: it may fail loudly, the CLI still starts.
+  const lead = typeof preamble === 'string' && preamble.trim() !== '' ? preamble.trim() : '';
+  const shellLine = lead ? `${lead}\n${execLine}` : execLine;
+  const runner = typeof shell === 'string' && shell.trim() !== '' ? shell.trim() : 'sh';
+  return { env, argv, shellLine, paneCommand: [runner, '-c', shellLine] };
 }
 
 /**
