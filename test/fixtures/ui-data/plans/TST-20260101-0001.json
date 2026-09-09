@@ -1,0 +1,18 @@
+{
+  "planId": "TST-20260101-0001",
+  "status": "pending",
+  "proposedBy": "TST-0001",
+  "proposedAt": 1767225606000,
+  "parent": "TST-0001",
+  "reason": "split the channel work",
+  "brains": [
+    {
+      "name": "fe-b",
+      "role": "sub",
+      "account": "b",
+      "cli": "codex",
+      "cwd": "/Users/dev/proj",
+      "reason": "channel work 2"
+    }
+  ]
+}

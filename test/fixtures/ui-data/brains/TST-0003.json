@@ -1,0 +1,16 @@
+{
+  "id": "TST-0003",
+  "uuid": "uuid-lead-b",
+  "name": "lead-b",
+  "role": "main",
+  "parent": null,
+  "account": "b",
+  "cli": "codex",
+  "model": null,
+  "cwd": "/Users/dev/proj",
+  "paneId": "%40",
+  "coord": "24:3.7",
+  "pid": 4321,
+  "createdAt": 1767225600000,
+  "origin": "adopted"
+}

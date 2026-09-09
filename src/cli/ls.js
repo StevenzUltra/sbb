@@ -3,13 +3,15 @@ import { homedir } from 'node:os';
 import { getBrain } from '../registry/brains.js';
 import { roster as defaultRoster } from '../registry/roster.js';
 import { conflictedBrainIds } from '../policy/claims.js';
+import { allChannels, unreadTeamLog } from '../teams/index.js';
 import { EXIT, main, parse, renderTable, writeJson } from './util.js';
 
-const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>] [--claims]
+const USAGE = `usage: sbb ls [<id|name>] [--json] [--tree] [--account <name>] [--cli <kind>] [--claims] [--teams]
 
 Rows are live CLI sessions across every account. An id (#SMS-0012) or a brain name
 prints that one row. --tree prints brains only, indented by parent. --claims marks rows
-whose brain holds a claim conflicting with another brain with a leading !.`;
+whose brain holds a claim conflicting with another brain with a leading !. --teams prints
+the team channels with their member counts and the caller's unread counts.`;
 
 const HEADERS = ['ID', 'BRAIN', 'ROLE', 'PARENT', 'ACCOUNT', 'CLI', 'MODEL', 'STATUS', 'WHERE', 'NAME/THREAD', 'CWD'];
 
@@ -93,6 +95,7 @@ export async function run(argv, deps = {}) {
       account: { type: 'string' },
       cli: { type: 'string' },
       claims: { type: 'boolean' },
+      teams: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     });
     if (values.help) {
@@ -126,6 +129,26 @@ export async function run(argv, deps = {}) {
       }
     }
 
+    if (values.teams) {
+      const paneId = deps.paneId ?? process.env.TMUX_PANE;
+      const callerId = deps.callerId ?? rows.find((r) => r.paneId === paneId)?.brainId ?? 'user';
+      const channels = (deps.allChannels ?? allChannels)({ listBrains: deps.listBrains });
+      const teams = channels.map((channel) => ({
+        id: channel.id,
+        name: `#${channel.name}`,
+        mainId: channel.main.id,
+        members: channel.members.length,
+        unread: (deps.unreadTeamLog ?? unreadTeamLog)(channel.main.id, callerId, { sbbDir: deps.sbbDir }).length,
+      }));
+      if (values.json) {
+        writeJson(teams);
+      } else if (teams.length === 0) {
+        console.log('no team channels');
+      } else {
+        console.log(renderTable(['CHANNEL', 'ID', 'MAIN', 'MEMBERS', 'UNREAD'], teams.map((t) => [t.name, t.id, t.mainId, t.members, t.unread])));
+      }
+      return EXIT.OK;
+    }
     if (values.tree) {
       printTree(filtered);
       return EXIT.OK;

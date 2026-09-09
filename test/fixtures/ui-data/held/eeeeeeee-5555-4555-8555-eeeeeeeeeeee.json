@@ -1,0 +1,11 @@
+{
+  "msgId": "eeeeeeee-5555-4555-8555-eeeeeeeeeeee",
+  "heldAt": 1767225605000,
+  "reason": "peers_moderated",
+  "sender": "lead",
+  "target": "lead-b",
+  "message": {
+    "text": "peer ping"
+  },
+  "text": "peer ping"
+}

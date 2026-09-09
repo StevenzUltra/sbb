@@ -1,0 +1,16 @@
+{
+  "id": "TST-0002",
+  "uuid": "uuid-fe-a",
+  "name": "fe-a",
+  "role": "sub",
+  "parent": "TST-0001",
+  "account": "a",
+  "cli": "claude",
+  "model": null,
+  "cwd": "/Users/dev/proj",
+  "paneId": "%30",
+  "coord": "24:3.7",
+  "pid": 4321,
+  "createdAt": 1767225600000,
+  "origin": "adopted"
+}

@@ -1,0 +1,2 @@
+{"t": 1767225610000, "msgId": "ffffffff-6666-4666-8666-ffffffffffff", "from": "lead", "fromId": "TST-0001", "text": "channel: everyone read this", "channel": "#lead", "receipts": [{"to": "fe-a", "toId": "TST-0002", "status": "delivered", "via": "uds"}]}
+{"t":1767225611
