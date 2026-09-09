@@ -46,6 +46,16 @@ if (dryRun) { console.log('dry run: not publishing'); process.exit(0); }
 const exists = spawnSync('gh', ['release', 'view', tag], { cwd: root, stdio: 'ignore' }).status === 0;
 const notes = process.env.SBB_RELEASE_NOTES || `SBB ${version}`;
 if (!exists) run('gh', ['release', 'create', tag, '--title', `SBB ${version}`, '--notes', notes]);
-run('gh', ['release', 'upload', tag, dmg, zip, join(release, 'latest-mac.yml'), '--clobber']);
+// uploads are large and GitHub drops connections now and then: retry, --clobber makes it idempotent
+let uploaded = false;
+for (let attempt = 1; attempt <= 4 && !uploaded; attempt++) {
+  try {
+    run('gh', ['release', 'upload', tag, dmg, zip, join(release, 'latest-mac.yml'), '--clobber']);
+    uploaded = true;
+  } catch (err) {
+    console.error(`upload attempt ${attempt} failed: ${err.message}`);
+    if (attempt === 4) throw err;
+  }
+}
 run('gh', ['release', 'edit', tag, '--draft=false']);
 console.log(`published ${tag}`);
