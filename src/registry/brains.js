@@ -9,7 +9,15 @@ import { BRAIN_ID_RE, newUuid } from './brain-id.js';
 /** @typedef {import('../types.js').Brain} Brain */
 
 /** Names are aliases: unique among live brains, [a-z0-9][a-z0-9-]{0,39}. */
-export const BRAIN_NAME_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+// Any letter or digit (Chinese included), then letters, digits, '-', '_' or '.'; no spaces, since a
+// name is also an address on the command line (`sbb tell 审核`, `#Main`). Case is kept as typed
+// and ignored when matching.
+export const BRAIN_NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N}_.-]{0,39}$/u;
+
+/** @param {unknown} a @param {unknown} b */
+export function sameName(a, b) {
+  return typeof a === 'string' && typeof b === 'string' && a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
+}
 export const BRAIN_ROLES = ['main', 'sub'];
 export const BRAIN_CLIS = ['claude', 'codex', 'agy', 'cursor', 'kimi', 'grok', 'other'];
 export const BRAIN_ORIGINS = ['spawned', 'adopted'];
@@ -35,7 +43,7 @@ export function isValidBrainName(name) {
 /** @param {string} name @returns {string} */
 export function assertBrainName(name) {
   if (!isValidBrainName(name)) {
-    throw new BrainError(`invalid brain name "${name}": must match ${BRAIN_NAME_RE}`, 'invalid_name');
+    throw new BrainError(`invalid brain name "${name}": letters, digits, - _ . only, no spaces, up to 40 characters`, 'invalid_name');
   }
   return name;
 }
@@ -117,7 +125,7 @@ export function getBrain(idOrName) {
   }
   const name = String(idOrName ?? '').trim();
   if (!isValidBrainName(name)) return undefined;
-  return listBrains().find((brain) => brain.name === name);
+  return listBrains().find((brain) => sameName(brain.name, name));
 }
 
 /** @param {string} ref brain id or name @returns {Brain|undefined} */
@@ -184,7 +192,7 @@ export function validateBrain(brain) {
     if (!getBrain(parentId)) throw new BrainError(`unknown parent brain "${brain.parent}"`, 'unknown_parent');
   }
   for (const other of listBrains()) {
-    if (other.id !== id && other.name === brain.name) {
+    if (other.id !== id && sameName(other.name, brain.name)) {
       throw new BrainError(`brain name "${brain.name}" is already used by ${other.id}`, 'duplicate_name');
     }
   }

@@ -2,7 +2,7 @@
 // Never guesses: an unknown or ambiguous address raises ResolveError.
 import { discoverAccounts } from '../lib/paths.js';
 import { resolvePaneId as defaultResolvePaneId } from '../lib/tmux.js';
-import { duplicateIdentities, getBrain, normalizeBrainId } from './brains.js';
+import { duplicateIdentities, getBrain, normalizeBrainId, sameName } from './brains.js';
 import { roster as defaultRoster } from './roster.js';
 
 /** @typedef {import('../types.js').Target} Target */
@@ -150,7 +150,7 @@ export async function resolve(address, opts = {}) {
     return toTarget(row, raw);
   }
 
-  const named = rows.filter((r) => r.account === accountName && r.cli === cli && r.name === target);
+  const named = rows.filter((r) => r.account === accountName && r.cli === cli && sameName(r.name, target));
   if (named.length === 0) {
     throw new ResolveError('target_not_found', `no live ${cli} session named "${target}" in account ${accountName}`);
   }

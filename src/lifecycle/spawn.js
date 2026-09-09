@@ -246,6 +246,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   const command = buildCommand({
     cli,
     model,
+    effort: input.effort,
     briefFile: prepared.file,
     extraArgs: cliArgs,
     account,
@@ -334,6 +335,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     threadName: thread?.name,
     createdAt: Date.now(),
     origin: 'spawned',
+    ...(typeof input.effort === 'string' && input.effort.trim() ? { effort: input.effort.trim() } : {}),
   };
   (deps.saveBrain ?? saveBrain)(brain);
 

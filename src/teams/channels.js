@@ -1,7 +1,7 @@
 // Team channels: `#<main name>` and `#all`. docs/spec/teams.md section "Channels".
 // Resolution is pure over an injected registry so the CLI, the console data service and
 // the tests share one definition of "who is in this channel".
-import { getBrain as defaultGetBrain, isValidBrainName, listBrains as defaultListBrains, normalizeBrainId } from '../registry/brains.js';
+import { getBrain as defaultGetBrain, isValidBrainName, listBrains as defaultListBrains, normalizeBrainId, sameName } from '../registry/brains.js';
 import { ResolveError } from '../registry/resolve.js';
 import { teamOf } from '../policy/rules.js';
 
@@ -92,7 +92,7 @@ export function resolveChannel(address, opts = {}) {
       postable: 'user',
     };
   }
-  const main = listBrains().find((brain) => brain.role === 'main' && brain.name === name);
+  const main = listBrains().find((brain) => brain.role === 'main' && sameName(brain.name, name));
   if (!main) throw new ResolveError('target_not_found', `no main brain named "${name}"`);
   return { kind: 'team', name, id: `team:${main.id}`, main, members: teamMembers(main, opts), postable: 'member' };
 }

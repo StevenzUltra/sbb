@@ -156,3 +156,10 @@ sbb policy spawn-shell /bin/zsh
 sbb policy spawn-preamble claude "source /path/to/spxy.sh on"
 sbb policy spawn-args claude "--dangerously-skip-permissions"
 ```
+
+## Effort
+
+`sbb spawn --effort <level>` (and `effort` in `POST /api/spawn`) sets the thinking effort where
+the CLI has a switch: Claude Code `--effort <level>`, Codex `-c model_reasoning_effort=<level>`.
+Levels are passed through as typed (`low`, `medium`, `high`, `xhigh`, ...); other CLIs ignore
+it. The brain record keeps `effort` so the console can show it.

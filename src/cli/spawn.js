@@ -4,7 +4,7 @@ import { EXIT, main, parse, UsageError, writeJson } from './util.js';
 
 const USAGE = `usage: sbb spawn --name <name> --role main|sub [--parent <id|name>]
           --account <acct> --cli claude|codex|agy|cursor|kimi|grok
-          [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"]
+          [--model <id>] [--effort <level>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"]
           [--split] [--force] [--json]
 
 Creates a pane, starts the CLI with the account environment and the briefing, waits for
@@ -51,6 +51,7 @@ export async function run(argv, deps = {}) {
       account: { type: 'string' },
       cli: { type: 'string' },
       model: { type: 'string' },
+      effort: { type: 'string' },
       cwd: { type: 'string' },
       'brief-file': { type: 'string' },
       'cli-args': { type: 'string' },
@@ -76,6 +77,7 @@ export async function run(argv, deps = {}) {
       account: values.account,
       cli: values.cli,
       model: values.model,
+      effort: values.effort,
       cwd: values.cwd,
       briefFile: values['brief-file'],
       extraArgs: values['cli-args'],
