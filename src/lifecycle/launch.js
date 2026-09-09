@@ -145,11 +145,11 @@ export function prepareBrief({ id, brief, dir } = {}) {
  * @param {{ cli: import('../types.js').CliKind, model?: string, briefFile: string,
  *           extraArgs?: string|string[], account: string|import('../types.js').Account,
  *           name?: string, accounts?: import('../types.js').Account[],
- *           preamble?: string, command?: string, shell?: string }} input
+ *           preamble?: string, command?: string, shell?: string, effort?: string }} input
  * @returns {{ env: Record<string,string>, argv: string[], shellLine: string,
  *             paneCommand: string[], briefArgv: boolean }}
  */
-export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts, preamble, command, shell } = {}) {
+export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts, preamble, command, shell, effort } = {}) {
   if (!CLI_BINARIES[cli]) throw new Error(`unknown cli "${cli}"`);
   const binary = typeof command === 'string' && command.trim() !== '' ? command.trim() : CLI_BINARIES[cli];
   if (!briefFile) throw new Error('buildCommand: briefFile is required');
@@ -212,6 +212,11 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
     // codex, cursor and grok take the brief as their first prompt
     push(briefArg, `"$(cat ${shellQuote(briefFile)})"`);
   }
+  // Thinking effort, where the CLI has a switch for it (docs/spec/lifecycle.md): claude
+  // --effort <level>, codex -c model_reasoning_effort=<level>; other CLIs have none yet.
+  const level = typeof effort === 'string' ? effort.trim() : '';
+  if (level && cli === 'claude') { push('--effort'); push(level); }
+  else if (level && cli === 'codex') { push('-c'); push(`model_reasoning_effort=${level}`); }
   for (const arg of extra) push(arg);
 
   const assignments = Object.entries(env).map(([key, value]) => shellQuote(`${key}=${value}`));

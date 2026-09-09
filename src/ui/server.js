@@ -605,7 +605,7 @@ export async function createUiServer(opts = {}) {
         const argv = [];
         for (const [key, flag] of [
           ['name', '--name'], ['role', '--role'], ['parent', '--parent'], ['account', '--account'],
-          ['cli', '--cli'], ['model', '--model'], ['cwd', '--cwd'], ['briefFile', '--brief-file'],
+          ['cli', '--cli'], ['model', '--model'], ['effort', '--effort'], ['cwd', '--cwd'], ['briefFile', '--brief-file'],
           ['cliArgs', '--cli-args'],
         ]) {
           if (body[key] !== undefined && body[key] !== null && body[key] !== '') argv.push(flag, String(body[key]));

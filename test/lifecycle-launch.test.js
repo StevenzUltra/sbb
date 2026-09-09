@@ -364,3 +364,14 @@ test('buildCommand: launcher settings add a preamble, replace the binary and pic
   assert.ok(!plain.shellLine.includes('\n'));
   assert.throws(() => buildCommand({ cli: 'nope', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, command: 'x' }), /unknown cli/);
 });
+
+test('buildCommand: --effort maps to each CLI\'s own switch and is ignored elsewhere', () => {
+  const claude = buildCommand({ cli: 'claude', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, effort: 'high' });
+  assert.ok(claude.argv.join(' ').includes('--effort high'));
+  const codex = buildCommand({ cli: 'codex', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, effort: 'xhigh' });
+  assert.ok(codex.argv.join(' ').includes('-c model_reasoning_effort=xhigh'));
+  const agy = buildCommand({ cli: 'agy', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, effort: 'high' });
+  assert.ok(!agy.argv.join(' ').includes('effort'));
+  const none = buildCommand({ cli: 'claude', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, effort: '  ' });
+  assert.ok(!none.argv.includes('--effort'));
+});

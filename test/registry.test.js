@@ -82,7 +82,7 @@ test('brains: invalid records are rejected with a reason', () => {
       id: 'TST-0001', uuid: 'uuid-1', name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude',
       cwd: '/Users/dev/proj', paneId: '%30', createdAt: Date.now(), origin: 'adopted',
     };
-    assert.throws(() => saveBrain({ ...base, name: 'Lead' }), (err) => err instanceof BrainError && err.reason === 'invalid_name');
+    assert.throws(() => saveBrain({ ...base, name: 'my lead' }), (err) => err instanceof BrainError && err.reason === 'invalid_name');
     assert.throws(() => saveBrain({ ...base, id: 'SMS-1' }), (err) => err.reason === 'invalid_id');
     assert.throws(() => saveBrain({ ...base, uuid: '' }), (err) => err.reason === 'invalid_uuid');
     const normalised = saveBrain({ ...base, id: 'sms-0001', uuid: 'uuid-norm', name: 'norm' });
@@ -496,4 +496,13 @@ test('roster: a codex brain that records its threadId is not re-guessed by cwd',
   } finally {
     restore();
   }
+});
+
+test('brain names: any script and case, no spaces; lookups ignore case', async () => {
+  const { isValidBrainName, sameName } = await import('../src/registry/brains.js');
+  for (const ok of ['Main', 'lead', '审核', 'ios-2', 'a_b.c', 'Übersetzer']) assert.equal(isValidBrainName(ok), true, ok);
+  for (const bad of ['', ' lead', 'my brain', '-x', '#lead', 'a'.repeat(41)]) assert.equal(isValidBrainName(bad), false, JSON.stringify(bad));
+  assert.equal(sameName('Main', 'main'), true);
+  assert.equal(sameName('审核', '审核'), true);
+  assert.equal(sameName('Main', 'mains'), false);
 });
