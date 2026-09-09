@@ -117,5 +117,22 @@
         "note": "weekly 9% left"
       }
     ]
+  },
+  "spawn-quota": {
+    "_note": "新建对话框：账号 a 的额度没有数字（只有一条未登录），应显示按量而不是别的 CLI 的数字",
+    "quota": [
+      {
+        "key": "a/claude",
+        "label": "a · Claude",
+        "pct": null,
+        "note": "未登录"
+      },
+      {
+        "key": "default/codex",
+        "label": "default · Codex",
+        "pct": 41,
+        "note": "weekly 41% left"
+      }
+    ]
   }
 }

@@ -1,8 +1,13 @@
 <script setup>
-import { computed, reactive } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useSbb } from '../store/sbb.js';
+import {
+  clampOffset, cliOptions, cwdPicks, modelOptions, quotaChipFor, quotaLabel,
+  readDialogPosition, writeDialogPosition,
+} from '../lib/spawn.js';
 
 const store = useSbb();
+
 const form = reactive({
   name: '',
   account: store.accounts[0]?.name ?? 'a',
@@ -13,47 +18,157 @@ const form = reactive({
   cwd: '',
 });
 
-const account = computed(() => store.accounts.find((item) => item.name === form.account) ?? null);
-const clis = computed(() => account.value?.clis ?? ['claude', 'codex']);
-const models = computed(() => store.catalog.filter((item) => item.cli === (form.cli || clis.value[0])));
-const parent = computed(() => store.brainById(form.parent));
-const quota = computed(() => store.quota.find((item) => item.key === `${form.account}/${form.cli || clis.value[0]}`));
+const panel = ref(null);
+const nameInput = ref(null);
+const cwdOpen = ref(false);
+const pos = reactive({ x: 0, y: 0 });
 
-function pickAccount(name) {
-  form.account = name;
-  const first = store.accounts.find((item) => item.name === name)?.clis?.[0];
-  form.cli = first ?? form.cli;
-  form.model = store.catalog.find((item) => item.cli === form.cli)?.model ?? '';
+const account = computed(() => store.accounts.find((item) => item.name === form.account) ?? null);
+const clis = computed(() => {
+  const list = cliOptions(account.value);
+  return list.length ? list : ['claude'];
+});
+const cli = computed(() => form.cli || clis.value[0] || '');
+const models = computed(() => modelOptions(store.catalog, { account: form.account, cli: cli.value }));
+const parent = computed(() => store.brainById(form.parent));
+const picks = computed(() => cwdPicks({ recent: store.recentCwds, parent: parent.value?.cwd ?? null }));
+const selectedQuota = computed(() => quotaChipFor(store.quota, form.account, cli.value));
+const hasBridge = computed(() => typeof window !== 'undefined' && Boolean(window.sbbDesktop?.pickFolder));
+
+// The account changed: fall back to its first CLI. The pair changed: fall back to its first
+// model. A pair with no catalog rows keeps an empty model, which means the CLI's own default.
+watch(clis, (list) => {
+  if (!list.includes(form.cli)) form.cli = list[0] ?? '';
+}, { immediate: true });
+watch(models, (list) => {
+  if (!list.some((item) => item.model === form.model)) form.model = list[0]?.model ?? '';
+}, { immediate: true });
+
+function accountQuota(item) {
+  const pair = item.name === form.account ? cli.value : (cliOptions(item)[0] ?? '');
+  return quotaLabel(store.quota, item.name, pair);
 }
 
-const ready = computed(() => Boolean(form.name && form.account && (form.cli || clis.value[0])));
+function chooseCwd(path) {
+  form.cwd = path;
+  cwdOpen.value = false;
+}
+
+async function pickFolder() {
+  const chosen = await window.sbbDesktop?.pickFolder({ defaultPath: form.cwd || parent.value?.cwd || undefined });
+  if (chosen) form.cwd = chosen;
+  cwdOpen.value = false;
+}
+
+const ready = computed(() => Boolean(form.name && form.account && cli.value));
 
 async function submit() {
   if (!ready.value) return;
   await store.spawn({
     name: form.name,
     account: form.account,
-    cli: form.cli || clis.value[0],
-    model: form.model || models.value[0]?.model,
+    cli: cli.value,
+    model: form.model || undefined,
     role: form.role,
     parent: form.role === 'main' ? null : form.parent,
-    cwd: form.cwd || parent.value?.cwd || '/Users/steven/developer/sbb',
+    cwd: form.cwd.trim() || parent.value?.cwd || picks.value[0] || undefined,
   });
 }
+
+// ---- drag by the title bar -------------------------------------------------
+const drag = { active: false, startX: 0, startY: 0, baseX: 0, baseY: 0, width: 0, height: 0 };
+
+function onDragStart(event) {
+  if (event.button !== 0) return;
+  if (event.target.closest('button, input, select, textarea')) return;
+  const box = panel.value?.getBoundingClientRect();
+  if (!box) return;
+  drag.active = true;
+  drag.startX = event.clientX;
+  drag.startY = event.clientY;
+  drag.baseX = pos.x;
+  drag.baseY = pos.y;
+  drag.width = box.width;
+  drag.height = box.height;
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd, { once: true });
+  event.preventDefault();
+}
+
+function onDragMove(event) {
+  if (!drag.active) return;
+  const next = clampOffset({
+    x: drag.baseX + (event.clientX - drag.startX),
+    y: drag.baseY + (event.clientY - drag.startY),
+    width: drag.width,
+    height: drag.height,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  });
+  pos.x = next.x;
+  pos.y = next.y;
+}
+
+function onDragEnd() {
+  drag.active = false;
+  writeDialogPosition({ x: pos.x, y: pos.y });
+  window.removeEventListener('pointermove', onDragMove);
+}
+
+function reclamp() {
+  const box = panel.value?.getBoundingClientRect();
+  if (!box) return;
+  const next = clampOffset({
+    x: pos.x, y: pos.y, width: box.width, height: box.height,
+    viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
+  });
+  pos.x = next.x;
+  pos.y = next.y;
+}
+
+function onKeydown(event) {
+  if (event.key !== 'Escape') return;
+  event.stopPropagation();
+  if (cwdOpen.value) cwdOpen.value = false;
+  else store.dialog = null;
+}
+
+onMounted(async () => {
+  const saved = readDialogPosition();
+  if (saved) {
+    pos.x = saved.x;
+    pos.y = saved.y;
+  }
+  await nextTick();
+  reclamp();
+  nameInput.value?.focus();
+  window.addEventListener('keydown', onKeydown);
+  window.addEventListener('resize', reclamp);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('resize', reclamp);
+  window.removeEventListener('pointermove', onDragMove);
+});
 </script>
 
 <template>
-  <div class="fixed inset-0 z-40 flex items-center justify-center" style="background: rgba(0, 0, 0, 0.24)" @click.self="store.dialog = null">
-    <div class="glass w-[520px] rounded-[16px] p-4" style="box-shadow: 0 16px 48px rgba(0, 0, 0, 0.16)">
+  <div class="scrim fixed inset-0 z-40 flex items-center justify-center" @click.self="store.dialog = null">
+    <div
+      ref="panel"
+      class="dialog-solid w-[520px] rounded-[16px] p-4"
+      :style="{ transform: `translate(${pos.x}px, ${pos.y}px)` }"
+    >
       <div class="flex flex-col gap-[12px]">
-        <div class="flex items-center justify-between">
+        <div class="dialog-bar flex items-center justify-between" @pointerdown="onDragStart">
           <div class="text-[14px] font-semibold">新建</div>
           <button class="text-es-muted" @click="store.dialog = null">关闭</button>
         </div>
 
         <label class="flex flex-col gap-[6px] text-[12px]">
           <span class="text-es-dim dark:text-es-dark-muted">名字</span>
-          <input v-model="form.name" class="field px-3 py-2 outline-none" placeholder="例如 review" />
+          <input ref="nameInput" v-model="form.name" class="field px-3 py-2 outline-none" placeholder="例如 review" />
         </label>
 
         <div class="flex flex-col gap-[6px] text-[12px]">
@@ -64,12 +179,10 @@ async function submit() {
               :key="item.name"
               class="rounded-[8px] px-[10px] py-[6px] text-[12px]"
               :class="form.account === item.name ? 'tone-green font-medium' : 'btn-ghost'"
-              @click="pickAccount(item.name)"
+              @click="form.account = item.name"
             >
               {{ item.label ?? item.name }}
-              <span v-if="store.quota.find((q) => q.key.startsWith(`${item.name}/`))?.pct !== undefined" class="mono ml-1 text-[11px]">
-                {{ store.quota.find((q) => q.key.startsWith(`${item.name}/`))?.pct ?? '按量' }}
-              </span>
+              <span class="mono ml-1 text-[11px]">{{ accountQuota(item) }}</span>
             </button>
           </div>
         </div>
@@ -78,13 +191,14 @@ async function submit() {
           <label class="flex flex-1 flex-col gap-[6px] text-[12px]">
             <span class="text-es-dim dark:text-es-dark-muted">CLI</span>
             <select v-model="form.cli" class="field px-3 py-2 outline-none">
-              <option v-for="cli in clis" :key="cli" :value="cli">{{ cli }}</option>
+              <option v-for="item in clis" :key="item" :value="item">{{ item }}</option>
             </select>
           </label>
           <label class="flex flex-1 flex-col gap-[6px] text-[12px]">
             <span class="text-es-dim dark:text-es-dark-muted">模型</span>
             <select v-model="form.model" class="field px-3 py-2 outline-none">
-              <option v-for="item in models" :key="item.model" :value="item.model">{{ item.label }}</option>
+              <option value="">{{ models.length ? '默认' : '该 CLI 默认' }}</option>
+              <option v-for="item in models" :key="item.model" :value="item.model">{{ item.label ?? item.model }}</option>
             </select>
           </label>
         </div>
@@ -107,14 +221,38 @@ async function submit() {
           </label>
         </div>
 
-        <label class="flex flex-col gap-[6px] text-[12px]">
+        <div class="flex flex-col gap-[6px] text-[12px]">
           <span class="text-es-dim dark:text-es-dark-muted">工作目录（默认跟上级）</span>
-          <input v-model="form.cwd" class="field mono px-3 py-2 text-[12px] outline-none" :placeholder="parent?.cwd ?? '/Users/steven/developer/sbb'" />
-        </label>
+          <div class="flex gap-[6px]">
+            <div class="relative flex-1">
+              <input
+                v-model="form.cwd"
+                class="field mono w-full px-3 py-2 text-[12px] outline-none"
+                :placeholder="parent?.cwd ?? picks[0] ?? '/Users/steven/developer/sbb'"
+                @focus="cwdOpen = true"
+                @blur="cwdOpen = false"
+              />
+              <div
+                v-if="cwdOpen && picks.length"
+                class="glass absolute top-[calc(100%+4px)] left-0 z-50 flex w-full flex-col rounded-[10px] p-[4px]"
+              >
+                <button
+                  v-for="path in picks"
+                  :key="path"
+                  class="mono rounded-[7px] px-[8px] py-[5px] text-left text-[11px] hover:bg-black/5 dark:hover:bg-white/10"
+                  @mousedown.prevent="chooseCwd(path)"
+                >
+                  {{ path }}
+                </button>
+              </div>
+            </div>
+            <button v-if="hasBridge" class="btn-ghost shrink-0 px-[10px] text-[12px]" @click="pickFolder">选择文件夹…</button>
+          </div>
+        </div>
 
         <div class="flex items-center justify-between">
           <span class="text-[11px] text-es-muted">
-            {{ quota ? `${quota.label} 剩余 ${quota.pct !== null ? `${quota.pct}%` : '按量'}` : '这个账号还没有额度数据' }}
+            {{ selectedQuota ? `${selectedQuota.label} 剩余 ${selectedQuota.pct !== null ? `${selectedQuota.pct}%` : '按量'}` : '这个账号还没有额度数据' }}
           </span>
           <span class="flex gap-[6px]">
             <button class="px-3 py-[7px] text-[12px] text-es-dim dark:text-es-dark-muted" @click="store.dialog = null">取消</button>

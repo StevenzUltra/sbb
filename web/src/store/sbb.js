@@ -64,6 +64,7 @@ export const useSbb = defineStore('sbb', {
     accounts: [],
     quota: [],
     catalog: [],
+    recentCwds: [],
     connected: false,
     policy: {
       peers: 'on',
@@ -212,6 +213,7 @@ export const useSbb = defineStore('sbb', {
         accounts: snapshot.accounts ?? [],
         quota: toQuotaChips(snapshot.quota ?? [], { brains: snapshot.brains ?? [], limit: QUOTA_CHIPS }),
         catalog: snapshot.catalog ?? [],
+        recentCwds: snapshot.recentCwds ?? [],
         policy: snapshot.policy ?? this.policy,
         held: snapshot.held ?? [],
         plans: snapshot.plans ?? [],

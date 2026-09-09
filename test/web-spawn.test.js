@@ -1,0 +1,89 @@
+// 新建 dialog rules (web/src/lib/spawn.js).
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  clampOffset, cliOptions, cwdPicks, modelOptions, quotaChipFor, quotaLabel,
+  readDialogPosition, resetDialogPosition, writeDialogPosition,
+} from '../web/src/lib/spawn.js';
+
+const chip = (key, pct) => ({ key, label: key, pct, note: '' });
+
+test('quota comes from the pair that will launch, never from another CLI chip', () => {
+  // The screenshot defect: account a showed 0 because a/codex (a CLI the brain does not use)
+  // was the account's first chip. The pair's own number wins.
+  const quota = [chip('a/codex', 0), chip('a/claude', 88)];
+  assert.equal(quotaLabel(quota, 'a', 'claude'), '88%');
+  assert.equal(quotaLabel(quota, 'a', 'codex'), '0%');
+});
+
+test('a pair with no chip falls back to the account first numeric chip, then 按量', () => {
+  const quota = [chip('a/codex', 41), chip('c/codex', null)];
+  assert.equal(quotaLabel(quota, 'a', 'agy'), '41%', 'no a/agy chip: the account has a number');
+  assert.equal(quotaLabel(quota, 'c', 'codex'), '按量', 'the only chip carries no number');
+  assert.equal(quotaLabel(quota, 'b', 'claude'), '按量', 'the account has no chip at all');
+  assert.equal(quotaLabel(undefined, 'a', 'claude'), '按量');
+});
+
+test('a non-numeric pair chip still prefers a numeric sibling of the same account', () => {
+  const quota = [chip('a/claude', null), chip('a/codex', 77)];
+  assert.equal(quotaLabel(quota, 'a', 'claude'), '77%');
+  assert.deepEqual(quotaChipFor(quota, 'a', 'claude'), quota[1]);
+  assert.equal(quotaChipFor([chip('a/claude', null)], 'a', 'claude').pct, null, 'no sibling keeps the 按量 chip');
+});
+
+test('the CLI list is the account list, and an empty model list stays selectable', () => {
+  assert.deepEqual(cliOptions({ clis: ['claude', 'codex', 'agy', 'cursor'] }), ['claude', 'codex', 'agy', 'cursor']);
+  assert.deepEqual(cliOptions({ clis: ['claude', 'claude', '', null] }), ['claude']);
+  assert.deepEqual(cliOptions(undefined), []);
+});
+
+test('models follow the account x CLI pair', () => {
+  const catalog = [
+    { account: 'a', cli: 'claude', model: 'claude-opus-5', label: 'Opus 5' },
+    { account: 'default', cli: 'claude', model: 'claude-sonnet-5', label: 'Sonnet 5' },
+    { account: 'default', cli: 'agy', model: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+    { account: 'default', cli: 'agy', model: '', label: 'junk' },
+    { cli: 'codex', model: 'gpt-6-astra', label: 'gpt-6' },
+  ];
+  assert.deepEqual(modelOptions(catalog, { account: 'a', cli: 'claude' }).map((m) => m.model), ['claude-opus-5']);
+  assert.deepEqual(modelOptions(catalog, { account: 'default', cli: 'claude' }).map((m) => m.model), ['claude-sonnet-5']);
+  assert.deepEqual(modelOptions(catalog, { account: 'default', cli: 'agy' }).map((m) => m.model), ['gemini-3.8-flash']);
+  assert.deepEqual(modelOptions(catalog, { account: 'a', cli: 'cursor' }), [], 'no rows: CLI stays selectable');
+  assert.deepEqual(modelOptions(catalog, { account: 'a', cli: 'codex' }).map((m) => m.model), ['gpt-6-astra'], 'account-less rows apply everywhere');
+  assert.deepEqual(modelOptions(undefined, { account: 'a', cli: 'claude' }), []);
+});
+
+test('working directory picks put the parent first, then the server recent list', () => {
+  assert.deepEqual(
+    cwdPicks({ recent: ['/b', '/c', '/b', ''], parent: '/a' }),
+    ['/a', '/b', '/c'],
+  );
+  assert.deepEqual(cwdPicks({ recent: ['/b', '/a'], parent: '/a' }), ['/a', '/b'], 'parent is not repeated');
+  assert.deepEqual(cwdPicks({ recent: Array.from({ length: 12 }, (_, i) => `/d${i}`), limit: 3 }), ['/d0', '/d1', '/d2']);
+  assert.deepEqual(cwdPicks({ recent: [null, 7, '/x'] }), ['/x']);
+  assert.deepEqual(cwdPicks(), []);
+});
+
+test('the drag clamp keeps the whole dialog inside the viewport', () => {
+  const box = { width: 520, height: 560, viewportWidth: 1440, viewportHeight: 900 };
+  assert.deepEqual(clampOffset({ ...box, x: 0, y: 0 }), { x: 0, y: 0 });
+  assert.deepEqual(clampOffset({ ...box, x: 9999, y: 9999 }), { x: 452, y: 162 });
+  assert.deepEqual(clampOffset({ ...box, x: -9999, y: -9999 }), { x: -452, y: -162 });
+  assert.deepEqual(clampOffset({ ...box, x: 'wide', y: undefined }), { x: 0, y: 0 }, 'junk becomes the centre');
+  assert.deepEqual(
+    clampOffset({ x: 100, y: 100, width: 900, height: 800, viewportWidth: 400, viewportHeight: 300 }),
+    { x: 0, y: 0 },
+    'a dialog larger than the viewport stays centred',
+  );
+});
+
+test('the dragged position lives in the module, so a reopened dialog lands there', () => {
+  resetDialogPosition();
+  assert.equal(readDialogPosition(), null, 'a fresh session starts centred');
+  writeDialogPosition({ x: 200, y: -120 });
+  assert.deepEqual(readDialogPosition(), { x: 200, y: -120 });
+  writeDialogPosition({ x: 'wide', y: undefined });
+  assert.deepEqual(readDialogPosition(), { x: 0, y: 0 }, 'junk becomes the centre');
+  resetDialogPosition();
+  assert.equal(readDialogPosition(), null);
+});

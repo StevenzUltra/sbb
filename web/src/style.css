@@ -125,15 +125,44 @@
     background: var(--es-glass-fill);
     border: 1px solid var(--es-glass-stroke);
     box-shadow: var(--es-shadow-glass);
-    backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  /* 新建 sits above the page: a scrim blurs what is behind it, the panel itself is opaque
+     so neither the empty-state card nor the page can show through (docs/tasks/m4-h2-spawn-dialog.md). */
+  .scrim {
+    background: rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+
+  .dialog-solid {
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--es-glass-stroke);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  }
+
+  .dark .dialog-solid {
+    background: rgba(16, 20, 18, 0.96);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  }
+
+  .dialog-bar {
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .dialog-bar:active {
+    cursor: grabbing;
   }
 
   .bar {
     background: var(--es-bar-fill);
     border-color: var(--es-bar-stroke);
-    backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
   }
 
   .mono {
@@ -325,12 +354,12 @@
 }
 :root[data-shell="desktop"].dark .glass,
 :root[data-shell="desktop"].dark .bar {
-  backdrop-filter: blur(var(--sbb-blur)) saturate(150%);
   -webkit-backdrop-filter: blur(var(--sbb-blur)) saturate(150%);
+  backdrop-filter: blur(var(--sbb-blur)) saturate(150%);
 }
 :root[data-shell="desktop"].dark .pane-frame {
-  backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
 :root[data-shell="desktop"].dark .pane-host .xterm-viewport,
 :root[data-shell="desktop"].dark .pane-host .xterm-screen,
