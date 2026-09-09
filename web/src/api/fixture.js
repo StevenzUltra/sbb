@@ -33,6 +33,55 @@ function merge(target, patch) {
   return target;
 }
 
+/**
+ * Apply one POST /api/policy body to the fixture config, mirroring the server's argv mapping
+ * (src/ui/server.js) and policy/config.js (blank values drop the entry).
+ * @param {Record<string, any>} policy
+ * @param {Record<string, any>} body
+ */
+export function applyPolicy(policy, body) {
+  const spawn = policy.spawn ?? (policy.spawn = { cliArgs: {}, preamble: {}, command: {} });
+  const map = (source, key, value) => {
+    const next = { ...(source ?? {}) };
+    if (value) next[key] = value;
+    else delete next[key];
+    return next;
+  };
+  if (body.peers !== undefined) policy.peers = String(body.peers);
+  if (body.quota) policy.quota = { ...(policy.quota ?? {}), ...body.quota };
+  if (body.spawnArgs) spawn.cliArgs = map(spawn.cliArgs, body.spawnArgs.cli, body.spawnArgs.args);
+  if (body.spawnPreamble) spawn.preamble = map(spawn.preamble, body.spawnPreamble.cli, body.spawnPreamble.value);
+  if (body.spawnCommand) spawn.command = map(spawn.command, body.spawnCommand.cli, body.spawnCommand.value);
+  if (body.spawnShell !== undefined) {
+    if (body.spawnShell) spawn.shell = body.spawnShell;
+    else delete spawn.shell;
+  }
+  if (body.terminal !== undefined) {
+    if (body.terminal) policy.terminal = body.terminal;
+    else delete policy.terminal;
+  }
+  if (body.subsDirect !== undefined) policy.teams = { ...(policy.teams ?? {}), subsDirect: Boolean(body.subsDirect) };
+  if (body.set) {
+    const id = String(body.set.ref ?? body.set.brain ?? '').toUpperCase();
+    const brains = { ...(policy.brains ?? {}) };
+    const entry = { ...(brains[id] ?? {}) };
+    if (body.set.peers !== undefined) {
+      if (body.set.peers === 'on') delete entry.peers;
+      else entry.peers = body.set.peers;
+    }
+    if (body.set.autonomous !== undefined) {
+      if (body.set.autonomous) entry.autonomous = true;
+      else delete entry.autonomous;
+    }
+    if (Object.keys(entry).length) brains[id] = entry;
+    else delete brains[id];
+    policy.brains = brains;
+  }
+  if (body.allow) policy.allow = [...(policy.allow ?? []), body.allow];
+  if (body.deny) policy.allow = (policy.allow ?? []).filter(([a, b]) => !(a === body.deny[0] && b === body.deny[1]));
+  return policy;
+}
+
 /** Rebuild the org tree from parent links, keeping the brains array order. */
 export function buildTree(brains) {
   const node = (brain) => ({
@@ -165,7 +214,7 @@ export function createFixtureClient() {
     },
 
     '/api/policy': (body) => {
-      Object.assign(state.policy, body.set ?? body);
+      applyPolicy(state.policy, body);
       emit('policy', state.policy);
       return state.policy;
     },
@@ -255,8 +304,9 @@ export function createFixtureClient() {
       return clone(handler(body ?? {}));
     },
 
-    subscribe(onEvent) {
+    subscribe(onEvent, onStatus) {
       listeners.add(onEvent);
+      onStatus?.(true);
       if (params.get('events') !== '0') {
         for (const entry of events.timeline) {
           later(() => onEvent({ event: entry.event, data: clone(entry.data) }), events.startDelayMs + entry.at);

@@ -193,9 +193,10 @@
     }
   ],
   "policy": {
-    "peers": "open",
+    "peers": "on",
     "quota": {
-      "min": 10
+      "floorWeekly": 10,
+      "mainReserve": 20
     },
     "rows": [
       {
@@ -223,7 +224,36 @@
         "value": "关",
         "tone": "muted"
       }
-    ]
+    ],
+    "brains": {
+      "SSL-0046": {
+        "peers": "moderated"
+      },
+      "SSL-0047": {
+        "autonomous": true
+      }
+    },
+    "teams": {
+      "subsDirect": true
+    },
+    "allow": [
+      [
+        "SSL-0045",
+        "SSL-0048"
+      ]
+    ],
+    "spawn": {
+      "cliArgs": {
+        "claude": "--dangerously-skip-permissions",
+        "codex": "--sandbox danger-full-access -a never"
+      },
+      "preamble": {
+        "claude": "source ~/spxy.sh on"
+      },
+      "command": {},
+      "shell": "/bin/zsh"
+    },
+    "terminal": "ghostty"
   },
   "held": [],
   "plans": [],
