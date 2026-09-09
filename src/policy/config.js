@@ -10,6 +10,9 @@ import { tagFromHostname } from '../registry/brain-id.js';
 /** Peer modes the spec defines. */
 export const PEER_MODES = Object.freeze(['on', 'off', 'moderated']);
 
+/** Terminals `sbb ui` can open; `terminal` in the config file (docs/spec/ui-server.md). */
+export const TERMINALS = Object.freeze(['ghostty', 'iterm2']);
+
 /** Quota floors in percent of the weekly window. */
 export const DEFAULT_QUOTA = Object.freeze({ floorWeekly: 10, mainReserve: 20 });
 
@@ -42,7 +45,10 @@ function percent(value, fallback) {
 
 /**
  * Merge a raw config file over the defaults. Unknown keys are dropped, invalid
- * values fall back instead of failing a delivery.
+ * values fall back instead of failing a delivery. `terminal` is the one optional key: it is
+ * kept when the file names a terminal this machine can open, and left absent otherwise, so
+ * `sbb policy`'s write-back cannot wipe h1's choice and a missing value still means
+ * "whichever is installed" (docs/spec/ui-server.md "Go to terminal").
  * @param {Record<string, any>} raw
  * @param {{ hostname?: string }} [opts]
  * @returns {import('./config.js').SbbConfig}
@@ -88,6 +94,9 @@ export function mergeConfig(raw, opts = {}) {
       mainReserve: percent(quota.mainReserve, base.quota.mainReserve),
     },
     spawn: { cliArgs },
+    ...(TERMINALS.includes(String(source.terminal ?? '').toLowerCase())
+      ? { terminal: String(source.terminal).toLowerCase() }
+      : {}),
   };
 }
 
@@ -128,4 +137,4 @@ export function updateConfig(mutate, opts = {}) {
   return writeConfig(next, opts);
 }
 
-/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, teams: { subsDirect: boolean }, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string> } }} SbbConfig */
+/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, teams: { subsDirect: boolean }, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string> }, terminal?: 'ghostty'|'iterm2' }} SbbConfig */
