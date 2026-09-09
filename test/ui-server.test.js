@@ -165,6 +165,7 @@ test('/api/state serves the injected snapshot and enriches brains from the roste
   assert.deepEqual(body.plans, [{ planId: 'p-1' }]);
   assert.deepEqual(body.claims, [{ brainId: brainA.id, resource: 'branch:h1' }]);
   assert.deepEqual(body.accounts, [{ account: 'a', cli: 'claude', models: [] }]);
+  assert.deepEqual(body.receipts, [], 'no receipt log yet');
   assert.ok(Array.isArray(body.tps));
   assert.ok(Array.isArray(body.teams));
   assert.equal(typeof body.version, 'string');
@@ -178,6 +179,18 @@ test('/api/state serves the injected snapshot and enriches brains from the roste
   assert.equal(two.status, '?', 'no roster row: the console shows unknown, not a guess');
   assert.equal(two.live, false);
   assert.deepEqual(body.tree.find((t) => t.id === brainA.id), { id: brainA.id, name: 'h1-one', role: 'main', parent: null });
+});
+
+test('/api/state carries the newest 500 receipts, newest first', async () => {
+  const { appendReceipt, readReceiptEntries } = await import('../src/registry/receipts.js');
+  for (let i = 0; i < 501; i += 1) {
+    appendReceipt({ msgId: `m${String(i).padStart(4, '0')}`, status: 'delivered', via: 'uds' });
+  }
+  const { body } = await getJson('/api/state');
+  assert.equal(body.receipts.length, 500);
+  assert.equal(body.receipts[0].msgId, 'm0500', 'newest first');
+  assert.equal(body.receipts.at(-1).msgId, 'm0001', 'the oldest kept entry');
+  assert.equal(readReceiptEntries().length, 501, 'the log itself is not truncated');
 });
 
 test('/api/state still answers when tmux cannot be listed', async () => {

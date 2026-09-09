@@ -32,6 +32,9 @@ const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 /** The port the spec documents. */
 export const DEFAULT_PORT = 4789;
 
+/** `/api/state` carries the newest receipt-log entries, newest first (docs/spec/ui-server.md). */
+export const RECEIPTS_LIMIT = 500;
+
 /** Static build of the console. `sbb ui` serves it when it exists. */
 export const WEB_DIST = join(ROOT, 'web', 'dist');
 
@@ -235,6 +238,7 @@ export async function createUiServer(opts = {}) {
       claims: (deps.listAllClaims ?? listAllClaims)({}),
       tps: [...tpsValues.values()],
       teams: listTeamLogs(),
+      receipts: (deps.readReceipts ?? readReceiptEntries)().slice(-RECEIPTS_LIMIT).reverse(),
       version: version(),
       ...extra,
     };
