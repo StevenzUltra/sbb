@@ -1,7 +1,7 @@
 // SBB desktop: a window around `sbb ui`. The shell starts the same local server the CLI
 // starts, loads its tokenized URL, and stops it on quit. No IPC, no node integration in
 // the page: the console stays the web console (docs/spec/web-console.md).
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import updaterPkg from 'electron-updater';
 const { autoUpdater } = updaterPkg;
 import { execFile, spawn } from 'node:child_process';
@@ -170,7 +170,7 @@ async function openConsole() {
     visualEffectState: 'active',
     backgroundColor: '#00000000',
     show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: join(HERE, 'preload.js') },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -200,6 +200,17 @@ async function openConsole() {
   setupUpdates();
   log('loaded');
 }
+
+// The one bridge the page has (desktop/preload.js): a native folder picker for 新建's
+// working directory. Browsers cannot hand a page an absolute path; the app can.
+ipcMain.handle('sbb:pick-folder', async (_event, options = {}) => {
+  const result = await dialog.showOpenDialog(win ?? undefined, {
+    title: '选择工作目录',
+    defaultPath: typeof options.defaultPath === 'string' && options.defaultPath ? options.defaultPath : app.getPath('home'),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return result.canceled ? null : (result.filePaths[0] ?? null);
+});
 
 app.on('before-quit', () => {
   app.isQuitting = true;

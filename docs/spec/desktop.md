@@ -23,6 +23,10 @@ server and shows its tokenized URL.
 
 Missing tmux or Node.js is an error dialog, not a blank window.
 
+The page gets one bridge (`desktop/preload.js`, `window.sbbDesktop`): `pickFolder({ defaultPath })`
+opens the native folder picker and resolves to a path or null. The console uses it for 新建's
+working directory when present and falls back to the typed path and recent list in a browser.
+
 ## Build
 
 ```

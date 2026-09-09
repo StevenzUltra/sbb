@@ -55,8 +55,8 @@ test('snapshot: the /api/state object built from the fixture, read-only and part
   try {
     const state = await snapshot();
     assert.deepEqual(Object.keys(state).sort(), [
-      'accounts', 'brains', 'claims', 'held', 'plans', 'policy', 'quota', 'receipts', 'teams', 'threads',
-      'tps', 'tree', 'version',
+      'accounts', 'brains', 'claims', 'held', 'plans', 'policy', 'quota', 'receipts', 'recentCwds', 'teams',
+      'threads', 'tps', 'tree', 'version',
     ]);
 
     assert.equal(state.version, VERSION);
@@ -296,4 +296,13 @@ test('consoleMessage: envelope bodies, sender ids and receipt summaries', async 
   assert.deepEqual(named.receipt, { status: 'delivered', via: 'uds', elapsedMs: 40 });
   assert.equal(named.thread, 'SSL-0033');
   assert.equal('team' in named, false);
+});
+
+test('recentCwds: newest first, unique, live and retired brains, capped', async () => {
+  const { recentCwds } = await import('../src/ui/data.js');
+  const live = [{ cwd: '/a', createdAt: 5 }, { cwd: '/b', createdAt: 9 }, { cwd: '', createdAt: 20 }];
+  const retired = [{ cwd: '/a', createdAt: 1, retiredAt: 30 }, { cwd: '/c', createdAt: 2, retiredAt: 3 }];
+  assert.deepEqual(recentCwds(live, retired), ['/a', '/b', '/c']);
+  assert.deepEqual(recentCwds(Array.from({ length: 12 }, (_, i) => ({ cwd: `/d${i}`, createdAt: i })), []).length, 10);
+  assert.deepEqual(recentCwds([], []), []);
 });
