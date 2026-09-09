@@ -26,6 +26,7 @@ const {
   readToken,
   tokenMatches,
   writeToken,
+  extractJson,
 } = await import('../src/ui/server.js');
 const { writeBrain } = await import('./fixtures/registry/helpers.js');
 
@@ -464,4 +465,13 @@ test('the pane WebSocket refuses a bad token, a bad pane id and a gone pane', as
   } finally {
     ws.close();
   }
+});
+
+test('extractJson: a human line before the JSON document does not hide it', () => {
+  assert.deepEqual(extractJson(['kill      SSL-0058  lead  main  a/claude  24:8.1', '{', '  "results": [],', '  "reparented": []', '}']), { results: [], reparented: [] });
+  assert.deepEqual(extractJson(['{"a":1}']), { a: 1 });
+  assert.deepEqual(extractJson(['[1,2]']), [1, 2]);
+  assert.equal(extractJson(['no json here']), undefined);
+  assert.equal(extractJson([]), undefined);
+  assert.equal(extractJson(['note', '{oops']), undefined);
 });

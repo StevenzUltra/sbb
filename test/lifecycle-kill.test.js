@@ -227,3 +227,22 @@ test('releaseClaims: a brain without a claims file reports none', () => {
   const dir = tempDir();
   assert.equal(releaseClaims('SMS-9999', { dir }), 'none');
 });
+
+test('kill --json prints exactly one JSON document (the plan lines are for people)', async () => {
+  const { run } = await import('../src/cli/kill.js');
+  const brain = { id: 'TST-0301', name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude', paneId: '%9', coord: 'w:1.1', createdAt: 1, origin: 'spawned' };
+  const outcome = { results: [{ brain, exit: { paneId: '%9', typed: false, killed: true, detail: 'pane was not idle; kill-pane' }, retired: { ...brain, retiredAt: 2 }, claims: 'none', expiredHolds: 0 }], reparented: [], notifications: [] };
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => lines.push(args.join(' '));
+  try {
+    const code = await run(['lead', '--yes', '--json'], {
+      killPlan: () => ({ victims: [brain], keep: [] }),
+      killBrains: async () => outcome,
+    });
+    assert.equal(code, 0);
+  } finally {
+    console.log = log;
+  }
+  assert.deepEqual(JSON.parse(lines.join('\n')), outcome, 'the whole stdout parses as one document');
+});

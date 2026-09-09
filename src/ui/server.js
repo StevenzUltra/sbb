@@ -78,6 +78,28 @@ const MIME = Object.freeze({
 });
 
 /** @param {number} [now] */
+/**
+ * The JSON document a CLI printed with --json. Some commands print a human line before it
+ * (a plan, a warning), so when the whole output is not JSON the parse restarts at the first
+ * line that opens an object or array.
+ * @param {string[]} lines
+ */
+export function extractJson(lines) {
+  const text = lines.join('\n').trim();
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = lines.findIndex((line) => /^\s*[[{]/.test(line));
+    if (start < 0) return undefined;
+    try {
+      return JSON.parse(lines.slice(start).join('\n'));
+    } catch {
+      return undefined;
+    }
+  }
+}
+
 export function newToken() {
   return randomBytes(16).toString('hex');
 }
@@ -420,13 +442,7 @@ export async function createUiServer(opts = {}) {
 
   /** @param {string[]} lines */
   function parseJson(lines) {
-    const text = lines.join('\n').trim();
-    if (!text) return undefined;
-    try {
-      return JSON.parse(text);
-    } catch {
-      return undefined;
-    }
+    return extractJson(lines);
   }
 
   /** @param {string} ref */
