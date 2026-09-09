@@ -1,7 +1,21 @@
 // One store for the whole console (web-console.md: components never fetch on their own).
 // It holds the /api/state snapshot, applies SSE events, and exposes the actions the UI calls.
 import { defineStore } from 'pinia';
+import { toQuotaChips } from '../lib/quota.js';
+import { receiptRow } from '../lib/receipts.js';
 import { createClient, FIXTURE } from '../api/index.js';
+
+/** Team members arrive as ids/names (fixture) or as { id, name, role } rows (server). */
+function memberName(member) {
+  return typeof member === 'string' ? member : member?.name ?? member?.id ?? '';
+}
+
+/** A team tab talks to its channel address (#<main>, docs/spec/teams.md), never to one member. */
+function teamAddress(team) {
+  if (!team) return undefined;
+  if (typeof team.name === 'string' && team.name.startsWith('#')) return team.name;
+  return (team.members ?? []).map(memberName).find((name) => name && name !== '你');
+}
 
 export const STATUS_LABEL = {
   idle: '空闲',
@@ -65,7 +79,7 @@ export const useSbb = defineStore('sbb', {
         kind: 'team',
         teamId: team.id,
         label: team.name,
-        sub: `组频道 · ${team.members.join('、')}`,
+        sub: `组频道 · ${(team.members ?? []).map(memberName).join('、')}`,
         count: team.messages.length,
       })),
       ...state.threads.map((thread) => ({
@@ -157,7 +171,7 @@ export const useSbb = defineStore('sbb', {
         brains: snapshot.brains ?? [],
         tree: snapshot.tree ?? null,
         accounts: snapshot.accounts ?? [],
-        quota: snapshot.quota ?? [],
+        quota: toQuotaChips(snapshot.quota ?? [], { brains: snapshot.brains ?? [] }),
         catalog: snapshot.catalog ?? [],
         policy: snapshot.policy ?? this.policy,
         held: snapshot.held ?? [],
@@ -166,7 +180,7 @@ export const useSbb = defineStore('sbb', {
         tps: snapshot.tps ?? this.tps,
         teams: snapshot.teams ?? [],
         threads: snapshot.threads ?? [],
-        receipts: (snapshot.receipts ?? []).slice(0, 500),
+        receipts: (snapshot.receipts ?? []).slice(0, 500).map(receiptRow),
       });
       const ui = snapshot.ui ?? {};
       this.view = ui.view ?? this.view;
@@ -191,7 +205,7 @@ export const useSbb = defineStore('sbb', {
           break;
         }
         case 'receipt': {
-          this.receipts.unshift(data);
+          this.receipts.unshift(receiptRow(data));
           // /api/state seeds the newest 500; keep the same window as events accumulate.
           if (this.receipts.length > 500) this.receipts.length = 500;
           // A later receipt for a message already in the stream replaces the earlier one,
@@ -205,13 +219,18 @@ export const useSbb = defineStore('sbb', {
           break;
         }
         case 'message': {
-          const thread = this.threads.find((item) => item.id === data.thread);
-          if (thread) {
-            if (!thread.messages.some((message) => message.msgId === data.msgId)) thread.messages.push(data);
-          } else {
+          // The data service files every message under a private thread (brain id) and/or a
+          // team channel (main id); the same msgId may legitimately show in both.
+          const push = (list) => {
+            if (list && !list.some((message) => message.msgId === data.msgId)) list.push(data);
+          };
+          const thread = this.threads.find((item) => item.id === data.thread || item.with === data.thread);
+          const team = this.teams.find((item) => item.mainId === data.team || item.id === data.team);
+          if (thread) push(thread.messages);
+          if (team) push(team.messages);
+          if (!thread && !team) {
             const brain = this.brains.find((item) => item.id === data.to);
-            const team = this.teams.find((item) => item.id === brain?.team);
-            if (team && !team.messages.some((message) => message.msgId === data.msgId)) team.messages.push(data);
+            push(this.teams.find((item) => item.id === brain?.team)?.messages);
           }
           if (data.replyTo) delete this.waiting[data.replyTo];
           break;
@@ -226,7 +245,7 @@ export const useSbb = defineStore('sbb', {
           this.tps = data;
           break;
         case 'quota':
-          this.quota = data;
+          this.quota = toQuotaChips(data, { brains: this.brains });
           break;
         case 'claim':
           this.claims = data;
@@ -304,7 +323,7 @@ export const useSbb = defineStore('sbb', {
       const to =
         tab?.kind === 'thread'
           ? this.threads.find((thread) => thread.id === tab.threadId)?.with
-          : this.teams.find((team) => team.id === tab?.teamId)?.members?.find((member) => member !== '你');
+          : teamAddress(this.teams.find((team) => team.id === tab?.teamId));
       if (!to) {
         this.toast('这里没有可以接话的脑', 'error');
         return;

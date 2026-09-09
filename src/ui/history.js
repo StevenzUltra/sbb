@@ -163,7 +163,7 @@ function receiptLine(entry) {
     status: entry.status ?? null,
     via: entry.via ?? null,
     replyTo: entry.replyTo ?? null,
-    text: entry.textPreview ?? null,
+    text: entry.textPreview ?? entry.text ?? null,
   };
 }
 

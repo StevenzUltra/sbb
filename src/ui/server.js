@@ -22,6 +22,7 @@ import { roster as defaultRoster } from '../registry/roster.js';
 import { closeInboxes } from '../transports/claude-uds.js';
 import { startInbox } from '../transports/uds-inbox.js';
 import { deliver, deliveryInboxDir, parsePeerFrame } from '../cli/util.js';
+import { checkChannel, isChannelAddress, resolveChannel, sendToChannel } from '../teams/index.js';
 import { createPaneStream } from './pane-stream.js';
 import { snapshot as dataSnapshot, watch as dataWatch } from './data.js';
 import { goToTerminal } from './switch.js';
@@ -434,16 +435,42 @@ export async function createUiServer(opts = {}) {
     });
   }
 
+  /**
+   * `#<main>` / `#all` from the console fan out exactly like `sbb tell #<main>` (teams.md):
+   * one msgId, one receipt per member, one team-log line. Returns the channel receipt shape.
+   * @param {string} address @param {string} text @param {Record<string, any>} identity @param {any} priority
+   */
+  async function tellChannel(address, text, identity, priority) {
+    const channel = (deps.resolveChannel ?? resolveChannel)(address, { getBrain: deps.getBrain, listBrains: deps.listBrains });
+    const gate = checkChannel(channel, identity);
+    if (!gate.ok) throw Object.assign(new Error(gate.detail ?? 'policy blocks this channel'), { reason: 'policy' });
+    const out = await (deps.sendToChannel ?? sendToChannel)({
+      channel, body: text, identity, priority, inbox: await openInbox(), deps,
+    });
+    const statuses = out.results.map((r) => r.receipt?.status);
+    return {
+      status: statuses.length === 0 ? 'blocked' : statuses.every((s) => s === 'delivered') ? 'delivered' : statuses.includes('delivered') || statuses.includes('queued') ? 'queued' : 'blocked',
+      via: 'channel',
+      msgId: out.msgId,
+      channel: channel.id,
+      name: `#${channel.name}`,
+      receipts: out.entry?.receipts ?? [],
+      log: out.logFile ?? null,
+    };
+  }
+
   /** @param {Record<string, any>} body */
   async function tell(body) {
     const to = String(body.to ?? '').trim();
     const text = String(body.text ?? '').trim();
     if (!to || !text) throw Object.assign(new Error('to and text are required'), { reason: 'invalid_input' });
+    const identity = { ...USER_IDENTITY, role: body.role ? String(body.role) : USER_IDENTITY.role };
+    if ((deps.isChannelAddress ?? isChannelAddress)(to)) return tellChannel(to, text, identity, body.priority);
     const target = await resolveTarget(to);
     const out = await deliver({
       target,
       body: text,
-      identity: { ...USER_IDENTITY, role: body.role ? String(body.role) : USER_IDENTITY.role },
+      identity,
       priority: body.priority,
       inbox: await openInbox(),
       deps,
@@ -455,6 +482,12 @@ export async function createUiServer(opts = {}) {
     const to = String(body.to ?? '').trim();
     const text = String(body.text ?? '').trim();
     if (!to || !text) throw Object.assign(new Error('to and text are required'), { reason: 'invalid_input' });
+    if ((deps.isChannelAddress ?? isChannelAddress)(to)) {
+      // A question to a channel is the same fan-out; replies come back as `message` events
+      // carrying replyTo = this msgId, one per member.
+      const receipt = await tellChannel(to, text, USER_IDENTITY, body.priority);
+      return { msgId: receipt.msgId, receipt };
+    }
     const target = await resolveTarget(to);
     const { receipt, entry } = await deliver({
       target,
@@ -850,7 +883,9 @@ export async function createUiServer(opts = {}) {
       socket.destroy();
       return;
     }
-    const paneId = match[1]; // '%12' is not a valid percent-escape, so never decode it
+    // The console sends the pane id URL-encoded ('%152' arrives as '%25152'); decode exactly
+    // that one escape. A full decodeURIComponent would misread '%15' inside a raw id.
+    const paneId = match[1].replace(/^%25/, '%');
     if (!/^%\d+$/.test(paneId)) {
       socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
       socket.destroy();

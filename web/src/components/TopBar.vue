@@ -1,6 +1,7 @@
 <script setup>
 import { useSbb, POLICY_LABEL } from '../store/sbb.js';
 import Icon from './Icon.vue';
+import { quotaTone, TONE_COLOR } from '../lib/quota.js';
 
 const store = useSbb();
 const views = [
@@ -37,17 +38,19 @@ const TONE = { open: 'tone-green', moderated: 'tone-yellow', closed: 'tone-muted
 
     <div class="h-5 w-px" style="background: var(--es-divider)" />
 
-    <div class="flex items-center gap-2">
+    <!-- Quota chips scroll sideways inside their own track; the controls on the right never move. -->
+    <div class="flex min-w-0 shrink items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <div
         v-for="chip in store.quota"
         :key="chip.key"
-        class="glass flex items-center gap-2 whitespace-nowrap rounded-[999px] px-[10px] py-[4px] text-[12px]"
+        class="glass flex shrink-0 items-center gap-2 whitespace-nowrap rounded-[999px] px-[10px] py-[4px] text-[12px]"
+        :title="chip.pct !== null ? `剩余额度 · ${chip.note}` : chip.note"
       >
         <span class="text-es-dim dark:text-es-dark-muted">{{ chip.label }}</span>
         <span v-if="chip.pct !== null" class="track relative h-1 w-14 rounded-[2px]">
           <span
             class="absolute left-0 top-0 h-1 rounded-[2px]"
-            :style="{ width: `${chip.pct}%`, background: chip.pct < 80 ? '#e5a835' : '#2d6b4f' }"
+            :style="{ width: `${chip.pct}%`, background: TONE_COLOR[quotaTone(chip.pct, store.policy)] }"
           />
         </span>
         <span class="mono">{{ chip.pct !== null ? `${chip.pct}%` : chip.note }}</span>
@@ -56,7 +59,7 @@ const TONE = { open: 'tone-green', moderated: 'tone-yellow', closed: 'tone-muted
 
     <div class="flex-grow" />
 
-    <div class="flex items-center gap-2">
+    <div class="flex shrink-0 items-center gap-2">
       <button
         class="flex items-center gap-[6px] rounded-[999px] px-[10px] py-[5px] text-[12px] font-medium"
         :class="TONE[store.policyMode]"

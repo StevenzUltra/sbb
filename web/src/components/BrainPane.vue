@@ -58,7 +58,14 @@ function openPane() {
       terminal.write(bytes);
     },
     onClosed: (reason) => {
-      if (reason && reason !== 'input_off') terminal.write(`\r\n[连接关闭：${reason}]\r\n`);
+      if (reason) terminal.write(`\r\n[连接关闭：${reason}]\r\n`);
+    },
+    onRefused: (reason) => {
+      // A resize is declined while someone has the pane open in a terminal (ui-server.md);
+      // the console keeps streaming at the pane's own size, so nothing to report.
+      if (reason === 'client_attached') return;
+      if (reason === 'input_off') store.toast('先点「在此输入」再敲键盘', 'warn');
+      else store.toast(`窗格拒绝了这次操作：${reason}`, 'warn');
     },
   });
   if (store.paneMode === 'input') socket.send({ type: 'mode', input: true });

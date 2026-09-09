@@ -55,8 +55,8 @@ test('snapshot: the /api/state object built from the fixture, read-only and part
   try {
     const state = await snapshot();
     assert.deepEqual(Object.keys(state).sort(), [
-      'accounts', 'brains', 'claims', 'held', 'plans', 'policy', 'quota', 'receipts', 'teams', 'tps',
-      'tree', 'version',
+      'accounts', 'brains', 'claims', 'held', 'plans', 'policy', 'quota', 'receipts', 'teams', 'threads',
+      'tps', 'tree', 'version',
     ]);
 
     assert.equal(state.version, VERSION);
@@ -94,12 +94,45 @@ test('snapshot: the /api/state object built from the fixture, read-only and part
     assert.deepEqual(lead.members.map((m) => m.id), ['TST-0001', 'TST-0002']);
     assert.deepEqual(state.teams[1].members.map((m) => m.id), ['TST-0003'], 'a lone main is its own team');
 
+    // The channel log rides along as console messages (the half-written last line is skipped).
+    assert.equal(lead.messages.length, 1);
+    assert.deepEqual(lead.messages[0], {
+      msgId: 'ffffffff-6666-4666-8666-ffffffffffff', t: 1767225610000, at: lead.messages[0].at,
+      from: 'TST-0001', fromName: 'lead', to: '#lead', text: 'channel: everyone read this', replyTo: null,
+      receipt: { status: 'delivered', via: 'uds', elapsedMs: null },
+      receipts: [{ to: 'fe-a', toId: 'TST-0002', status: 'delivered', via: 'uds' }],
+      team: 'TST-0001',
+    });
+    assert.deepEqual(state.teams[1].messages, []);
+
+    // One private thread per brain: receipts naming the brain plus its replies in the user's inbox.
+    assert.deepEqual(state.threads.map((t) => t.id), ['TST-0001', 'TST-0002', 'TST-0003']);
+    const leadThread = state.threads[0];
+    assert.equal(leadThread.with, 'TST-0001');
+    assert.equal(leadThread.title, 'lead');
+    assert.deepEqual(leadThread.messages.map((m) => [m.from, m.to, m.text, m.thread]), [
+      ['TST-0001', 'TST-0002', 'start on the channel work', 'TST-0001'],
+      ['TST-0002', 'TST-0001', 'on it', 'TST-0001'],
+      ['TST-0001', 'user', 'status?', 'TST-0001'],
+    ]);
+    assert.equal(leadThread.messages[1].replyTo, 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa');
+    assert.deepEqual(state.threads[2].messages, []);
+
     // The fixture's last receipts line and last team-log line are half written; both
     // readers must return the complete entries only.
     const receipts = readFileSync(join(sbbDir, 'log', 'receipts.jsonl'), 'utf8');
     assert.ok(receipts.trimEnd().endsWith('cccccccc-'), 'fixture really ends mid-line');
     const again = await snapshot();
     assert.deepEqual(again, state, 'snapshot is deterministic and read-only');
+
+    // A reply (user inbox, replyTo = a channel msgId) shows in that channel as well as in the thread.
+    writeInboxEntry({ owner: 'user', entry: { msgId: 'aaaa7777-0000-4000-8000-000000000007', from: 'fe-a', fromId: 'TST-0002', replyTo: 'ffffffff-6666-4666-8666-ffffffffffff', text: 'read it', t: 1767225612000 } });
+    const replied = await snapshot();
+    assert.deepEqual(replied.teams[0].messages.map((m) => [m.from, m.text, m.team, m.thread ?? null]), [
+      ['TST-0001', 'channel: everyone read this', 'TST-0001', null],
+      ['TST-0002', 'read it', 'TST-0001', 'TST-0002'],
+    ]);
+    assert.equal(replied.threads[1].messages.at(-1).text, 'read it');
   } finally {
     restore();
   }
@@ -142,6 +175,9 @@ test('watch: every typed event carries the full updated object', async () => {
     const message = await waitFor('message');
     assert.equal(message.msgId, 'aaaa2222-0000-4000-8000-000000000002');
     assert.equal(message.from, 'be-a');
+    assert.equal(message.fromName, 'be-a');
+    assert.equal(message.thread, 'lead', "a brain's inbox mirror belongs to that brain's thread");
+    assert.equal(message.text, 'mirror');
 
     writeBrain({ id: 'TST-0009', name: 'new-sub', role: 'sub', parent: 'TST-0001', account: 'a' });
     const brain = await waitFor('brain');
@@ -236,4 +272,28 @@ test('watch: close stops the events and the timers', async () => {
   } finally {
     restore();
   }
+});
+
+test('consoleMessage: envelope bodies, sender ids and receipt summaries', async () => {
+  const { messageBody, consoleMessage } = await import('../src/ui/data.js');
+  assert.equal(messageBody('[lead#SSL-0033@a/claude:sbb-rehearsal:3.1][主脑] 翻译已完成。   (sbb:d8afb2c3)'), '翻译已完成。');
+  assert.equal(messageBody('[user@cli][用户 → #demo] 请自我介绍 (sbb:ff0b5ab7)'), '请自我介绍');
+  assert.equal(messageBody('plain text'), 'plain text');
+
+  const fromUser = consoleMessage({ t: 1788940106563, msgId: 'm1', from: 'user', fromId: null, text: '[user@cli][用户] hi (sbb:ff0b5ab7)', channel: '#demo',
+    receipts: [{ to: 'demo', toId: 'SSL-0053', status: 'delivered', via: 'uds+screen' }, { to: 'ios', toId: 'SSL-0031', status: 'queued', via: 'codex-queue' }] }, { team: 'SSL-0053' });
+  assert.equal(fromUser.from, 'user');
+  assert.equal(fromUser.fromName, '你');
+  assert.equal(fromUser.text, 'hi');
+  assert.deepEqual(fromUser.receipt, { status: 'queued', via: 'channel', elapsedMs: null, count: 2 });
+  assert.equal(fromUser.team, 'SSL-0053');
+  assert.match(fromUser.at, /^\d\d:\d\d$/);
+
+  const named = consoleMessage({ t: 1, msgId: 'm2', from: 'lead#SSL-0033', text: 'x', replyTo: 'm1', status: 'delivered', via: 'uds', elapsedMs: 40 }, { thread: 'SSL-0033' });
+  assert.equal(named.from, 'SSL-0033');
+  assert.equal(named.fromName, 'lead');
+  assert.equal(named.replyTo, 'm1');
+  assert.deepEqual(named.receipt, { status: 'delivered', via: 'uds', elapsedMs: 40 });
+  assert.equal(named.thread, 'SSL-0033');
+  assert.equal('team' in named, false);
 });
