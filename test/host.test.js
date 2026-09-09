@@ -188,3 +188,18 @@ test('real tmux: serverSocketPath names the scratch socket', { skip: !hasTmux },
   const path = await host.serverSocketPath();
   assert.ok(typeof path === 'string' && path.includes(SOCKET), `expected a socket path, got ${path}`);
 });
+
+test('real tmux: ensureServer starts a detached sbb session once and then reports it running', async () => {
+  const { ensureServer, tmux } = await import('../src/host/tmux.js');
+  try {
+    await tmux(['kill-server']);
+  } catch {
+    // no server on the scratch socket yet
+  }
+  const first = await ensureServer({ cwd: '/tmp' });
+  assert.deepEqual(first, { started: true, session: 'sbb' });
+  assert.match(await tmux(['list-sessions', '-F', '#{session_name}']), /^sbb$/m);
+  const again = await ensureServer({ cwd: '/tmp' });
+  assert.deepEqual(again, { started: false });
+  await tmux(['kill-server']);
+});

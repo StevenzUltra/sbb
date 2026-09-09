@@ -244,6 +244,7 @@ export async function spawnBrain(input = {}, deps = {}) {
   try {
     // The CLI is the pane command: nothing is typed into an interactive shell, so a
     // multi-kilobyte brief cannot stall behind the shell's completion or paste handling.
+    if (!input.split) await tmuxApi.ensureServer?.();
     paneId = input.split
       ? await tmuxApi.tmux(['split-window', '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand])
       : await tmuxApi.tmux(['new-window', '-n', `ai-${accountName}`, '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand]);

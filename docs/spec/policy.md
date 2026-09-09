@@ -83,6 +83,8 @@ sbb policy spawn-args <cli> "<args>"     -> spawn.cliArgs[<cli>]; an empty strin
 sbb policy spawn-preamble <cli> "<line>" -> spawn.preamble[<cli>]; an empty string removes it
 sbb policy spawn-command <cli> <launcher> -> spawn.command[<cli>]; an empty string removes it
 sbb policy spawn-shell <path>            -> spawn.shell; an empty string removes it (sh)
+sbb policy terminal ghostty|iterm2|-     -> terminal (去终端 preference); - removes it
+sbb policy subs-direct on|off            -> teams.subsDirect (teams.md)
 ```
 
 ## Claims

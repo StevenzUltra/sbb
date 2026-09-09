@@ -4,6 +4,12 @@
 built web console (`web/dist`) and exposes SBB's state and actions to it. Everything the
 console can do is a thin call into the same modules the CLI uses; no logic lives in the server.
 
+## Start-up
+
+`sbb ui` needs no terminal window: if no tmux server answers, it starts one with a detached
+session `sbb` (`tmux new-session -d -s sbb`), and `sbb spawn` does the same before its first
+`new-window`. A person can attach later with `tmux attach -t sbb`; 去终端 opens that for them.
+
 ## Security
 
 - Binds `127.0.0.1` only. A random 32-hex token is generated at start, written to
@@ -33,7 +39,7 @@ console can do is a thin call into the same modules the CLI uses; no logic lives
 | POST | `/api/spawn` | same fields as `sbb spawn` | spawn result JSON |
 | POST | `/api/kill` | `{ brain, keepChildren? }` | kill result |
 | POST | `/api/switch` | `{ brain }` | `{ switched, client }` — see "Go to terminal" |
-| POST | `/api/policy` | `{ peers?, set?, allow?, deny?, quota?, spawnArgs? }` | new policy |
+| POST | `/api/policy` | `{ peers?, set?, allow?, deny?, quota?, spawnArgs?, spawnPreamble? {cli,value}, spawnCommand? {cli,value}, spawnShell?, terminal? ("ghostty"\|"iterm2"\|null), subsDirect? }` | new policy (one key per request; an empty value removes the entry) |
 | POST | `/api/claims` | `{ add?, release? }` | claims |
 | POST | `/api/plans/:id/approve` \| `/reject` | `{ edit?, reason? }` | plan result |
 

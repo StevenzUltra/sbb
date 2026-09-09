@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh" class="dark">
+<head>
+<meta charset="utf-8">
+<title>SBB 布局稿 v2：精简顶栏 + 状态栏 + 设置页</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px 32px 80px; font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif; color: var(--es-dark-text); background: #202623; -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 8px; color: #c7cfca; }
+  p.note { margin: 0 0 18px; font-size: 12px; color: #8f9993; max-width: 1100px; line-height: 1.6; }
+  .mono { font-family: "SF Mono", Menlo, monospace; }
+  .board { width: 1440px; height: 900px; border-radius: 14px; overflow: hidden; position: relative; margin-bottom: 56px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  /* simulated desktop behind the translucent window */
+  .board::before { content: ""; position: absolute; inset: 0; background: radial-gradient(900px 500px at 10% 0%, #2e5a56 0%, transparent 60%), radial-gradient(800px 600px at 90% 100%, #5b4a2d 0%, transparent 55%), linear-gradient(160deg, #1a2422 0%, #0f1412 60%, #171b19 100%); filter: saturate(120%); }
+  .window { position: absolute; inset: 0; display: flex; flex-direction: column; background: rgba(10,13,11,.42); }
+  .top { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 14px 0 88px; background: rgba(12,15,13,.38); border-bottom: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(28px); }
+  .lights { position: absolute; left: 14px; top: 14px; display: flex; gap: 8px; }
+  .lights i { width: 12px; height: 12px; border-radius: 6px; display: block; }
+  .mark { width: 24px; height: 24px; border-radius: 7px; background: var(--es-green); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; }
+  .tabs { display: flex; gap: 2px; background: rgba(255,255,255,.05); border-radius: 9px; padding: 3px; }
+  .tabs span { padding: 5px 12px; font-size: 12.5px; border-radius: 7px; color: #a0aaa4; }
+  .tabs span.on { background: rgba(255,255,255,.10); color: #e8ece9; }
+
+  .viewsel { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 8px; border-radius: 8px; color: #e8ece9; font-size: 13px; position: relative; }
+  .viewsel:hover { background: rgba(255,255,255,.06); }
+  .viewsel svg { color: #c7cfca; }
+  .viewsel .caret { color: #8f9993; font-size: 10px; margin-left: 2px; }
+  .viewmenu { position: absolute; left: 86px; top: 44px; z-index: 6; width: 188px; padding: 6px; border-radius: 12px; background: rgba(18,22,20,.92); border: 1px solid rgba(255,255,255,.10); box-shadow: 0 16px 40px rgba(0,0,0,.45); backdrop-filter: blur(28px); }
+  .viewmenu div { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: #e8ece9; }
+  .viewmenu div svg { color: #c7cfca; }
+  .viewmenu div.on { background: rgba(255,255,255,.10); }
+  .viewmenu div .k { margin-left: auto; font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: #8f9993; }
+  .grow { flex: 1; }
+  .cmdk { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 8px; background: rgba(255,255,255,.05); color: #8f9993; font-size: 12px; min-width: 220px; }
+  .cmdk .k { margin-left: auto; font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.08); }
+  .gear { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center; color: #c7cfca; font-size: 14px; }
+  .body { flex: 1; display: grid; grid-template-columns: 300px 12px minmax(0,1fr) 12px 460px; padding: 12px; min-height: 0; }
+  .panel { border-radius: 16px; background: rgba(16,20,18,.46); border: 1px solid rgba(255,255,255,.10); backdrop-filter: blur(28px); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .ph { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; font-size: 14px; font-weight: 600; }
+  .ph .sub { font-weight: 400; font-size: 12px; color: #a0aaa4; }
+  .btn { padding: 5px 10px; border-radius: 8px; font-size: 12px; background: rgba(255,255,255,.06); color: #e8ece9; }
+  .btn.primary { background: var(--es-green); color: #fff; font-weight: 500; }
+  .search { margin: 0 12px 10px; padding: 9px 12px; border-radius: 10px; background: rgba(255,255,255,.05); color: #8f9993; font-size: 13px; }
+  .row { margin: 0 8px 6px; padding: 10px 12px; border-radius: 12px; }
+  .row.sel { background: rgba(45,107,79,.28); }
+  .row b { font-size: 14px; font-weight: 600; }
+  .row .id { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: #a0aaa4; margin-left: 6px; }
+  .row .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: rgba(127,191,159,.18); color: #7fbf9f; margin-left: 6px; }
+  .row .meta { font-size: 12px; color: #a0aaa4; margin-top: 2px; }
+  .row.sub { margin-left: 28px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 4px; margin-right: 8px; vertical-align: 1px; }
+  .g { background: #7fbf9f; } .y { background: var(--es-yellow); } .r { background: var(--es-red); } .m { background: #8a938e; }
+  .chanbar { margin-top: auto; padding: 12px 16px; font-size: 11px; color: #a0aaa4; }
+  .chanbar span { display: inline-block; margin: 6px 6px 0 0; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.06); color: #e8ece9; font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  .chanbar span.on { background: var(--es-green); color: #fff; }
+  .thread { display: flex; align-items: center; gap: 8px; padding: 14px 16px; font-size: 14px; }
+  .thread .sub { font-size: 12px; color: #a0aaa4; }
+  .thread .pills { margin-left: auto; display: flex; gap: 4px; background: rgba(255,255,255,.05); border-radius: 9px; padding: 3px; }
+  .thread .pills span { padding: 4px 10px; border-radius: 7px; font-size: 12px; color: #a0aaa4; }
+  .thread .pills span.on { background: rgba(255,255,255,.10); color: #e8ece9; }
+  .msgs { flex: 1; padding: 6px 20px; overflow: hidden; }
+  .msg { display: flex; gap: 12px; margin-bottom: 18px; }
+  .av { width: 30px; height: 30px; border-radius: 15px; background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
+  .av.me { background: var(--es-green-dark); color: #cfe5da; }
+  .msg .who { font-size: 13px; font-weight: 600; }
+  .msg .who .id { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: #a0aaa4; font-weight: 400; margin-left: 6px; }
+  .msg .who .t { font-size: 11px; color: #a0aaa4; font-weight: 400; margin-left: 8px; }
+  .msg .txt { font-size: 14px; line-height: 1.55; margin-top: 3px; }
+  .msg .rc { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: #7fbf9f; margin-top: 4px; }
+  .composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid rgba(255,255,255,.08); }
+  .composer .in { flex: 1; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.05); color: #8f9993; font-size: 13px; }
+  .term { margin: 0 12px 12px; flex: 1; border-radius: 12px; background: rgba(6,8,7,.62); backdrop-filter: blur(18px); padding: 12px 14px; font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; line-height: 1.7; color: #d5dbd7; white-space: pre; overflow: hidden; }
+  .term .dim { color: #8f9993; } .term .pink { color: #e08fb0; }
+  .pane-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 8px; }
+  .pane-head b { font-size: 14px; }
+  .pane-head .acts { margin-left: auto; display: flex; gap: 6px; }
+  .pane-head .acts span { padding: 5px 9px; border-radius: 8px; background: rgba(255,255,255,.06); font-size: 12px; }
+  .pane-head .acts span.danger { color: #f08c8c; background: rgba(217,75,75,.12); }
+  .pane-meta { padding: 0 16px 8px; font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: #a0aaa4; }
+  .status { height: 30px; display: flex; align-items: center; gap: 18px; padding: 0 14px; font-size: 11.5px; color: #a0aaa4; background: rgba(12,15,13,.38); border-top: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(28px); white-space: nowrap; }
+  .status .item { display: flex; align-items: center; gap: 6px; }
+  .status .item b { color: #e8ece9; font-weight: 500; font-family: "SF Mono", Menlo, monospace; }
+  .status .bar { width: 44px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.12); position: relative; }
+  .status .bar i { position: absolute; left: 0; top: 0; height: 3px; border-radius: 2px; background: #7fbf9f; }
+  .status .sep { width: 1px; height: 14px; background: rgba(255,255,255,.10); }
+  .status .held { padding: 2px 8px; border-radius: 999px; background: var(--es-red); color: #fff; font-weight: 500; }
+  .status .right { margin-left: auto; display: flex; gap: 18px; align-items: center; }
+  /* settings */
+  .settings { flex: 1; display: grid; grid-template-columns: 240px minmax(0,1fr); padding: 12px; gap: 12px; min-height: 0; }
+  .snav { padding: 8px; }
+  .snav div { padding: 9px 12px; border-radius: 10px; font-size: 13px; color: #c7cfca; }
+  .snav div.on { background: rgba(255,255,255,.10); color: #e8ece9; }
+  .snav .cap { font-size: 11px; color: #8f9993; padding: 12px 12px 4px; letter-spacing: .06em; }
+  .sbody { padding: 20px 28px; overflow: hidden; }
+  .sec { margin-bottom: 26px; }
+  .sec h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+  .sec p { margin: 0 0 12px; font-size: 12px; color: #a0aaa4; line-height: 1.5; }
+  .frow { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.07); font-size: 13px; }
+  .frow .lab { width: 210px; color: #c7cfca; }
+  .frow .val { flex: 1; font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: #e8ece9; }
+  .seg { display: flex; gap: 2px; background: rgba(255,255,255,.05); border-radius: 8px; padding: 2px; }
+  .seg span { padding: 4px 10px; border-radius: 6px; font-size: 12px; color: #a0aaa4; }
+  .seg span.on { background: var(--es-green); color: #fff; }
+  .input { padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.06); font-family: "SF Mono", Menlo, monospace; font-size: 12px; min-width: 320px; color: #e8ece9; }
+  .toggle { width: 34px; height: 20px; border-radius: 10px; background: var(--es-green); position: relative; }
+  .toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 8px; background: #fff; }
+  .toggle.off { background: rgba(255,255,255,.14); } .toggle.off::after { right: auto; left: 2px; }
+  .legend { position: absolute; z-index: 5; font-size: 11px; color: #ffd18a; background: rgba(60,40,10,.85); border: 1px solid rgba(255,209,138,.4); padding: 3px 7px; border-radius: 6px; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<h1>1 · 控制台（桌面版，透明磨砂）</h1>
+<p class="note">顶栏只剩两件事：视图切换（下拉框，前置无底色 SVG）、搜索与设置入口（不再有图标和 SBB / Switch Brain Brain 字样）。原顶栏里的额度胶囊、主脑互通开关、待批准计数、主题切换全部下沉：数据类进底部状态栏，开关类进设置页。「新建」跟着脑图走，放在左栏标题右侧。橙色小标是给你看的批注，不属于界面。</p>
+
+<div class="board">
+  <div class="window">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <div class="top">
+      <div class="viewsel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M3 10h6"/></svg> 控制台 <span class="caret">▾</span></div>
+      <div class="grow"></div>
+      <div class="cmdk">按名字或编号找脑，或输入命令 <span class="k">⌘K</span></div>
+      <div class="gear">⚙</div>
+    </div>
+    <div class="viewmenu">
+      <div class="on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M3 10h6"/></svg> 控制台 <span class="k">⌘1</span></div>
+      <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/></svg> 组织图 <span class="k">⌘2</span></div>
+      <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg> 回执日志 <span class="k">⌘3</span></div>
+    </div>
+    <div class="legend" style="left:290px;top:52px">视图切换是下拉框，前面是无底色线性 SVG；此处画的是展开态</div>
+    <div class="legend" style="left:1120px;top:52px">搜索/命令 + 设置，其余下沉</div>
+
+    <div class="body">
+      <div class="panel">
+        <div class="ph">脑图 <span class="sub">4 个脑 · 2 个组</span><span class="grow"></span><span class="btn primary">+ 新建</span></div>
+        <div class="legend" style="left:214px;top:104px">新建跟着脑图</div>
+        <div class="row sel"><span class="dot g"></span><b>lead</b><span class="id">SSL-0054</span><span class="tag">主脑</span><div class="meta">a / claude · claude-haiku-4-5 · 空闲</div></div>
+        <div class="row sub"><span class="dot g"></span><b>ios</b><span class="id">SSL-0056</span><div class="meta">default / codex · gpt-6-astra · 空闲</div></div>
+        <div class="row sub"><span class="dot y"></span><b>review</b><span class="id">SSL-0057</span><div class="meta">a / codex · gpt-6-astra · 忙</div></div>
+        <div class="row"><span class="dot g"></span><b>ops</b><span class="id">SSL-0055</span><span class="tag">主脑</span><div class="meta">a / codex · gpt-6-astra · 空闲</div></div>
+        <div class="chanbar">组频道<br><span class="on">#lead</span><span>#ops</span></div>
+      </div>
+      <div></div>
+      <div class="panel">
+        <div class="thread"><b>#lead</b><span class="sub">组频道 · lead、ios、review</span>
+          <div class="pills"><span class="on">组频道</span><span>lead</span><span>ops</span><span>ios</span><span>review</span></div></div>
+        <div class="msgs">
+          <div class="msg"><div class="av me">你</div><div><div class="who">你<span class="t">16:08</span></div><div class="txt">请每位用一句话汇报手头的任务和进度。</div><div class="rc">✓ delivered · channel · 3 位成员</div></div></div>
+          <div class="msg"><div class="av">R</div><div><div class="who">review<span class="id">SSL-0057</span><span class="t">16:08</span></div><div class="txt">已完成身份核验与协作规则检查，当前尚未收到具体审查任务，等待上级派单。</div></div></div>
+          <div class="msg"><div class="av">I</div><div><div class="who">ios<span class="id">SSL-0056</span><span class="t">16:14</span></div><div class="txt">已完成 README 中文翻译至 docs/README.zh.md，代码块与命令核对通过，claim 已释放并交 review 校对。</div></div></div>
+          <div class="msg"><div class="av me">你</div><div><div class="who">你<span class="t">16:21</span></div><div class="txt">各位用一句话汇报：手头任务完成了吗，产出在哪里？</span></div><div class="rc" style="color:#e5a835">◔ queued · channel · 3 位成员</div></div></div>
+        </div>
+        <div class="composer"><div class="in">给 #lead 说一句，回车发送</div><span class="btn">附文件</span><span class="btn primary">发送</span></div>
+      </div>
+      <div></div>
+      <div class="panel">
+        <div class="pane-head"><b>lead</b><span class="mono" style="font-size:11px;color:#a0aaa4">SSL-0054</span><span class="dot g" style="margin-left:4px"></span><span style="font-size:11px;color:#a0aaa4">实时</span>
+          <div class="acts"><span>在此输入</span><span>去终端</span><span>转移</span><span class="danger">结束</span></div></div>
+        <div class="pane-meta">a / claude · claude-haiku-4-5-20251001 · sbb-rehearsal:4.1</div>
+        <div class="term"><span class="dim">›</span> Message from @user: [user@cli][用户 → #lead] 各位用一句话汇报：手头任务完成了吗，产出在哪里？
+
+<span class="dim">⏺</span> 两项工作已完成。回复用户。
+
+<span class="dim">*</span> Brewed for 11s · done 4:21 PM
+
+<span class="dim">──────────────────────────────────────────────────────</span>
+❯
+<span class="dim">──────────────────────────────────────────────────────</span>
+  <span class="pink">⏵⏵ bypass permissions on</span> (shift+tab to cycle) · ← for agents</div>
+      </div>
+    </div>
+
+    <div class="status">
+      <div class="item"><span class="dot g" style="margin-right:2px"></span>tmux 已连接</div>
+      <div class="sep"></div>
+      <div class="item">吐字 <b>lead 71.1</b> · <b>review 29.0</b> · 总 <b>100.1</b> tok/s</div>
+      <div class="sep"></div>
+      <div class="item">a·Claude <span class="bar"><i style="width:78%"></i></span><b>78%</b></div>
+      <div class="item">a·Codex <span class="bar"><i style="width:88%"></i></span><b>88%</b></div>
+      <div class="item">default·Claude <span class="bar"><i style="width:75%"></i></span><b>75%</b></div>
+      <div class="item">b·Codex <span class="bar"><i style="width:41%"></i></span><b>41%</b></div>
+      <div class="item" style="color:#8f9993">+3 ▾</div>
+      <div class="right">
+        <div class="item"><span class="dot g" style="margin-right:2px"></span>主脑互通 开</div>
+        <div class="item"><span class="held">待批准 2</span></div>
+        <div class="item">v0.1.0</div>
+      </div>
+    </div>
+    <div class="legend" style="left:520px;top:848px">状态栏：连接 · TPS · 各账户周剩余额度（超出的收进 ▾） · 互通 · 待批准</div>
+  </div>
+</div>
+
+<h1>2 · 设置页（顶栏齿轮或 ⌘, 打开，占满内容区）</h1>
+<p class="note">把原来散落在顶栏的开关和 CLI 才能改的配置收到一处：互通与策略、额度下限、启动器（对应你的 cc 逻辑）、账户、终端、外观。每一项都是 <span class="mono">~/.sbb/config.json</span> 的可视化，改完立即生效。</p>
+
+<div class="board">
+  <div class="window">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <div class="top">
+      <div class="viewsel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M3 10h6"/></svg> 控制台 <span class="caret">▾</span></div>
+      <div class="grow"></div>
+      <div class="cmdk">按名字或编号找脑，或输入命令 <span class="k">⌘K</span></div>
+      <div class="gear" style="background:rgba(255,255,255,.14)">⚙</div>
+    </div>
+    <div class="settings">
+      <div class="panel snav">
+        <div class="cap">设置</div>
+        <div class="on">互通与策略</div><div>额度</div><div>启动器</div><div>账户</div><div>终端</div><div>外观</div>
+        <div class="cap">关于</div><div>SBB v0.1.0 · main 6101b41</div>
+      </div>
+      <div class="panel sbody">
+        <div class="sec"><h2>主脑互通</h2><p>主脑之间能否直接说话。「审核」时消息先停在待批准列表，等你放行。</p>
+          <div class="frow"><div class="lab">默认</div><div class="seg"><span class="on">开</span><span>审核</span><span>关</span></div></div>
+          <div class="frow"><div class="lab">同组子脑直接互通</div><div class="toggle"></div><div class="val" style="color:#a0aaa4">teams.subsDirect</div></div>
+          <div class="frow"><div class="lab">按脑覆盖</div><div class="val">ops：审核 · lead：开（自主）</div><span class="btn">编辑</span></div>
+          <div class="frow"><div class="lab">额外放行的配对</div><div class="val">ops ↔ review</div><span class="btn">添加</span></div>
+        </div>
+        <div class="sec"><h2>额度下限</h2><p>周剩余低于下限时拒绝 spawn / ask；主脑账户再多留一段。</p>
+          <div class="frow"><div class="lab">周剩余下限</div><div class="input" style="min-width:90px">10 %</div></div>
+          <div class="frow"><div class="lab">主脑账户保留</div><div class="input" style="min-width:90px">20 %</div></div>
+        </div>
+        <div class="sec"><h2>启动器</h2><p>每个 CLI 拉起前先跑什么、用什么命令、用哪个 shell。对应 sbb policy spawn-*。</p>
+          <div class="frow"><div class="lab">shell</div><div class="input">/bin/zsh</div></div>
+          <div class="frow"><div class="lab">claude · 前置</div><div class="input">source /Users/steven/developer/eagerstudy/spxy.sh on</div></div>
+          <div class="frow"><div class="lab">claude · 参数</div><div class="input">--dangerously-skip-permissions</div></div>
+          <div class="frow"><div class="lab">codex · 参数</div><div class="input">--sandbox danger-full-access -a never</div></div>
+        </div>
+        <div class="sec"><h2>外观</h2>
+          <div class="frow"><div class="lab">主题</div><div class="seg"><span class="on">深色</span><span>浅色</span><span>跟随系统</span></div></div>
+          <div class="frow"><div class="lab">窗口透明度</div><div class="val">▬▬▬▬▬▬▬▬○▬▬  42%</div></div>
+          <div class="frow"><div class="lab">背景模糊</div><div class="val">▬▬▬▬▬▬▬○▬▬▬  28 px</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="status">
+      <div class="item"><span class="dot g" style="margin-right:2px"></span>tmux 已连接</div>
+      <div class="sep"></div>
+      <div class="item">吐字 总 <b>100.1</b> tok/s</div>
+      <div class="right"><div class="item"><span class="dot g" style="margin-right:2px"></span>主脑互通 开</div><div class="item"><span class="held">待批准 2</span></div><div class="item">v0.1.0</div></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
