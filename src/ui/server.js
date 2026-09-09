@@ -784,7 +784,13 @@ export async function createUiServer(opts = {}) {
   }
 
   /** @param {string} pathname @param {import('node:http').ServerResponse} res */
-  function serveStatic(pathname, res) {
+  /**
+   * Serve web/dist. `setCookie` is the token the first page load presented in `?t=`: the
+   * browser requests the page's <script>/<link> assets before any of the page's code runs, so
+   * the server has to hand the token back as the `sbb_ui` cookie or those asset loads get 401.
+   * @param {string} pathname @param {import('node:http').ServerResponse} res @param {string} [setCookie]
+   */
+  function serveStatic(pathname, res, setCookie) {
     if (!existsSync(dist)) {
       const hint = `sbb ui: web/dist is not built. Run: cd web && npm install && npm run build\n`;
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
@@ -806,6 +812,7 @@ export async function createUiServer(opts = {}) {
     res.writeHead(200, {
       'content-type': MIME[extname(file)] ?? 'application/octet-stream',
       'content-length': body.length,
+      ...(setCookie ? { 'set-cookie': `sbb_ui=${encodeURIComponent(setCookie)}; Path=/; SameSite=Strict` } : {}),
     });
     res.end(body);
   }
@@ -826,7 +833,7 @@ export async function createUiServer(opts = {}) {
       sendError(res, 405, 'usage', `${req.method} is not allowed`);
       return;
     }
-    serveStatic(path, res);
+    serveStatic(path, res, url.searchParams.get('t') ?? undefined);
   });
 
   const wss = new WebSocketServer({ noServer: true });

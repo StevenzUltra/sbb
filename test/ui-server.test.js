@@ -333,9 +333,21 @@ test('static files come from web/dist, and a missing build explains itself', asy
   const dist = join(TMP, 'dist');
   mkdirSync(dist, { recursive: true });
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>h1-console</title>');
+  mkdirSync(join(dist, 'assets'), { recursive: true });
+  writeFileSync(join(dist, 'assets', 'app.js'), 'console.log(1)');
   const withDist = await createUiServer({ port: 0, token: TOKEN, host, deps, dist });
   const distInfo = await withDist.start({ port: 0 });
   try {
+    // A browser loads <script src="/assets/app.js"> before the page's own code can set a
+    // cookie, so the first page load must hand the token back as the cookie.
+    const first = await fetch(`http://127.0.0.1:${distInfo.port}/?t=${TOKEN}`);
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get('set-cookie'), `sbb_ui=${TOKEN}; Path=/; SameSite=Strict`);
+    const asset = await fetch(`http://127.0.0.1:${distInfo.port}/assets/app.js`, { headers: { cookie: `sbb_ui=${TOKEN}` } });
+    assert.equal(asset.status, 200);
+    assert.equal(asset.headers.get('set-cookie'), null, 'no cookie is set when the token did not come by query');
+    assert.equal((await fetch(`http://127.0.0.1:${distInfo.port}/assets/app.js`)).status, 401);
+
     const res = await fetch(`http://127.0.0.1:${distInfo.port}/?t=${TOKEN}`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);

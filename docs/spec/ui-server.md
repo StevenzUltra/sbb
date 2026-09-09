@@ -9,8 +9,10 @@ console can do is a thin call into the same modules the CLI uses; no logic lives
 - Binds `127.0.0.1` only. A random 32-hex token is generated at start, written to
   `~/.sbb/ui-token` (0600) and appended to the URL the command prints/opens
   (`http://127.0.0.1:4789/?t=<token>`). Every request must carry it (`?t=` on the first page
-  load, then the `X-SBB-Token` header or the `sbb_ui` cookie the page sets). Missing or wrong
-  token: 401, no body.
+  load, then the `X-SBB-Token` header or the `sbb_ui` cookie). The server answers a static
+  request that presented `?t=` with `Set-Cookie: sbb_ui=<token>; Path=/; SameSite=Strict`, because
+  the browser fetches the page's script and stylesheet before any page code can set the cookie
+  itself; the page also stores the token for later loads. Missing or wrong token: 401, no body.
 - Actions run as the user. `approve` from the console counts as the user (the server is not a
   brain), so the approve authorization rule holds.
 
