@@ -10,7 +10,10 @@ const USAGE = `usage: sbb policy show [--json]
        sbb policy allow <a> <b>
        sbb policy deny <a> <b>
        sbb policy quota [--floor-weekly <n>] [--main-reserve <n>]
-       sbb policy spawn-args <cli> "<args>"`;
+       sbb policy spawn-args <cli> "<args>"
+       sbb policy spawn-preamble <cli> "<shell line run before the CLI>"
+       sbb policy spawn-command <cli> <launcher>
+       sbb policy spawn-shell <shell path>`;
 
 const OPTIONS = {
   json: { type: 'boolean' },
@@ -46,6 +49,9 @@ export async function run(argv, deps = {}) {
     // `<args>` may start with `-`, which strict parseArgs reads as another option
     // (`--permission-mode bypassPermissions`). This subcommand takes its tail verbatim.
     if (argv[0] === 'spawn-args') return spawnArgsCommand(argv.slice(1), deps);
+    if (argv[0] === 'spawn-preamble') return spawnMapCommand('preamble', argv.slice(1), deps);
+    if (argv[0] === 'spawn-command') return spawnMapCommand('command', argv.slice(1), deps);
+    if (argv[0] === 'spawn-shell') return spawnShellCommand(argv.slice(1), deps);
     const { values, positionals } = parse(argv, OPTIONS);
     if (values.help) {
       console.log(USAGE);
@@ -67,6 +73,12 @@ export async function run(argv, deps = {}) {
       console.log(`quota       floorWeekly=${config.quota.floorWeekly} mainReserve=${config.quota.mainReserve}`);
       const spawnEntries = Object.entries(config.spawn.cliArgs);
       console.log(`spawn       ${spawnEntries.length ? spawnEntries.map(([cli, text]) => `${cli}=${text}`).join(', ') : '-'}`);
+      const launcher = [
+        ...(config.spawn.shell ? [`shell=${config.spawn.shell}`] : []),
+        ...Object.entries(config.spawn.preamble ?? {}).map(([cli, text]) => `${cli}.preamble=${text}`),
+        ...Object.entries(config.spawn.command ?? {}).map(([cli, text]) => `${cli}.command=${text}`),
+      ];
+      console.log(`launcher    ${launcher.length ? launcher.join(', ') : '-'}`);
       console.log(`allow       ${config.allow.length ? config.allow.map(([a, b]) => `${a} <-> ${b}`).join(', ') : '-'}`);
       const brains = Object.entries(config.brains);
       console.log(`brains      ${brains.length ? brains.map(([id, e]) => `${id}${e.peers ? ` peers=${e.peers}` : ''}${e.autonomous ? ' autonomous' : ''}`).join(', ') : '-'}`);
@@ -169,6 +181,56 @@ function spawnArgsCommand(tail, deps) {
   }, { sbbDir: deps.sbbDir, hostname: deps.hostname });
   const value = config.spawn.cliArgs[cli];
   console.log(value === undefined ? `spawn.cliArgs.${cli} removed` : `spawn.cliArgs.${cli}=${value}`);
+  return EXIT.OK;
+}
+
+/**
+ * `sbb policy spawn-preamble <cli> "<line>"` / `spawn-command <cli> <launcher>` write
+ * `spawn.preamble[<cli>]` / `spawn.command[<cli>]`; an empty value removes the entry.
+ * @param {'preamble'|'command'} field @param {string[]} tail
+ * @param {{ updateConfig?: Function, sbbDir?: string, hostname?: string }} deps
+ */
+function spawnMapCommand(field, tail, deps) {
+  if (tail.includes('-h') || tail.includes('--help')) {
+    console.log(`usage: sbb policy spawn-${field} <cli> "<value>"   (an empty string removes the entry)`);
+    return EXIT.OK;
+  }
+  const cli = tail[0];
+  if (!cli) throw new UsageError(`policy spawn-${field} needs <cli> "<value>"`);
+  if (!BRAIN_CLIS.includes(cli)) throw new UsageError(`policy spawn-${field}: unknown cli "${cli}" (${BRAIN_CLIS.join('|')})`);
+  const rest = tail.slice(1);
+  const text = (rest[0] === '--' ? rest.slice(1) : rest).join(' ').trim();
+  const writeCfg = deps.updateConfig ?? updateConfig;
+  const config = writeCfg((current) => {
+    const map = { ...(current.spawn[field] ?? {}) };
+    if (text === '') delete map[cli];
+    else map[cli] = text;
+    return { ...current, spawn: { ...current.spawn, [field]: map } };
+  }, { sbbDir: deps.sbbDir, hostname: deps.hostname });
+  const value = config.spawn[field]?.[cli];
+  console.log(value === undefined ? `spawn.${field}.${cli} removed` : `spawn.${field}.${cli}=${value}`);
+  return EXIT.OK;
+}
+
+/**
+ * `sbb policy spawn-shell <path>` writes `spawn.shell` (the shell that runs the pane line,
+ * default sh); an empty value removes it.
+ * @param {string[]} tail @param {{ updateConfig?: Function, sbbDir?: string, hostname?: string }} deps
+ */
+function spawnShellCommand(tail, deps) {
+  if (tail.includes('-h') || tail.includes('--help')) {
+    console.log('usage: sbb policy spawn-shell <shell path>   (an empty string removes it; default sh)');
+    return EXIT.OK;
+  }
+  const text = tail.join(' ').trim();
+  const writeCfg = deps.updateConfig ?? updateConfig;
+  const config = writeCfg((current) => {
+    const spawn = { ...current.spawn };
+    if (text === '') delete spawn.shell;
+    else spawn.shell = text;
+    return { ...current, spawn };
+  }, { sbbDir: deps.sbbDir, hostname: deps.hostname });
+  console.log(config.spawn.shell === undefined ? 'spawn.shell removed (sh)' : `spawn.shell=${config.spawn.shell}`);
   return EXIT.OK;
 }
 

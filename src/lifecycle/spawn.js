@@ -62,6 +62,21 @@ export function spawnCliArgs(cli, { dir, readConfig = readPolicyConfig, onWarn }
 }
 
 /**
+ * Launcher settings for one CLI from `spawn.preamble[<cli>]`, `spawn.command[<cli>]` and
+ * `spawn.shell` (docs/spec/lifecycle.md "Launcher"; written by `sbb policy spawn-*`).
+ * @param {string} cli
+ * @param {{ dir?: string,
+ *           readConfig?: (opts: { sbbDir?: string }) => import('../policy/config.js').SbbConfig,
+ *           onWarn?: (message: string) => void }} [opts]
+ * @returns {{ preamble?: string, command?: string, shell?: string }}
+ */
+export function spawnLauncher(cli, { dir, readConfig = readPolicyConfig, onWarn } = {}) {
+  const spawn = readConfig({ sbbDir: dir, onWarn })?.spawn ?? {};
+  const pick = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
+  return { preamble: pick(spawn.preamble?.[cli]), command: pick(spawn.command?.[cli]), shell: pick(spawn.shell) };
+}
+
+/**
  * Effective extra CLI args, in order: config defaults, explicit `--cli-args`, plan-node
  * args. Every source is whitespace-split with quotes honoured.
  * @param {(string|string[]|undefined|null)[]} sources
@@ -212,6 +227,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     input.extraArgs,
     input.cliArgs,
   ]);
+  const launcher = (deps.spawnLauncher ?? spawnLauncher)(cli, { dir: deps.configDir, onWarn: deps.onWarn });
   const command = buildCommand({
     cli,
     model,
@@ -220,6 +236,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     account,
     name,
     accounts,
+    ...launcher,
   });
 
   const tmuxApi = deps.tmuxApi ?? tmuxLib;

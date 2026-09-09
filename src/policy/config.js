@@ -33,7 +33,7 @@ export function defaultConfig(opts = {}) {
     teams: { subsDirect: true },
     allow: [],
     quota: { ...DEFAULT_QUOTA },
-    spawn: { cliArgs: {} },
+    spawn: { cliArgs: {}, preamble: {}, command: {} },
   };
 }
 
@@ -80,6 +80,24 @@ export function mergeConfig(raw, opts = {}) {
     const text = value.trim();
     if (text !== '') cliArgs[String(cli)] = text;
   }
+  // Launcher settings per CLI (docs/spec/lifecycle.md "Launcher"): a shell preamble run in
+  // the pane before the CLI starts (proxy scripts, extra env), a command that replaces the
+  // CLI binary (a personal launcher that forwards its arguments), and the shell that runs
+  // the pane line. Blank or non-string values are dropped.
+  const spawnRaw = source.spawn && typeof source.spawn === 'object' ? source.spawn : {};
+  const stringMap = (raw) => {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const [cli, value] of Object.entries(raw)) {
+      if (typeof value !== 'string') continue;
+      const text = value.trim();
+      if (text !== '') out[String(cli)] = text;
+    }
+    return out;
+  };
+  const preamble = stringMap(spawnRaw.preamble);
+  const command = stringMap(spawnRaw.command);
+  const shell = typeof spawnRaw.shell === 'string' && spawnRaw.shell.trim() !== '' ? spawnRaw.shell.trim() : undefined;
   return {
     machineTag: typeof source.machineTag === 'string' && source.machineTag.trim() !== ''
       ? source.machineTag.trim()
@@ -93,7 +111,7 @@ export function mergeConfig(raw, opts = {}) {
       floorWeekly: percent(quota.floorWeekly, base.quota.floorWeekly),
       mainReserve: percent(quota.mainReserve, base.quota.mainReserve),
     },
-    spawn: { cliArgs },
+    spawn: { cliArgs, preamble, command, ...(shell ? { shell } : {}) },
     ...(TERMINALS.includes(String(source.terminal ?? '').toLowerCase())
       ? { terminal: String(source.terminal).toLowerCase() }
       : {}),
@@ -137,4 +155,4 @@ export function updateConfig(mutate, opts = {}) {
   return writeConfig(next, opts);
 }
 
-/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, teams: { subsDirect: boolean }, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string> }, terminal?: 'ghostty'|'iterm2' }} SbbConfig */
+/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, teams: { subsDirect: boolean }, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string>, preamble: Record<string, string>, command: Record<string, string>, shell?: string }, terminal?: 'ghostty'|'iterm2' }} SbbConfig */

@@ -282,3 +282,21 @@ test('EXIT_COMMANDS: every CLI with a known exit command is listed', () => {
   assert.deepEqual(EXIT_COMMANDS, { claude: '/exit', codex: '/quit', agy: '/quit', cursor: '/exit' });
   assert.equal(existsSync('/nonexistent'), false);
 });
+
+test('buildCommand: launcher settings add a preamble, replace the binary and pick the shell', () => {
+  const built = buildCommand({
+    cli: 'claude', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS,
+    preamble: 'source /Users/me/spxy.sh on', command: '/Users/me/bin/claude-launch', shell: '/bin/zsh',
+    extraArgs: '--dangerously-skip-permissions',
+  });
+  assert.deepEqual(built.paneCommand, ['/bin/zsh', '-c', built.shellLine], 'the user shell runs the line');
+  const [first, second] = built.shellLine.split('\n');
+  assert.equal(first, 'source /Users/me/spxy.sh on', 'the preamble is its own statement');
+  assert.equal(second, 'exec env CLAUDE_CONFIG_DIR=/tmp/home/.ai-account-a/claude /Users/me/bin/claude-launch --append-system-prompt-file /tmp/b.md --dangerously-skip-permissions');
+  assert.equal(built.argv[0], '/Users/me/bin/claude-launch');
+
+  const plain = buildCommand({ cli: 'claude', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, preamble: '  ', command: '', shell: '' });
+  assert.deepEqual(plain.paneCommand, ['sh', '-c', plain.shellLine], 'blank settings mean the defaults');
+  assert.ok(!plain.shellLine.includes('\n'));
+  assert.throws(() => buildCommand({ cli: 'nope', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, command: 'x' }), /unknown cli/);
+});

@@ -105,3 +105,25 @@ written to that `from` socket (auth line not required between SBB inboxes; send 
 with an empty token for symmetry: `{"type":"auth","token":""}`). `sbb reply` starts its own
 inbox, sends with `from`, waits up to 2 s for that frame and reports `delivered via=uds-inbox`
 instead of `queued`. Claude sessions never send this frame; do not wait for it from them.
+
+## Launcher
+
+Many people do not start a CLI by its bare name: a personal script turns a proxy on, sets
+environment, adds a permission flag. `sbb spawn` reproduces that per CLI from
+`~/.sbb/config.json` (policy.md): the pane line becomes
+
+```
+<spawn.preamble[cli]>
+exec env CLAUDE_CONFIG_DIR=... <spawn.command[cli] or the CLI binary> <model> <brief> <cliArgs>
+```
+
+run by `spawn.shell` (default `sh`). The preamble is a plain statement, so a failing proxy
+script prints its error and the CLI still starts; a replacement command must forward the
+arguments SBB appends (`"$@"`). Example, a launcher that sources a proxy script and skips
+permission prompts:
+
+```
+sbb policy spawn-shell /bin/zsh
+sbb policy spawn-preamble claude "source /path/to/spxy.sh on"
+sbb policy spawn-args claude "--dangerously-skip-permissions"
+```
