@@ -52,8 +52,9 @@ accepts input:
   is not blank before the next output.
 - Client → server text frames are JSON: `{ "type": "input", "data": "<keys>" }` → `send-keys -l` for
   printable text; `{ "type": "key", "name": "Enter"|"Escape"|"C-c"|... }` → `send-keys <name>`;
-  `{ "type": "resize", "cols", "rows" }` → `resize-pane -t %<pane> -x cols -y rows` only when the pane
-  has no other attached client (never resize a pane the user is looking at in a terminal).
+  `{ "type": "resize", "cols", "rows" }` → `resize-pane -t %<pane> -x cols -y rows` (a detached single-pane
+  window needs `resize-window` instead; do both) only when the pane has no other attached client
+  (never resize a pane the user is looking at in a terminal).
 - Input frames are refused (`{ "type": "refused", "reason": "input_off" }`) unless the socket first sent
   `{ "type": "mode", "input": true }`; the console sends that when the user clicks 在此输入.
 
