@@ -1,0 +1,52 @@
+{
+  "_note": "Scripted ambient stream replayed by src/api/fixture.js. It starts after startDelayMs so a screenshot taken on load shows the snapshot exactly; ?events=0 turns it off.",
+  "startDelayMs": 5000,
+  "timeline": [
+    {
+      "at": 0,
+      "event": "tps",
+      "data": {
+        "list": [
+          { "brainId": "SSL-0045", "tps": 64, "tokens60s": 3840, "source": "claude-jsonl" },
+          { "brainId": "SSL-0047", "tps": 121, "tokens60s": 7260, "source": "codex-rollout" },
+          { "brainId": "SSL-0048", "tps": 291, "tokens60s": 17460, "source": "codex-rollout" },
+          { "brainId": "SSL-0046", "tps": 0, "tokens60s": 0, "source": "codex-rollout" }
+        ],
+        "total": 476
+      }
+    },
+    {
+      "at": 4000,
+      "event": "brain",
+      "data": {
+        "id": "SSL-0047", "name": "ios", "account": "default", "cli": "codex",
+        "model": "gpt-6-astra", "modelLabel": "gpt-6-astra", "role": "sub",
+        "status": "busy", "parent": "SSL-0045", "team": "lead", "paneId": "%47",
+        "coord": "sbb-rehearsal:5.1", "cwd": "/Users/steven/developer/sbb",
+        "lastMessage": "正在翻译 README"
+      }
+    },
+    {
+      "at": 7000,
+      "event": "receipt",
+      "data": {
+        "at": "05:48", "from": "ios", "to": "lead", "status": "delivered", "via": "reply",
+        "preview": "翻译完成：docs/README.zh.md（56 行，代码块原样保留）…", "msgId": "8e9469c2"
+      }
+    },
+    {
+      "at": 10000,
+      "event": "tps",
+      "data": {
+        "list": [
+          { "brainId": "SSL-0045", "tps": 58, "tokens60s": 3480, "source": "claude-jsonl" },
+          { "brainId": "SSL-0047", "tps": 133, "tokens60s": 7980, "source": "codex-rollout" },
+          { "brainId": "SSL-0048", "tps": 286, "tokens60s": 17160, "source": "codex-rollout" },
+          { "brainId": "SSL-0046", "tps": 12, "tokens60s": 720, "source": "codex-rollout" }
+        ],
+        "total": 489
+      }
+    },
+    { "at": 15000, "event": "heartbeat", "data": {} }
+  ]
+}
