@@ -42,7 +42,9 @@
       "coord": "sbb-rehearsal:4.1",
       "session": "sbb-rehearsal",
       "cwd": "/Users/steven/developer/sbb",
-      "lastMessage": "空闲"
+      "lastMessage": "空闲",
+      "effort": "max",
+      "effortApplied": "xhigh"
     },
     {
       "id": "SSL-0047",

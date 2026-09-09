@@ -1,3 +1,5 @@
+import { cliLabel } from './quota.js';
+
 // Rules behind 新建 (web/src/components/SpawnDialog.vue). Kept out of the SFC so the account
 // x CLI quota pick, the per-account CLI and model lists, the working-directory quick picks
 // and the drag clamp are testable without a DOM (test/web-spawn.test.js).
@@ -155,23 +157,50 @@ export function modelSuggestions(catalog, { account, cli, custom = null } = {}) 
   return out;
 }
 
-/** Footer line: the pair, the model and effort that will actually be passed to the CLI. */
-export function footerText({ chip = null, account = '', cli = '', model = '', effort = '' } = {}) {
+/** Footer line: the pair, the model, the effort that will be passed, and any downgrade hint. */
+export function footerText({ chip = null, account = '', cli = '', model = '', effort = '', note = '' } = {}) {
   const base = chip?.label ?? `${account} · ${cli}`;
   const id = typeof model === 'string' && model.trim() !== '' ? model.trim() : '默认';
   const level = typeof effort === 'string' ? effort.trim() : '';
   const quota = chip ? (typeof chip.pct === 'number' ? `剩余 ${chip.pct}%` : '按量') : '额度未知';
-  return [base, id, level, quota].filter((part) => part !== '').join(' · ');
+  return [base, id, level, quota, typeof note === 'string' ? note.trim() : '']
+    .filter((part) => part !== '').join(' · ');
 }
 
-// Effort (follow-up 2, 2026-09-10): only the CLIs whose launch command has a thinking-effort
-// switch take it (src/lifecycle/launch.js: claude --effort, codex -c model_reasoning_effort=).
-export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'];
-const EFFORT_CLIS = ['claude', 'codex'];
+// Effort (follow-up 2, 2026-09-10; `max` added same day): only the CLIs whose launch command has a
+// thinking-effort switch take it (src/lifecycle/launch.js: claude --effort, codex
+// -c model_reasoning_effort=). The server downgrades a level a CLI cannot do and records the
+// level it really used as `effortApplied`; the ceiling below mirrors that rule so the dialog
+// can warn before the spawn.
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const EFFORT_CEILING = Object.freeze({ claude: 'max', codex: 'xhigh' });
 
 /** @param {string} cli @returns {string[]} empty means "this CLI has no effort switch: hide it" */
 export function effortOptions(cli) {
-  return EFFORT_CLIS.includes(String(cli ?? '')) ? [...EFFORT_LEVELS] : [];
+  return EFFORT_CEILING[String(cli ?? '')] ? [...EFFORT_LEVELS] : [];
+}
+
+/**
+ * The level the CLI will actually run. Unknown levels pass through (the server decides).
+ * @param {string} cli @param {string} level @returns {string} '' when the CLI takes no effort
+ */
+export function effortApplied(cli, level) {
+  const want = typeof level === 'string' ? level.trim() : '';
+  if (want === '') return '';
+  const ceiling = EFFORT_CEILING[String(cli ?? '')];
+  if (!ceiling) return '';
+  const index = EFFORT_LEVELS.indexOf(want);
+  if (index < 0) return want;
+  return EFFORT_LEVELS[Math.min(index, EFFORT_LEVELS.indexOf(ceiling))];
+}
+
+/** '' when the level runs as chosen, else 「Codex 最高 xhigh，将按 xhigh 运行」. */
+export function effortNote(cli, level) {
+  const want = typeof level === 'string' ? level.trim() : '';
+  if (want === '') return '';
+  const applied = effortApplied(cli, want);
+  if (!applied || applied === want) return '';
+  return `${cliLabel(cli)} 最高 ${applied}，将按 ${applied} 运行`;
 }
 
 // Names are addresses too, so the server takes any script, digits, - _ . and keeps case, but

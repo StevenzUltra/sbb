@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useSbb } from '../store/sbb.js';
 import {
-  clampOffset, cliOptions, cwdPicks, effortOptions, footerText, modelOptions,
+  clampOffset, cliOptions, cwdPicks, effortNote, effortOptions, footerText, modelOptions,
   modelSuggestions, quotaChipFor, quotaLabel, readCustomModels, readDialogPosition,
   sanitizeName, writeCustomModel, writeDialogPosition,
 } from '../lib/spawn.js';
@@ -46,7 +46,7 @@ const modelPicks = computed(() =>
 const footer = computed(() =>
   footerText({
     chip: selectedQuota.value, account: form.account, cli: cli.value,
-    model: form.model, effort: form.effort,
+    model: form.model, effort: form.effort, note: effortNote(cli.value, form.effort),
   }));
 const hasBridge = computed(() => typeof window !== 'undefined' && Boolean(window.sbbDesktop?.pickFolder));
 

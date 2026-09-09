@@ -2,7 +2,7 @@
 // `VITE_SBB_FIXTURE=1 npm run dev` (or `npm run build`) renders every screen with no server.
 // ?scene=held|transfer applies an overlay from fixtures/scenes.json; ?events=0 stops the
 // scripted stream (it already waits fixtures/events.json startDelayMs before the first tick).
-import { NAME_RE } from '../lib/spawn.js';
+import { effortApplied, NAME_RE } from '../lib/spawn.js';
 import snapshot from '../../fixtures/state.json';
 import events from '../../fixtures/events.json';
 import panes from '../../fixtures/panes.json';
@@ -246,6 +246,8 @@ export function createFixtureClient() {
         model: body.model ?? 'claude-haiku-4-5',
         modelLabel: body.modelLabel ?? body.model ?? 'claude-haiku-4-5',
         ...(body.effort ? { effort: body.effort } : {}),
+        ...(body.effort && effortApplied(body.cli ?? 'claude', body.effort)
+          ? { effortApplied: effortApplied(body.cli ?? 'claude', body.effort) } : {}),
         role: body.role ?? 'sub',
         status: 'busy',
         parent: parent?.id ?? null,

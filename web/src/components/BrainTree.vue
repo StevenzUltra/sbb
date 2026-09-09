@@ -12,7 +12,7 @@ function detail(brain) {
   const parts = [
     `${brain.account} / ${brain.cli}`,
     brain.modelLabel ?? brain.model,
-    brain.effort ? `effort ${brain.effort}` : null,
+    (brain.effortApplied ?? brain.effort) ? `effort ${brain.effortApplied ?? brain.effort}` : null,
     STATUS_LABEL[brain.status] ?? brain.status,
   ];
   return parts.filter(Boolean).join(' · ');
