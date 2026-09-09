@@ -2,7 +2,7 @@
 // (blocked / moderated / held / approve) exercised through the real CLI entry points.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { run as tellRun } from '../src/cli/tell.js';
 import { run as approveRun } from '../src/cli/approve.js';
@@ -100,6 +100,34 @@ test('policy config: defaults, merge drops invalid values, write is atomic 0600'
     writeConfig(merged);
     assert.equal(statSync(join(home, '.sbb', 'config.json')).mode & 0o777, 0o600);
     assert.deepEqual(readConfig(), merged);
+  } finally {
+    restore();
+  }
+});
+
+test('policy config: terminal survives a policy write-back, invalid values are dropped', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    // h1's `sbb ui` reads `~/.sbb/config.json` `terminal` (docs/spec/ui-server.md, "Go to
+    // terminal"); `sbb policy` rewrites the whole file, so mergeConfig must carry the key.
+    assert.equal('terminal' in readConfig(), false, 'no terminal is invented when the file has none');
+    writeConfig({ ...mergeConfig({}), terminal: 'iterm2' });
+    assert.equal(readConfig().terminal, 'iterm2');
+
+    assert.equal((await captureLog(() => policyRun(['peers', 'off']))).result, 0);
+    const after = readConfig();
+    assert.equal(after.peers, 'off');
+    assert.equal(after.terminal, 'iterm2', 'the write-back keeps the terminal');
+    assert.equal(
+      JSON.parse(readFileSync(join(home, '.sbb', 'config.json'), 'utf8')).terminal,
+      'iterm2',
+      'and it is still on disk',
+    );
+
+    assert.equal(mergeConfig({ terminal: 'Ghostty' }).terminal, 'ghostty', 'normalized to lower case');
+    assert.equal('terminal' in mergeConfig({ terminal: 'kitty' }), false, 'an unknown terminal is dropped');
+    assert.equal('terminal' in mergeConfig({ terminal: 7 }), false);
   } finally {
     restore();
   }
