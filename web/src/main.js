@@ -3,7 +3,6 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
-import '@xterm/xterm/css/xterm.css';
 import './style.css';
 
 // Inside the desktop app (docs/spec/desktop.md) the window is a translucent dark surface:
