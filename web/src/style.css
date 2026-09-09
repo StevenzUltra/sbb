@@ -304,3 +304,28 @@
 .pane-host .xterm-viewport::-webkit-scrollbar {
   display: none;
 }
+
+/* Desktop shell (docs/spec/desktop.md): the macOS window is a vibrancy surface, so the page
+   paints only a thin dark tint and the panels are translucent glass over it. */
+:root[data-shell="desktop"].dark body {
+  background-color: rgba(10, 13, 11, 0.42);
+  background-image: radial-gradient(1200px 600px at 20% -10%, rgba(45, 107, 79, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% 100%, rgba(229, 168, 53, 0.06), transparent 60%);
+}
+:root[data-shell="desktop"].dark {
+  --es-glass-fill: rgba(16, 20, 18, 0.46);
+  --es-glass-stroke: rgba(255, 255, 255, 0.10);
+  --es-bar-fill: rgba(12, 15, 13, 0.38);
+  --es-bar-stroke: rgba(255, 255, 255, 0.08);
+  --es-shadow-glass: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --es-terminal-fill: rgba(6, 8, 7, 0.62);
+}
+:root[data-shell="desktop"].dark .glass,
+:root[data-shell="desktop"].dark .bar {
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+}
+:root[data-shell="desktop"].dark .pane-frame {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}

@@ -12,8 +12,13 @@ server and shows its tokenized URL.
 2. Start `sbb ui --port 0 --no-open --json` (the `sbb` on PATH, else the copy bundled under
    `Contents/Resources/sbb` run with the system Node.js, 22.13 or newer) and read the
    `{ url, port, token }` document it prints.
-3. Open a 1440x900 window (`titleBarStyle: hiddenInset`), load the URL, and inject a few
-   lines of CSS so the header leaves room for the traffic lights and drags the window.
+3. Open a 1440x900 window (`titleBarStyle: hiddenInset`, macOS vibrancy `under-window`
+   with a transparent background colour), load the URL with `&shell=desktop`, and inject a
+   few lines of CSS so the header leaves room for the traffic lights and drags the window.
+   With `shell=desktop` the page marks `<html data-shell="desktop">`, defaults to the dark
+   theme, paints only a thin dark tint instead of an opaque ground, and turns the panels and
+   the terminal frame into translucent glass (`web/src/style.css`), so the desktop looks like
+   a terminal with background blur.
 4. On quit, stop the server. If the server dies, the app quits.
 
 Missing tmux or Node.js is an error dialog, not a blank window.
