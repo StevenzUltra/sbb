@@ -69,3 +69,11 @@ open them in a browser). Match them: brand green `#2d6b4f` / `#1e3a32`, light gr
 - Every action shows its receipt state inline (delivered / queued / unverified / blocked) with the
   same wording as the CLI.
 - Lighthouse performance ≥ 90 on the built app; first paint under 300 ms from `sbb ui`.
+
+## Column widths
+
+The brain tree (left) and the brain pane (right) are resizable: a 12 px handle sits in each
+gutter, drag it to change that column, double-click to restore the default (300 px / 460 px).
+Widths are clamped (`web/src/lib/layout.js`: tree 220-560, pane 360-960, the stream keeps at
+least 420 px) and remembered per browser in `localStorage` (`sbb-layout`). Below 1180 px the
+pane becomes a drawer and only the tree handle remains.
