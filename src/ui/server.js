@@ -2,7 +2,7 @@
 // Binds 127.0.0.1 only, requires a token on every request, and does nothing itself: every
 // action is a call into the module the matching CLI command already uses.
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,23 +17,20 @@ import { getPlan, listPlans } from '../policy/plans.js';
 import { catalog } from '../quota/catalog.js';
 import { readQuota } from '../quota/usage-guard.js';
 import { getBrain, listBrains } from '../registry/brains.js';
-import { readReceiptEntries } from '../registry/receipts.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { roster as defaultRoster } from '../registry/roster.js';
 import { closeInboxes } from '../transports/claude-uds.js';
 import { startInbox } from '../transports/uds-inbox.js';
 import { deliver, deliveryInboxDir, parsePeerFrame } from '../cli/util.js';
 import { createPaneStream } from './pane-stream.js';
+import { snapshot as dataSnapshot, watch as dataWatch } from './data.js';
 import { goToTerminal } from './switch.js';
-import { DEFAULT_LIMIT, listTeamLogs, messagesFor, teamLog, transcriptFor } from './history.js';
+import { DEFAULT_LIMIT, messagesFor, teamLog, transcriptFor } from './history.js';
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 /** The port the spec documents. */
 export const DEFAULT_PORT = 4789;
-
-/** `/api/state` carries the newest receipt-log entries, newest first (docs/spec/ui-server.md). */
-export const RECEIPTS_LIMIT = 500;
 
 /** Static build of the console. `sbb ui` serves it when it exists. */
 export const WEB_DIST = join(ROOT, 'web', 'dist');
@@ -191,23 +188,37 @@ export async function createUiServer(opts = {}) {
   const streams = new Map();
   /** @type {Set<any>} */
   const sseClients = new Set();
-  /** @type {import('node:fs').FSWatcher[]} */
-  const watchers = [];
   /** @type {NodeJS.Timeout[]} */
   const timers = [];
   /** @type {any} */
   let inbox;
-  /** @type {any} */
-  let watcherState = null;
+  /** @type {{ close: () => void }|null} */
+  let watcher = null;
   let closed = false;
 
   // ---------------------------------------------------------------- state
 
   /**
+   * `/api/state` comes from src/ui/data.js `snapshot()` (docs/spec/ui-server.md). The server
+   * adds only what data.js does not own: live roster status, its own TPS samples, and the
+   * flattened account x CLI model catalog the spawn dialog reads.
    * @param {Record<string, any>} [extra]
    */
   async function buildState(extra = {}) {
-    const brains = listBrains();
+    const base = await (deps.snapshot ?? dataSnapshot)({
+      sbbDir: stateDir,
+      readQuota: deps.readQuota,
+      readConfig: deps.readConfig,
+      listHeld: deps.listHeld,
+      listPlans: deps.listPlans,
+      listAllClaims: deps.listAllClaims,
+      readReceipts: deps.readReceipts,
+      listBrains: deps.listBrains,
+      accountList: deps.accountList,
+      allChannels: deps.allChannels,
+      tps: deps.tps,
+    });
+    const brains = base.brains ?? [];
     /** @type {import('../registry/roster.js').RosterRow[]} */
     let rows = [];
     try {
@@ -228,39 +239,61 @@ export async function createUiServer(opts = {}) {
       };
     });
     return {
+      ...base,
       brains: enriched,
-      tree: brains.map((b) => ({ id: b.id, name: b.name, role: b.role, parent: b.parent })),
-      accounts: (deps.catalog ?? catalog)(),
-      quota: await (deps.readQuota ?? readQuota)({}),
-      policy: (deps.readConfig ?? readConfig)({}),
-      held: (deps.listHeld ?? listHeld)({}),
-      plans: (deps.listPlans ?? listPlans)({}),
-      claims: (deps.listAllClaims ?? listAllClaims)({}),
-      tps: [...tpsValues.values()],
-      teams: listTeamLogs(),
-      receipts: (deps.readReceipts ?? readReceiptEntries)().slice(-RECEIPTS_LIMIT).reverse(),
-      version: version(),
+      tree: consoleTree(brains),
+      catalog: flattenCatalog((deps.catalog ?? catalog)()),
+      tps: tpsPayload(),
+      teams: (base.teams ?? []).map((team) => ({ ...team, messages: team.messages ?? [] })),
       ...extra,
     };
   }
 
-  /** @returns {string} */
-  function version() {
-    try {
-      return JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
-    } catch {
-      return 'unknown';
+  /** OrgChart.vue renders a nested tree rooted at the user, with `kind` on every node. */
+  function consoleTree(brains) {
+    const byId = new Map(brains.map((b) => [b.id, { id: b.id, name: b.name, kind: 'brain', children: [] }]));
+    /** @type {Record<string, any>[]} */
+    const roots = [];
+    for (const brain of brains) {
+      const node = byId.get(brain.id);
+      const parent = brain.parent ? byId.get(brain.parent) : undefined;
+      if (parent) parent.children.push(node);
+      else roots.push(node);
     }
+    return { id: 'user', name: '你', kind: 'user', children: roots };
+  }
+
+  /** SpawnDialog.vue filters `{ cli, model }` rows out of the account x CLI catalog. */
+  function flattenCatalog(rows) {
+    return rows.flatMap((row) => (row.models ?? []).map((model) => ({
+      account: row.account,
+      cli: row.cli,
+      model: model.id,
+      label: model.label ?? null,
+    })));
+  }
+
+  /** TpsBar.vue reads `{ list, total }` (web/src/store/sbb.js). */
+  function tpsPayload() {
+    const list = [...tpsValues.values()];
+    const tokens = list.reduce((sum, row) => sum + (row.tokens60s ?? 0), 0);
+    const activeMs = list.reduce((sum, row) => sum + (row.activeMs ?? 0), 0);
+    return { list, total: activeMs > 0 ? Number((tokens / (activeMs / 1000)).toFixed(2)) : 0 };
   }
 
   // ---------------------------------------------------------------- events
 
-  /** @param {Record<string, any>} event */
-  function emit(event) {
-    const payload = JSON.stringify(event);
+  /**
+   * One SSE frame per named event. docs/spec/ui-server.md lists the nine names and says each
+   * carries the full updated object; web/src/api/http.js parses `msg.data` directly, so there
+   * is no envelope.
+   * @param {string} name @param {any} data
+   */
+  function emitEvent(name, data) {
+    const payload = `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const res of sseClients) {
       try {
-        res.write(`data: ${payload}\n\n`);
+        res.write(payload);
       } catch {
         sseClients.delete(res);
       }
@@ -268,116 +301,64 @@ export async function createUiServer(opts = {}) {
   }
 
   /**
-   * Interim state watcher. `src/ui/data.js` (h3) owns this in the final design; until it
-   * lands the server needs a way to emit events, so this private version watches the same
-   * paths teams.md lists. It exports nothing and is replaced by data.js when present.
+   * A server-side problem is not one of the nine event names and the console has no handler
+   * for it, so it goes out as an SSE comment: visible in devtools, never a stray event.
+   * @param {unknown} detail
+   */
+  function emitComment(detail) {
+    const line = `: sbb ui ${String(detail).replace(/[\r\n]+/g, ' ')}\n\n`;
+    for (const res of sseClients) {
+      try {
+        res.write(line);
+      } catch {
+        sseClients.delete(res);
+      }
+    }
+  }
+
+  /**
+   * State events come from src/ui/data.js `watch()`; this maps its kinds onto the nine
+   * documented event names and the payload each console handler expects.
    */
   function startWatcher() {
-    watcherState = {
-      receipts: readReceiptEntries().length,
-      brains: snapshotJson(listBrains(), (b) => b.id),
-      held: JSON.stringify(listHeld({})),
-      plans: JSON.stringify(listPlans({})),
-      claims: JSON.stringify(listAllClaims({})),
-      policy: JSON.stringify(readConfig({})),
-      teams: new Map(listTeamLogs().map((t) => [t.mainId, t.mtimeMs])),
-    };
-    const paths = [
-      join(stateDir, 'brains'),
-      join(stateDir, 'log'),
-      join(stateDir, 'held'),
-      join(stateDir, 'plans'),
-      join(stateDir, 'claims'),
-      join(stateDir, 'teams'),
-      join(stateDir, 'config.json'),
-    ];
-    let timer = null;
-    const onChange = () => {
-      if (timer) return;
-      timer = setTimeout(() => {
-        timer = null;
-        rescan().catch((err) => emit({ type: 'error', error: String(err?.message ?? err) }));
-      }, 150);
-      timer.unref?.();
-    };
-    for (const path of paths) {
-      try {
-        watchers.push(watch(path, { persistent: false }, onChange));
-      } catch {
-        // a path that does not exist yet is watched as soon as it is created by the next scan
+    watcher = (deps.watch ?? dataWatch)((kind, object) => {
+      switch (kind) {
+        case 'brain': {
+          if (object?.removed) return emitEvent('brain', { id: object.id, deleted: true });
+          const brains = (deps.listBrains ?? listBrains)();
+          return emitEvent('brain', { ...object, tree: consoleTree(brains) });
+        }
+        case 'receipt':
+          return emitEvent('receipt', object);
+        case 'message':
+          return emitEvent('message', object);
+        case 'held':
+          return emitEvent('held', (deps.listHeld ?? listHeld)({ sbbDir: stateDir }));
+        case 'plan':
+          return emitEvent('plan', { ...object, id: object.id ?? object.planId });
+        case 'claim':
+          return emitEvent('claim', (deps.listAllClaims ?? listAllClaims)({ sbbDir: stateDir }));
+        case 'quota':
+          return emitEvent('quota', object);
+        case 'tps':
+          return emitEvent('tps', tpsPayload());
+        case 'policy':
+          return emitEvent('policy', object);
+        default:
+          return undefined; // data.js owns the vocabulary; the spec names nine events
       }
-    }
-  }
-
-  /** @param {any[]} list @param {(item: any) => string} key */
-  function snapshotJson(list, key) {
-    /** @type {Map<string, string>} */
-    const out = new Map();
-    for (const item of list) out.set(String(key(item)), JSON.stringify(item));
-    return out;
-  }
-
-  async function rescan() {
-    const state = watcherState;
-    if (!state) return;
-    // receipts: append-only log, emit only the new lines
-    const entries = readReceiptEntries();
-    for (const entry of entries.slice(state.receipts)) emit({ type: 'receipt', receipt: entry });
-    state.receipts = entries.length;
-    // brains
-    const brains = listBrains();
-    const nextBrains = snapshotJson(brains, (b) => b.id);
-    for (const [id, json] of nextBrains) {
-      if (state.brains.get(id) !== json) {
-        emit({ type: 'brain', brain: brains.find((b) => b.id === id) });
-      }
-    }
-    for (const id of state.brains.keys()) {
-      if (!nextBrains.has(id)) emit({ type: 'brain', brain: { id, retired: true } });
-    }
-    state.brains = nextBrains;
-    // collections
-    const collections = [
-      ['held', () => listHeld({}), 'held'],
-      ['plan', () => listPlans({}), 'plans'],
-      ['claim', () => listAllClaims({}), 'claims'],
-    ];
-    for (const [key, read, field] of collections) {
-      const json = JSON.stringify(read());
-      if (state[key] !== json) {
-        state[key] = json;
-        emit({ type: key, [field]: JSON.parse(json) });
-      }
-    }
-    const policy = JSON.stringify(readConfig({}));
-    if (state.policy !== policy) {
-      state.policy = policy;
-      emit({ type: 'policy', policy: JSON.parse(policy) });
-    }
-    const teams = new Map(listTeamLogs().map((t) => [t.mainId, t.mtimeMs]));
-    for (const [id, mtimeMs] of teams) {
-      if (state.teams.get(id) !== mtimeMs) emit({ type: 'message', team: id, mainId: id });
-    }
-    state.teams = teams;
+    }, { sbbDir: stateDir });
   }
 
   async function refreshTps() {
     let brains = [];
     try {
-      brains = listBrains();
+      brains = (deps.listBrains ?? listBrains)();
     } catch {
       return;
     }
-    for (const result of await tps.sampleAll(brains, {})) {
-      tpsValues.set(result.brainId, result);
-      emit({ type: 'tps', tps: result });
-    }
-    const tokens = [...tpsValues.values()].reduce((sum, r) => sum + (r.tokens60s ?? 0), 0);
-    const activeMs = [...tpsValues.values()].reduce((sum, r) => sum + (r.activeMs ?? 0), 0);
-    emit({
-      type: 'tps',
-      tps: { total: activeMs > 0 ? Number((tokens / (activeMs / 1000)).toFixed(2)) : null, tokens60s: tokens, activeMs },
-    });
+    for (const result of await tps.sampleAll(brains, {})) tpsValues.set(result.brainId, result);
+    emitEvent('tps', tpsPayload());
   }
 
   /** The server keeps ONE inbox for its whole life: peer replies and receipts land here. */
@@ -387,15 +368,15 @@ export async function createUiServer(opts = {}) {
     inbox = await start({ dir: deps.inboxDir ?? deliveryInboxDir() });
     inbox.on('message', (frame) => {
       try {
-        emit({ type: 'message', message: parsePeerFrame(frame) });
+        emitEvent('message', parsePeerFrame(frame));
       } catch (err) {
-        emit({ type: 'error', error: String(err?.message ?? err) });
+        emitComment(err?.message ?? err);
       }
     });
     inbox.on('receipt', (frame) => {
-      emit({ type: 'receipt', receipt: { kind: 'peer-status', msgId: frame?.orig_msg_id ?? null, status: frame?.status ?? null } });
+      emitEvent('receipt', { kind: 'peer-status', msgId: frame?.orig_msg_id ?? null, status: frame?.status ?? null });
     });
-    inbox.on('error', (err) => emit({ type: 'error', error: String(err?.message ?? err) }));
+    inbox.on('error', (err) => emitComment(err?.message ?? err));
     return inbox;
   }
 
@@ -626,8 +607,8 @@ export async function createUiServer(opts = {}) {
     // afterIdle waits for the brain to finish its turn: answer immediately and let the
     // command run on, emitting `brain` when it lands (docs/spec/ui-server.md).
     runCli('move', [ref, '--to', to, '--after-idle', '--yes', '--json'])
-      .then((out) => emit({ type: 'brain', brain: getBrain(ref) ?? { ref }, move: { to, status: out.code === 0 ? 'moved' : 'failed', detail: out.stderr } }))
-      .catch((err) => emit({ type: 'error', error: String(err?.message ?? err) }));
+      .then((out) => emitEvent('brain', { ...(getBrain(ref) ?? { ref }), move: { to, status: out.code === 0 ? 'moved' : 'failed', detail: out.stderr } }))
+      .catch((err) => emitComment(err?.message ?? err));
     return sendJson(res, 202, { pending: true, mode, to });
   }
 
@@ -654,7 +635,7 @@ export async function createUiServer(opts = {}) {
     const out = await runCli('policy', [...argv, '--json']);
     if (out.code !== 0) return cliResult(res, out, 'policy');
     const config = (deps.readConfig ?? readConfig)({});
-    emit({ type: 'policy', policy: config });
+    emitEvent('policy', config);
     return sendJson(res, 200, config);
   }
 
@@ -673,7 +654,7 @@ export async function createUiServer(opts = {}) {
       if (out.code !== 0) return cliResult(res, out, 'claim');
     }
     const rows = (deps.listAllClaims ?? listAllClaims)({});
-    emit({ type: 'claim', claims: rows });
+    emitEvent('claim', rows);
     return sendJson(res, 200, rows);
   }
 
@@ -704,13 +685,14 @@ export async function createUiServer(opts = {}) {
     });
     res.write(': sbb ui events\n\n');
     sseClients.add(res);
+    // docs/spec/ui-server.md names `heartbeat` among the events; deps.heartbeatMs is a test seam.
     const heartbeat = setInterval(() => {
       try {
-        res.write(': heartbeat\n\n');
+        res.write(`event: heartbeat\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
       } catch {
         clearInterval(heartbeat);
       }
-    }, 15000);
+    }, deps.heartbeatMs ?? 15000);
     heartbeat.unref?.();
     req.on('close', () => {
       clearInterval(heartbeat);
@@ -736,7 +718,7 @@ export async function createUiServer(opts = {}) {
       session,
       host: api,
       controlFactory: deps.controlFactory,
-      onError: (err) => emit({ type: 'error', error: String(err?.message ?? err) }),
+      onError: (err) => emitComment(err?.message ?? err),
     });
     streams.set(session, stream);
     return stream;
@@ -755,7 +737,7 @@ export async function createUiServer(opts = {}) {
     const sub = stream.subscribe(paneId, {
       onOutput: (data, meta) => {
         if (ws.readyState === 1) ws.send(data, { binary: true });
-        if (meta.initial) emit({ type: 'pane', paneId, initial: true });
+        if (meta.initial) emitComment(`pane ${paneId} initial screen sent`);
       },
       onClosed: () => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'closed' }));
@@ -900,9 +882,9 @@ export async function createUiServer(opts = {}) {
       server.listen(port, '127.0.0.1');
     });
     startWatcher();
-    await openInbox().catch((err) => emit({ type: 'error', error: `inbox unavailable: ${err?.message ?? err}` }));
+    await openInbox().catch((err) => emitComment(`inbox unavailable: ${err?.message ?? err}`));
     const quotaTimer = setInterval(() => {
-      readQuota({}).then((rows) => emit({ type: 'quota', quota: rows })).catch(() => {});
+      readQuota({}).then((rows) => emitEvent('quota', rows)).catch(() => {});
     }, 60000);
     quotaTimer.unref?.();
     timers.push(quotaTimer);
@@ -926,14 +908,12 @@ export async function createUiServer(opts = {}) {
     closed = true;
     for (const timer of timers) clearInterval(timer);
     timers.length = 0;
-    for (const watcher of watchers) {
-      try {
-        watcher.close();
-      } catch {
-        // already closed
-      }
+    try {
+      watcher?.close();
+    } catch {
+      // already closed
     }
-    watchers.length = 0;
+    watcher = null;
     for (const stream of streams.values()) await stream.stop().catch(() => {});
     streams.clear();
     for (const res of sseClients) {
@@ -960,9 +940,7 @@ export async function createUiServer(opts = {}) {
     start,
     stop,
     buildState,
-    emit,
+    emitEvent,
     runCli,
-    /** test seam: the interim watcher's current bookkeeping */
-    watcherState: () => watcherState,
   };
 }
