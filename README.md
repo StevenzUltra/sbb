@@ -5,10 +5,10 @@
 <p align="center"><b>Several AI subscriptions, on separate accounts, working as one team, from one terminal.</b><br>
 <b>多个 AI 订阅账户，一起协作，一个终端指挥。</b></p>
 
-![The SBB console: brain tree, a team channel with receipts, and the live pane of the selected brain](docs/readme/console.png)
+![The SBB desktop app: brain tree, a team channel with receipts, and the live terminal of the selected brain](docs/readme/console.png)
 
-<p align="center">A real session, 22 s: a question to the #lead channel, replies from the sub brains with receipts, the org chart, the receipt log.<br>
-真实录屏 22 秒：在 #lead 频道提问，子脑带回执回复，组织图，回执日志。</p>
+<p align="center">A real session, 21 s: a question to the #lead channel, the org chart, the receipt log, settings.<br>
+真实录屏 21 秒：在 #lead 频道提问，组织图，回执日志，设置页。</p>
 
 ![Demo](docs/readme/demo.gif)
 
@@ -108,9 +108,12 @@ a team with `sbb tell #lead ...`, move a brain to another main with its context
 | --- | --- |
 | ![Org chart](docs/readme/org.png) | ![Receipt log](docs/readme/receipts.png) |
 | The org chart: drag a brain onto another main to transfer it, whole subtree included. | Every receipt, filterable by brain, state and channel. |
+| ![Settings](docs/readme/settings.png) | ![The console in a browser, light theme](docs/readme/console-light.png) |
+| Settings: who may talk to whom, quota floors, launchers, accounts, terminal, appearance. | The same console in a browser (`sbb ui`), light theme. |
 
-![The console in dark mode](docs/readme/console-dark.png)
-
+- **Desktop app.** A translucent dark window (macOS vibrancy) around the same console; the
+  dmg is on the Releases page and the app updates itself from there. No terminal window is
+  needed: SBB starts tmux on its own.
 - **Live panes.** The selected brain's terminal streams through tmux control mode, never
   soft-wrapped. `在此输入` types into it; `去终端` switches your own tmux client (or opens
   Ghostty / iTerm2) to the pane.
@@ -256,9 +259,11 @@ sbb ui                                               # 控制台，只监听 127
 | --- | --- |
 | ![组织图](docs/readme/org.png) | ![回执日志](docs/readme/receipts.png) |
 | 组织图：把一个脑拖到另一个主脑上即可转移，整棵子树一起走。 | 每一条回执，可按脑、状态、通道筛选。 |
+| ![设置](docs/readme/settings.png) | ![浏览器里的控制台，浅色主题](docs/readme/console-light.png) |
+| 设置：谁能和谁说话、额度下限、启动器、账户、终端、外观。 | 同一个控制台在浏览器里（`sbb ui`），浅色主题。 |
 
-![深色模式下的控制台](docs/readme/console-dark.png)
-
+- **桌面版。** 同一个控制台装进一个暗色透明磨砂的 macOS 窗口；dmg 在 Releases 页，应用会自己从那里更新。
+  不需要开任何终端窗口：SBB 会自己拉起 tmux。
 - **实时画面。** 选中脑的终端通过 tmux 控制模式实时流过来，绝不软换行。「在此输入」直接往里打字，
   「去终端」把你自己的 tmux 客户端切过去（或打开 Ghostty / iTerm2）。
 - **组频道。** `#lead` 发给 lead 组的每个成员，`#all` 发给所有主脑。对频道消息的回复会显示在频道里。

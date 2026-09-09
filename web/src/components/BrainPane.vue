@@ -17,6 +17,7 @@ let socket = null;
 let observer = null;
 let requestTimer = null;
 let reopenTimer = null;
+let lastReopen = 0;
 let escapeAt = 0;
 // The pane's own geometry (canned in fixture mode, reported by the server when it knows it).
 let paneCols = 0;
@@ -128,8 +129,9 @@ function onKey(event) {
  */
 function proposed() {
   if (!terminal || !scroller.value || !host.value) return null;
-  const canvas = host.value.querySelector('canvas');
-  const box = canvas?.getBoundingClientRect();
+  // xterm's DOM renderer has no canvas; .xterm-screen carries the exact rendered size.
+  const screen = host.value.querySelector('.xterm-screen') ?? host.value.querySelector('canvas');
+  const box = screen?.getBoundingClientRect();
   if (!box || !box.width || !box.height || !terminal.cols || !terminal.rows) {
     try {
       return fitAddon?.proposeDimensions() ?? null;
@@ -163,7 +165,12 @@ function syncSize({ request = true } = {}) {
     // size settles, reopen the stream so the server sends the whole current screen again.
     clearTimeout(reopenTimer);
     reopenTimer = setTimeout(() => {
-      if (socket) openPane();
+      // never more often than every 1.5 s: a reopen resets the measurements, and a fresh
+      // proposal that differs by a column must not turn into an endless reconnect loop
+      if (socket && Date.now() - lastReopen > 1500) {
+        lastReopen = Date.now();
+        openPane();
+      }
     }, 250);
   }
   // Observable size for tests and support: what the terminal is, and why.
