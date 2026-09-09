@@ -10,7 +10,7 @@ import { run as heldRun } from '../src/cli/held.js';
 import { run as policyRun } from '../src/cli/policy.js';
 import { deliver } from '../src/cli/util.js';
 import { DEFAULT_QUOTA, mergeConfig, readConfig, writeConfig } from '../src/policy/config.js';
-import { check } from '../src/policy/rules.js';
+import { check, teamOf } from '../src/policy/rules.js';
 import { checkMainReserve, checkQuotaFloor, weeklyRemaining } from '../src/policy/quota.js';
 import { listHeld } from '../src/policy/held.js';
 import { killBrains, killPlan } from '../src/lifecycle/kill.js';
@@ -79,18 +79,22 @@ test('policy config: defaults, merge drops invalid values, write is atomic 0600'
     assert.deepEqual(base.brains, {});
     assert.deepEqual(base.allow, []);
     assert.deepEqual(base.quota, { ...DEFAULT_QUOTA });
+    assert.deepEqual(base.teams, { subsDirect: true });
 
     const merged = mergeConfig({
       machineTag: '  X1 ',
       peers: 'bogus',
       brains: { 'tst-0001': { peers: 'off', autonomous: 'yes' }, bad: 3 },
+      teams: { subsDirect: false },
       allow: [['a', 'b'], ['c'], ['d', 5], ['', 'e']],
       quota: { floorWeekly: 150, mainReserve: 5 },
     });
     assert.equal(merged.machineTag, 'X1');
     assert.equal(merged.peers, 'on');
     assert.deepEqual(merged.brains, { 'TST-0001': { peers: 'off' } });
+    assert.deepEqual(merged.teams, { subsDirect: false });
     assert.deepEqual(merged.allow, [['a', 'b']]);
+    assert.deepEqual(mergeConfig({ teams: { subsDirect: 'no' } }).teams, { subsDirect: true }, 'only a literal false switches it off');
     assert.deepEqual(merged.quota, { floorWeekly: DEFAULT_QUOTA.floorWeekly, mainReserve: 5 });
 
     writeConfig(merged);
@@ -126,10 +130,24 @@ test('policy rules: every row of the table, allow, autonomous and peers:off', ()
     assert.deepEqual(v(mainA, mainB, cfg({ peers: 'off' })), { ok: false, reason: 'policy', detail: 'peers_off' });
     assert.deepEqual(v(mainA, mainB, cfg({ peers: 'moderated' })), { ok: false, moderated: true, reason: 'policy', detail: 'peers_moderated' });
     assert.deepEqual(v(mainA, mainB, cfg({ brains: { 'TST-0002': { peers: 'off' } } })), { ok: false, reason: 'policy', detail: 'peers_off' }, 'per-brain peers off');
-    assert.deepEqual(v(subA, subA2, cfg()), { ok: false, reason: 'policy', detail: 'same_team_via_parent' });
-    assert.deepEqual(v(subA, subA2, cfg({ brains: { 'TST-0001': { autonomous: true } } })), { ok: true }, 'autonomous root main');
-    assert.deepEqual(v(subA, subB, cfg()), { ok: false, reason: 'policy', detail: 'cross_team' });
+    // M3 talk table (docs/spec/teams.md): same-team sub <-> sub is on by default.
+    assert.equal(teamOf('TST-0001', getBrain), 'TST-0001', 'a main is its own team');
+    assert.equal(teamOf('TST-0003', getBrain), 'TST-0001', 'a sub belongs to its root main');
+    assert.equal(teamOf('TST-0006', getBrain), 'TST-0001', 'a grandchild belongs to the same team');
+    assert.equal(teamOf('TST-0005', getBrain), 'TST-0002', 'another team');
+    assert.equal(teamOf('TST-9999', getBrain), null, 'unknown brain, no team');
+    assert.deepEqual(v(subA, subA2, cfg()), { ok: true }, 'same-team sub <-> sub, subsDirect on by default');
+    assert.deepEqual(v(subA2, subA, cfg()), { ok: true }, 'same-team sub <-> sub, either direction');
+    assert.deepEqual(v(grand, subA2, cfg()), { ok: true }, 'a grandchild is in the same team');
+    assert.deepEqual(v(subA, subA2, cfg({ teams: { subsDirect: false } })), { ok: false, reason: 'policy', detail: 'same_team_via_parent' }, 'subsDirect false restores via-parent');
+    assert.deepEqual(v(subA, subA2, cfg({ teams: { subsDirect: false }, brains: { 'TST-0001': { autonomous: true } } })), { ok: true }, 'autonomous root main');
+    assert.deepEqual(v(subA, subB, cfg()), { ok: false, reason: 'policy', detail: 'cross_team' }, 'different teams');
     assert.deepEqual(v(grand, subB, cfg()), { ok: false, reason: 'policy', detail: 'cross_team' }, 'nested sub vs other team');
+    assert.deepEqual(v(subA, mainB, cfg()), { ok: false, reason: 'policy', detail: 'cross_team' }, 'sub -> another team main');
+    assert.deepEqual(v(mainB, subA, cfg()), { ok: false, reason: 'policy', detail: 'cross_team' }, 'another team main -> sub');
+    assert.deepEqual(v(subA, mainA, cfg()), { ok: true }, 'sub -> its own main, the escalation path');
+    assert.deepEqual(v(mainA, grand, cfg()), { ok: true }, 'main -> a grandchild in its own team');
+    assert.deepEqual(v(subA, mainB, cfg({ allow: [['sub-a', 'lead-b']] })), { ok: true }, 'allow beats cross-team');
 
     const allow = cfg({ allow: [['sub-a', 'sub-b']] });
     assert.deepEqual(v(subA, subB, allow), { ok: true }, 'allow by name');

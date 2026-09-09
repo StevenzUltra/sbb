@@ -3,23 +3,31 @@ import { readFileSync } from 'node:fs';
 import { bodyFromFile, senderPrefix } from '../registry/envelope.js';
 import { resolve as defaultResolve } from '../registry/resolve.js';
 import { closeInboxes } from '../transports/claude-uds.js';
-import { shortId } from '../lib/ids.js';
+import { newMsgId, shortId } from '../lib/ids.js';
+import { appendReceipt } from '../registry/receipts.js';
+import { channelRole, checkChannel, isChannelAddress, resolveChannel, sendToChannel } from '../teams/index.js';
 import {
   EXIT,
   UsageError,
   callerIdentity,
+  channelBlockEntry,
+  channelExitCode,
   deliver,
   main,
   openDeliveryInbox,
+  openSenderInbox,
   parse,
   parseDuration,
+  policyBlockLine,
   previewTransport,
   printReceipt,
   writeJson,
 } from './util.js';
 
-const USAGE = `usage: sbb tell <address> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms|30s|5m|1h>] [--force] [--dry-run]
+const USAGE = `usage: sbb tell <address|#channel> <text...> [--priority now|next|later] [--role <text>] [--file <path>] [--timeout <ms|30s|5m|1h>] [--force] [--dry-run]
 
+#<main name> posts to that team's channel (every member except you), #all to every main
+brain (the user only). Each member gets its own receipt and the team log one line.
 --force bypasses the weekly quota floor for this send; it never bypasses moderation.`;
 
 const PRIORITIES = ['now', 'next', 'later'];
@@ -66,6 +74,10 @@ export async function run(argv, deps = {}) {
 
     const identity = { ...(await callerIdentity(deps)) };
     if (values.role) identity.role = values.role;
+
+    if ((deps.isChannelAddress ?? isChannelAddress)(address)) {
+      return tellChannel({ address, body, identity, priority, verifyTimeoutMs, values, deps });
+    }
 
     const target = await (deps.resolve ?? defaultResolve)(address, { accounts: deps.accounts, onWarn: deps.onWarn, rows: deps.rows });
 
@@ -124,6 +136,57 @@ export async function run(argv, deps = {}) {
       await (deps.closeInboxes ?? closeInboxes)();
     }
   });
+}
+
+/**
+ * `sbb tell #<main>` / `#all`: policy-check the sender against the channel, deliver to every
+ * member except the sender, print one receipt per member and append one team-log line.
+ * @returns {Promise<number>} exit code
+ */
+async function tellChannel({ address, body, identity, priority, verifyTimeoutMs, values, deps }) {
+  const channel = (deps.resolveChannel ?? resolveChannel)(address, {
+    getBrain: deps.getBrain,
+    listBrains: deps.listBrains,
+  });
+  const gate = checkChannel(channel, identity);
+  const msgId = deps.msgId ?? newMsgId();
+  if (!gate.ok) {
+    const entry = channelBlockEntry({ identity, channel, address, body, msgId, detail: gate.detail, deps });
+    if (!values['dry-run']) (deps.appendReceipt ?? appendReceipt)(entry);
+    if (values.json) writeJson({ ...entry, receipts: [] });
+    else console.log(policyBlockLine({ msgId, reason: 'policy', detail: gate.detail }));
+    return EXIT.BLOCKED;
+  }
+  if (values['dry-run']) {
+    console.log(`channel   #${channel.name}  ${channel.id}  members=${channel.members.length}`);
+    for (const member of channel.members) {
+      console.log(`  ${member.name.padEnd(12)} ${member.id}  ${member.role}  ${member.account}/${member.cli}`);
+    }
+    console.log(`sender    ${senderPrefix(identity)}[${channelRole(identity, channel)}]`);
+    return EXIT.OK;
+  }
+
+  const inbox = await openSenderInbox({ owner: identity.brain ?? 'user', deps });
+  try {
+    const out = await (deps.sendToChannel ?? sendToChannel)({
+      channel, body, identity, priority, force: values.force, msgId, verifyTimeoutMs, inbox, deps,
+    });
+    if (values.json) {
+      writeJson({ msgId: out.msgId, channel: channel.id, name: `#${channel.name}`, receipts: out.entry.receipts, log: out.logFile });
+    } else {
+      console.log(`channel   #${channel.name}  ${channel.id}  members=${channel.members.length}  sent=${out.entry.receipts.length}`);
+      console.log(`envelope  ${out.text}`);
+      for (const { member, receipt } of out.results) {
+        const reason = receipt.reason ? `  reason=${receipt.reason}${receipt.detail ? `  detail=${receipt.detail}` : ''}` : '';
+        console.log(`  ${member.name.padEnd(12)} ${member.id}  ${String(receipt.status).padEnd(10)} via=${receipt.via}  ${((receipt.elapsedMs ?? 0) / 1000).toFixed(1)}s${reason}`);
+      }
+      if (out.logFile) console.log(`log       ${out.logFile}`);
+    }
+    return channelExitCode(out.results);
+  } finally {
+    await inbox?.close?.();
+    await (deps.closeInboxes ?? closeInboxes)();
+  }
 }
 
 /** @param {import('../types.js').Receipt} receipt */

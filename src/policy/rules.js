@@ -1,5 +1,5 @@
 // Who may talk to whom. `check(senderBrain|null, targetBrain|null, config)` is the single
-// source of truth; docs/spec/policy.md section "Who may talk to whom" is the table.
+// source of truth; docs/spec/teams.md section "Talk table" is the table (M3).
 import { getBrain as defaultGetBrain } from '../registry/brains.js';
 
 /** @typedef {import('../types.js').Brain} Brain */
@@ -66,6 +66,21 @@ export function rootMain(brain, getBrain = defaultGetBrain) {
   return null;
 }
 
+/**
+ * The team a brain belongs to: the id of the main brain at the top of its chain (a main is
+ * its own team). `null` when the brain or its chain is unknown. docs/spec/teams.md:
+ * "Team = a main brain plus everything below it (all descendants)".
+ * @param {Brain|string|null|undefined} brainOrId
+ * @param {(ref: string) => Brain|undefined} getBrain
+ * @returns {string|null}
+ */
+export function teamOf(brainOrId, getBrain = defaultGetBrain) {
+  const brain = typeof brainOrId === 'string' ? getBrain(brainOrId) : brainOrId;
+  if (!brain) return null;
+  const root = rootMain(brain, getBrain);
+  return root?.id ?? null;
+}
+
 /** @param {string} detail @returns {Verdict} */
 function blocked(detail) {
   return { ok: false, reason: 'policy', detail };
@@ -97,15 +112,22 @@ export function check(sender, target, config = {}, opts = {}) {
     return { ok: true };
   }
 
+  const senderTeam = teamOf(sender, getBrain);
+  const targetTeam = teamOf(target, getBrain);
+
   if (!isMain(sender) && !isMain(target)) {
-    const a = rootMain(sender, getBrain);
-    const b = rootMain(target, getBrain);
-    if (a && b && a.id === b.id) {
-      if (config?.brains?.[a.id]?.autonomous === true) return { ok: true };
+    if (senderTeam && targetTeam && senderTeam === targetTeam) {
+      // M3: sub brains in one team work on the same thing, so they talk directly.
+      // `config.teams.subsDirect = false` restores the old via-parent rule.
+      if (config?.teams?.subsDirect !== false) return { ok: true };
+      if (config?.brains?.[senderTeam]?.autonomous === true) return { ok: true };
       return blocked('same_team_via_parent');
     }
     return blocked('cross_team');
   }
+
+  // A sub and a main of different teams: escalate through the sub's own main.
+  if (senderTeam && targetTeam && senderTeam !== targetTeam) return blocked('cross_team');
 
   return { ok: true };
 }

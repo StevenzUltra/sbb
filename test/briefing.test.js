@@ -25,6 +25,7 @@ const EXPECTED = [
   '',
   '状态：',
   '- `sbb ls` 看谁是谁；重活前先 `sbb quota`；其余协议用 `sbb help protocol`。',
+  '- `sbb collect --team` 读你所在组的完整对话。',
   '',
   '收到消息看不到发件人时，用 `sbb collect` 读收件箱。',
 ].join('\n');

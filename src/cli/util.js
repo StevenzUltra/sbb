@@ -366,14 +366,15 @@ function parseAttrs(text) {
 }
 
 /**
- * Start the sender-side inbox. Only a `claude` target can send receipts back over uds;
- * everything else gets no inbox and no `fromSock`. A socket that cannot be created is
- * reported once and the send continues (the receipt will say `queued`).
- * @param {{ target: import('../types.js').Target, owner: string, deps?: Record<string, any> }} input
+ * Start the sender-side inbox, with the handlers that persist what arrives while a send is
+ * in flight. A channel fan-out opens ONE of these and shares it with every member, so all
+ * their receipts carry the same live `fromSock` and a member's `sbb reply` reaches the
+ * sender's waiting `ask`. A socket that cannot be created is reported once and the send
+ * continues (the receipt will say `queued`).
+ * @param {{ owner: string, deps?: Record<string, any> }} input
  * @returns {Promise<import('../transports/uds-inbox.js').Inbox|undefined>}
  */
-export async function openDeliveryInbox({ target, owner, deps = {} }) {
-  if (target?.cli !== 'claude') return undefined;
+export async function openSenderInbox({ owner, deps = {} }) {
   let inbox;
   try {
     if (deps.startInbox) inbox = await deps.startInbox({ dir: deliveryInboxDir() });
@@ -388,6 +389,17 @@ export async function openDeliveryInbox({ target, owner, deps = {} }) {
   if (!inbox) return undefined;
   attachInboxHandlers(inbox, { owner, deps });
   return inbox;
+}
+
+/**
+ * The inbox for one target: only a `claude` target can send receipts back over uds;
+ * everything else gets no inbox and no `fromSock`.
+ * @param {{ target: import('../types.js').Target, owner: string, deps?: Record<string, any> }} input
+ * @returns {Promise<import('../transports/uds-inbox.js').Inbox|undefined>}
+ */
+export async function openDeliveryInbox({ target, owner, deps = {} }) {
+  if (target?.cli !== 'claude') return undefined;
+  return openSenderInbox({ owner, deps });
 }
 
 /**
@@ -490,6 +502,8 @@ export async function deliver(input) {
     elapsedMs: receipt.elapsedMs,
     reason: receipt.reason ?? null,
     textPreview: text.slice(0, 200),
+    // Channel deliveries carry their team so the console can group them (teams.md).
+    ...(input.team ? { team: input.team } : {}),
   };
   if (!input.dryRun) appendReceipt(entry);
   // Mirror every delivery to a registered brain into that brain's inbox. The transports
@@ -509,10 +523,50 @@ export async function deliver(input) {
         t: Date.now(),
         via: receipt.via,
         status: receipt.status,
+        ...(input.team ? { team: input.team } : {}),
       },
     });
   }
   return { receipt, text, identity, entry, message };
+}
+
+/**
+ * The receipt entry for a channel post refused before any delivery happened (teams.md).
+ * @param {{ identity: Record<string, any>, channel: { name: string, id: string },
+ *           address: string, body: string, msgId: string, detail: string,
+ *           deps?: Record<string, any> }} input
+ */
+export function channelBlockEntry({ identity, channel, address, body, msgId, detail, deps = {} }) {
+  const session = senderSessionFromEnv(deps.env ?? process.env);
+  return {
+    msgId,
+    from: identity?.brain ?? identity?.sender ?? 'user',
+    fromId: identity?.id ?? null,
+    fromAddress: identity?.address ?? null,
+    fromSock: null,
+    senderSock: session.senderSock,
+    senderPid: session.senderPid,
+    to: `#${channel.name}`,
+    toId: channel.id,
+    address,
+    status: 'blocked',
+    via: 'policy',
+    elapsedMs: 0,
+    reason: 'policy',
+    detail,
+    textPreview: String(body ?? '').slice(0, 200),
+  };
+}
+
+/**
+ * OK when at least one member received the channel message, UNVERIFIED when the only
+ * outcome was unverified, BLOCKED when every member was refused.
+ * @param {{ receipt: import('../types.js').Receipt }[]} results
+ */
+export function channelExitCode(results = []) {
+  if (results.some((r) => r.receipt?.status === 'delivered' || r.receipt?.status === 'queued')) return EXIT.OK;
+  if (results.some((r) => r.receipt?.status === 'unverified')) return EXIT.UNVERIFIED;
+  return EXIT.BLOCKED;
 }
 
 /** @param {import('../types.js').Receipt} receipt */

@@ -27,6 +27,7 @@ export function defaultConfig(opts = {}) {
     machineTag: tagFromHostname(opts.hostname ?? osHostname()),
     peers: 'on',
     brains: {},
+    teams: { subsDirect: true },
     allow: [],
     quota: { ...DEFAULT_QUOTA },
     spawn: { cliArgs: {} },
@@ -79,6 +80,8 @@ export function mergeConfig(raw, opts = {}) {
       : base.machineTag,
     peers: PEER_MODES.includes(source.peers) ? source.peers : 'on',
     brains,
+    // M3 (docs/spec/teams.md): sub brains of one team talk directly unless switched off.
+    teams: { subsDirect: source.teams?.subsDirect !== false },
     allow,
     quota: {
       floorWeekly: percent(quota.floorWeekly, base.quota.floorWeekly),
@@ -125,4 +128,4 @@ export function updateConfig(mutate, opts = {}) {
   return writeConfig(next, opts);
 }
 
-/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string> } }} SbbConfig */
+/** @typedef {{ machineTag: string, peers: 'on'|'off'|'moderated', brains: Record<string, { peers?: string, autonomous?: boolean }>, teams: { subsDirect: boolean }, allow: string[][], quota: { floorWeekly: number, mainReserve: number }, spawn: { cliArgs: Record<string, string> } }} SbbConfig */

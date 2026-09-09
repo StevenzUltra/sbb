@@ -1,0 +1,16 @@
+{
+  "id": "TST-0001",
+  "uuid": "uuid-lead",
+  "name": "lead",
+  "role": "main",
+  "parent": null,
+  "account": "a",
+  "cli": "claude",
+  "model": null,
+  "cwd": "/Users/dev/proj",
+  "paneId": "%73",
+  "coord": "24:3.7",
+  "pid": 4321,
+  "createdAt": 1767225600000,
+  "origin": "adopted"
+}
