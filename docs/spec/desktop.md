@@ -31,5 +31,6 @@ npm run smoke                                  # starts, loads, screenshots to s
 ```
 
 Unsigned, not notarized: a locally built app opens without Gatekeeper prompts; a downloaded
-one needs a right-click Open the first time. The app icon is a placeholder until the project
-icon lands.
+one needs a right-click Open the first time. The app icon is built by electron-builder from
+`desktop/build/icon.png` (the project mark on a dark rounded square; source in
+`docs/readme/logo-source.png`).
