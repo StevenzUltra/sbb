@@ -1,0 +1,292 @@
+@import "tailwindcss";
+
+/* Class-based dark theme (web-console.md: `.dark` on <html>). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Brand tokens: mirror of docs/design/tokens.css (keep in sync by hand). */
+@theme {
+  --color-es-red: #d94b4b;
+  --color-es-green: #2d6b4f;
+  --color-es-green-dark: #1e3a32;
+  --color-es-green-light: #e0eae8;
+  --color-es-yellow: #e5a835;
+  --color-es-black: #1a1a1a;
+  --color-es-white: #ffffff;
+  --color-es-muted: #8a938e;
+  --color-es-dim: #5f6a64;
+  --color-es-dark-bg: #131715;
+  --color-es-dark-text: #e8ece9;
+  --color-es-dark-muted: #a0aaa4;
+  --color-es-dark-green: #7fbf9f;
+  --color-es-dark-green-soft: #a8d8bf;
+  --color-es-pane-bg: #111513;
+  --color-es-pane-text: #d5dbd7;
+  --radius-card: 16px;
+  --radius-btn: 8px;
+  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Surfaces the mockups express as inline rgba() values; themed in one place. */
+:root {
+  --es-glass-fill: rgba(255, 255, 255, 0.72);
+  --es-glass-stroke: rgba(26, 26, 26, 0.06);
+  --es-bar-fill: rgba(255, 255, 255, 0.55);
+  --es-bar-stroke: rgba(26, 26, 26, 0.06);
+  --es-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --es-sunken: rgba(26, 26, 26, 0.04);
+  --es-sunken-strong: rgba(26, 26, 26, 0.08);
+  --es-hover: rgba(26, 26, 26, 0.05);
+  --es-selected: #e0eae8;
+  --es-track: rgba(26, 26, 26, 0.08);
+  --es-divider: rgba(26, 26, 26, 0.06);
+  --es-terminal-fill: #111513;
+  --es-terminal-text: #d5dbd7;
+}
+
+.dark {
+  --es-glass-fill: rgba(255, 255, 255, 0.05);
+  --es-glass-stroke: rgba(255, 255, 255, 0.09);
+  --es-bar-fill: rgba(255, 255, 255, 0.04);
+  --es-bar-stroke: rgba(255, 255, 255, 0.08);
+  --es-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --es-sunken: rgba(255, 255, 255, 0.06);
+  --es-sunken-strong: rgba(255, 255, 255, 0.08);
+  --es-hover: rgba(255, 255, 255, 0.06);
+  --es-selected: rgba(45, 107, 79, 0.28);
+  --es-track: rgba(255, 255, 255, 0.12);
+  --es-divider: rgba(255, 255, 255, 0.08);
+  --es-terminal-fill: #0c0f0d;
+  --es-terminal-text: #d5dbd7;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+    color: #1a1a1a;
+    background-color: #f2f4f1;
+    background-image: radial-gradient(1200px 600px at 20% -10%, rgba(45, 107, 79, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 100% 100%, rgba(229, 168, 53, 0.08), transparent 60%);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .dark body {
+    color: #e8ece9;
+    background-color: #131715;
+    background-image: radial-gradient(1200px 600px at 20% -10%, rgba(45, 107, 79, 0.16), transparent 60%),
+      radial-gradient(900px 500px at 100% 100%, rgba(229, 168, 53, 0.07), transparent 60%);
+  }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 0;
+    background: none;
+    color: inherit;
+  }
+
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(26, 26, 26, 0.14);
+    border-radius: 4px;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .glass {
+    background: var(--es-glass-fill);
+    border: 1px solid var(--es-glass-stroke);
+    box-shadow: var(--es-shadow-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .bar {
+    background: var(--es-bar-fill);
+    border-color: var(--es-bar-stroke);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+  }
+
+  .seg {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--es-sunken);
+  }
+
+  .seg-item {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: var(--color-es-dim);
+    white-space: nowrap;
+  }
+
+  .dark .seg-item {
+    color: var(--color-es-dark-muted);
+  }
+
+  .seg-item-active,
+  .seg-item-active:hover {
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    color: #1a1a1a;
+  }
+
+  .dark .seg-item-active {
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: none;
+    color: var(--color-es-dark-text);
+  }
+
+  .row-selected {
+    background: var(--es-selected);
+  }
+
+  .btn-primary {
+    background: var(--color-es-green);
+    color: #ffffff;
+    font-weight: 500;
+    border-radius: 8px;
+  }
+
+  .dark .btn-primary {
+    background: var(--color-es-green);
+  }
+
+  .btn-ghost {
+    background: var(--es-sunken-strong);
+    border-radius: 8px;
+  }
+
+  .btn-ghost:hover {
+    background: var(--es-hover);
+  }
+
+  .track {
+    background: var(--es-track);
+  }
+}
+
+/* Tone pills shared by the top bar, tree rows and cards (values from the mockups). */
+@layer components {
+  .tone-green {
+    background: #e0eae8;
+    color: #1e3a32;
+  }
+
+  .dark .tone-green {
+    background: rgba(45, 107, 79, 0.32);
+    color: #a8d8bf;
+  }
+
+  .tone-yellow {
+    background: rgba(229, 168, 53, 0.16);
+    color: #7a5410;
+  }
+
+  .dark .tone-yellow {
+    background: rgba(229, 168, 53, 0.18);
+    color: #e5a835;
+  }
+
+  .tone-muted {
+    background: var(--es-sunken);
+    color: var(--color-es-dim);
+  }
+
+  .dark .tone-muted {
+    color: var(--color-es-dark-muted);
+  }
+
+  .tone-red {
+    background: rgba(217, 75, 75, 0.1);
+    color: #d94b4b;
+  }
+
+  .tone-red-solid {
+    background: #d94b4b;
+    color: #ffffff;
+  }
+
+  .dot-idle {
+    background: var(--color-es-green);
+  }
+
+  .dark .dot-idle {
+    background: #7fbf9f;
+  }
+
+  .dot-busy {
+    background: #e5a835;
+  }
+
+  .dot-blocked {
+    background: #d94b4b;
+  }
+
+  .dot-unknown {
+    background: #8a938e;
+  }
+
+  .field {
+    background: var(--es-sunken);
+    border-radius: 8px;
+    color: inherit;
+  }
+
+  .field::placeholder {
+    color: var(--color-es-muted);
+  }
+
+  .dark .field::placeholder {
+    color: #8a938e;
+  }
+}
+
+:root {
+  --es-avatar-lead: #1e3a32;
+  --es-avatar-sub: rgba(26, 26, 26, 0.08);
+  --es-avatar-sub-text: #1a1a1a;
+  --es-highlight-fill: #e0eae8;
+  --es-highlight-text: #1e3a32;
+}
+
+.dark {
+  --es-avatar-lead: #3f8a67;
+  --es-avatar-sub: rgba(255, 255, 255, 0.14);
+  --es-avatar-sub-text: #e8ece9;
+  --es-highlight-fill: rgba(45, 107, 79, 0.32);
+  --es-highlight-text: #a8d8bf;
+}

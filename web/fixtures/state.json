@@ -1,0 +1,522 @@
+{
+  "version": "0.1.0",
+  "generatedAt": "2026-09-09T05:46:00+08:00",
+  "user": {
+    "name": "你",
+    "role": "user"
+  },
+  "brains": [
+    {
+      "id": "SSL-0045",
+      "name": "lead",
+      "account": "a",
+      "cli": "claude",
+      "model": "claude-haiku-4-5",
+      "modelLabel": "haiku 4.5",
+      "role": "main",
+      "status": "busy",
+      "parent": null,
+      "team": "lead",
+      "paneId": "%30",
+      "coord": "sbb-rehearsal:3.1",
+      "session": "sbb-rehearsal",
+      "cwd": "/Users/steven/developer/sbb",
+      "claude": {
+        "pid": 4242
+      },
+      "lastMessage": "等你批准一条发给 ops 的消息"
+    },
+    {
+      "id": "SSL-0046",
+      "name": "ops",
+      "account": "a",
+      "cli": "codex",
+      "model": "gpt-6-astra",
+      "modelLabel": "gpt-6-astra",
+      "role": "main",
+      "status": "idle",
+      "parent": null,
+      "team": "ops",
+      "paneId": "%21",
+      "coord": "sbb-rehearsal:4.1",
+      "session": "sbb-rehearsal",
+      "cwd": "/Users/steven/developer/sbb",
+      "lastMessage": "空闲"
+    },
+    {
+      "id": "SSL-0047",
+      "name": "ios",
+      "account": "default",
+      "cli": "codex",
+      "model": "gpt-6-astra",
+      "modelLabel": "gpt-6-astra",
+      "role": "sub",
+      "status": "idle",
+      "parent": "SSL-0045",
+      "team": "lead",
+      "paneId": "%47",
+      "coord": "sbb-rehearsal:5.1",
+      "session": "sbb-rehearsal",
+      "cwd": "/Users/steven/developer/sbb",
+      "lastMessage": "翻译完成，报告已落盘"
+    },
+    {
+      "id": "SSL-0048",
+      "name": "review",
+      "account": "c",
+      "cli": "codex",
+      "model": "deepseek-v4-flash-vision-exp",
+      "modelLabel": "deepseek-v4-flash",
+      "role": "sub",
+      "status": "busy",
+      "parent": "SSL-0045",
+      "team": "lead",
+      "paneId": "%48",
+      "coord": "sbb-rehearsal:6.1",
+      "session": "sbb-rehearsal",
+      "cwd": "/Users/steven/developer/sbb",
+      "lastMessage": "校对完成，直接改了 3 处"
+    }
+  ],
+  "tree": {
+    "id": "user",
+    "name": "你",
+    "kind": "user",
+    "children": [
+      {
+        "id": "SSL-0045",
+        "name": "lead",
+        "kind": "brain",
+        "children": [
+          {
+            "id": "SSL-0047",
+            "name": "ios",
+            "kind": "brain",
+            "children": []
+          },
+          {
+            "id": "SSL-0048",
+            "name": "review",
+            "kind": "brain",
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "SSL-0046",
+        "name": "ops",
+        "kind": "brain",
+        "children": []
+      }
+    ]
+  },
+  "accounts": [
+    {
+      "name": "a",
+      "clis": [
+        "claude",
+        "codex"
+      ],
+      "label": "a"
+    },
+    {
+      "name": "default",
+      "clis": [
+        "codex"
+      ],
+      "label": "default"
+    },
+    {
+      "name": "c",
+      "clis": [
+        "codex"
+      ],
+      "label": "c"
+    }
+  ],
+  "quota": [
+    {
+      "key": "a/claude",
+      "label": "a · Claude",
+      "pct": 89,
+      "note": "5h 17% · 7d 11%"
+    },
+    {
+      "key": "a/codex",
+      "label": "a · Codex",
+      "pct": 94,
+      "note": "weekly 94% left"
+    },
+    {
+      "key": "default/codex",
+      "label": "default · Codex",
+      "pct": 75,
+      "note": "weekly 75% left"
+    },
+    {
+      "key": "c/codex",
+      "label": "c · DeepSeek",
+      "pct": null,
+      "note": "按量"
+    }
+  ],
+  "catalog": [
+    {
+      "cli": "claude",
+      "model": "claude-haiku-4-5",
+      "label": "haiku 4.5"
+    },
+    {
+      "cli": "claude",
+      "model": "claude-sonnet-5",
+      "label": "sonnet 5"
+    },
+    {
+      "cli": "codex",
+      "model": "gpt-6-astra",
+      "label": "gpt-6-astra"
+    },
+    {
+      "cli": "codex",
+      "model": "deepseek-v4-flash-vision-exp",
+      "label": "deepseek-v4-flash"
+    },
+    {
+      "cli": "agy",
+      "model": "default",
+      "label": "default"
+    },
+    {
+      "cli": "cursor",
+      "model": "default",
+      "label": "default"
+    }
+  ],
+  "policy": {
+    "peers": "open",
+    "quota": {
+      "min": 10
+    },
+    "rows": [
+      {
+        "label": "你 ↔ 任何脑",
+        "value": "始终",
+        "tone": "green"
+      },
+      {
+        "label": "主脑 ↔ 主脑",
+        "value": "先经我过目",
+        "tone": "yellow"
+      },
+      {
+        "label": "上级 ↔ 直属下级",
+        "value": "始终",
+        "tone": "green"
+      },
+      {
+        "label": "同组子脑之间",
+        "value": "开",
+        "tone": "green"
+      },
+      {
+        "label": "跨组子脑之间",
+        "value": "关",
+        "tone": "muted"
+      }
+    ]
+  },
+  "held": [],
+  "plans": [],
+  "claims": [
+    {
+      "path": "/Users/steven/developer/sbb/docs/README.zh.md",
+      "by": "SSL-0048",
+      "note": "校对"
+    },
+    {
+      "path": "/Users/steven/developer/sbb/README.md",
+      "by": "SSL-0047",
+      "note": "翻译"
+    }
+  ],
+  "tps": {
+    "list": [
+      {
+        "brainId": "SSL-0045",
+        "tps": 62,
+        "tokens60s": 3720,
+        "source": "claude-jsonl"
+      },
+      {
+        "brainId": "SSL-0047",
+        "tps": 118,
+        "tokens60s": 7080,
+        "source": "codex-rollout"
+      },
+      {
+        "brainId": "SSL-0048",
+        "tps": 297,
+        "tokens60s": 17820,
+        "source": "codex-rollout"
+      },
+      {
+        "brainId": "SSL-0046",
+        "tps": 0,
+        "tokens60s": 0,
+        "source": "codex-rollout"
+      }
+    ],
+    "total": 477
+  },
+  "teams": [
+    {
+      "id": "lead",
+      "name": "#lead",
+      "members": [
+        "SSL-0045",
+        "SSL-0047",
+        "SSL-0048",
+        "你"
+      ],
+      "messages": [
+        {
+          "msgId": "eb46b602",
+          "from": "user",
+          "fromName": "你",
+          "to": "lead",
+          "at": "05:27",
+          "text": "把翻译派给 ios（写到 docs/README.zh.md），校对派给 review，都用 sbb ask 等回复；两项都完成后回我一行。",
+          "receipt": {
+            "status": "delivered",
+            "via": "uds+screen",
+            "elapsedMs": 4000,
+            "msgId": "eb46b602"
+          }
+        },
+        {
+          "msgId": "628cdaff",
+          "from": "SSL-0045",
+          "fromName": "lead",
+          "to": "SSL-0047",
+          "at": "05:27",
+          "note": "发给 ios",
+          "text": "翻译 /Users/steven/developer/sbb/README.md 为中文，保留代码块与结构，写到 docs/README.zh.md，完成后 sbb reply。",
+          "receipt": {
+            "status": "delivered",
+            "via": "codex-queue+screen",
+            "elapsedMs": 5300
+          }
+        },
+        {
+          "msgId": "8e9469c2",
+          "from": "SSL-0047",
+          "fromName": "ios",
+          "to": "SSL-0045",
+          "at": "05:31",
+          "note": "回复 lead",
+          "text": "翻译完成：docs/README.zh.md（56 行，代码块原样保留）。报告 docs/reports/readme-zh-ssl-0047-2026-09-09.md。",
+          "receipt": {
+            "status": "delivered",
+            "via": "reply",
+            "elapsedMs": 1200,
+            "replyTo": "628cdaff"
+          }
+        },
+        {
+          "msgId": "5aa9e4e9",
+          "from": "SSL-0048",
+          "fromName": "review",
+          "to": "SSL-0045",
+          "at": "05:33",
+          "note": "回复 lead",
+          "text": "校对完成，直接改了 3 处：依托改为依赖、简介换行重排、M1 列表重排；结构与语义未动。",
+          "receipt": {
+            "status": "delivered",
+            "via": "reply",
+            "elapsedMs": 900,
+            "replyTo": "628cdaff"
+          }
+        },
+        {
+          "msgId": "fc5b2b31",
+          "from": "SSL-0045",
+          "fromName": "lead",
+          "to": "user",
+          "at": "05:33",
+          "note": "回复你",
+          "highlight": true,
+          "text": "翻译与校对均已完成。中文版本：/Users/steven/developer/sbb/docs/README.zh.md（格式正确、无误改）。",
+          "receipt": {
+            "status": "delivered",
+            "via": "reply",
+            "elapsedMs": 800,
+            "msgId": "5aa9e4e9"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ops",
+      "name": "#ops",
+      "members": [
+        "SSL-0046"
+      ],
+      "messages": []
+    },
+    {
+      "id": "all",
+      "name": "#all",
+      "members": [
+        "SSL-0045",
+        "SSL-0046",
+        "SSL-0047",
+        "SSL-0048"
+      ],
+      "messages": []
+    }
+  ],
+  "threads": [
+    {
+      "id": "lead",
+      "with": "SSL-0045",
+      "title": "私聊 lead",
+      "subtitle": "lead、你",
+      "messages": [
+        {
+          "msgId": "24a3b38d",
+          "from": "user",
+          "fromName": "你",
+          "to": "SSL-0045",
+          "at": "05:46",
+          "text": "问一下 ops：review 现在归你了吗？",
+          "receipt": {
+            "status": "delivered",
+            "via": "uds+screen",
+            "elapsedMs": 4000,
+            "msgId": "24a3b38d"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lead-ops",
+      "with": "SSL-0045",
+      "peer": "SSL-0046",
+      "title": "lead 与 ops",
+      "subtitle": "主脑之间 · 先经你过目",
+      "messages": [
+        {
+          "msgId": "24a3b38d",
+          "from": "user",
+          "fromName": "你",
+          "to": "SSL-0045",
+          "at": "05:46",
+          "note": "发给 lead",
+          "text": "问一下 ops：review 现在归你了吗？",
+          "receipt": {
+            "status": "delivered",
+            "via": "uds+screen",
+            "elapsedMs": 4000,
+            "msgId": "24a3b38d"
+          }
+        },
+        {
+          "msgId": "003f9c0b",
+          "from": "SSL-0045",
+          "fromName": "lead",
+          "to": "SSL-0046",
+          "at": "05:46",
+          "note": "想发给 ops",
+          "held": true,
+          "text": "[lead#SSL-0045 → ops#SSL-0046][主脑] review 现在归你了吗？",
+          "receipt": {
+            "status": "held",
+            "via": "policy",
+            "reason": "moderated"
+          }
+        },
+        {
+          "msgId": "pending-ops",
+          "from": "SSL-0046",
+          "fromName": "ops",
+          "to": "SSL-0045",
+          "at": "",
+          "note": "放行后 ops 的回答会出现在这里",
+          "pending": true,
+          "text": ""
+        }
+      ]
+    }
+  ],
+  "receipts": [
+    {
+      "at": "05:27",
+      "from": "你",
+      "to": "lead",
+      "status": "delivered",
+      "via": "uds+screen",
+      "preview": "把翻译派给 ios（写到 docs/README.zh.md），校对派给 review，都用 sbb ask 等回复…",
+      "msgId": "eb46b602"
+    },
+    {
+      "at": "05:27",
+      "from": "lead",
+      "to": "ios",
+      "status": "delivered",
+      "via": "codex-queue+screen",
+      "preview": "翻译 /Users/steven/developer/sbb/README.md 为中文，保留代码块与结构…",
+      "msgId": "628cdaff"
+    },
+    {
+      "at": "05:31",
+      "from": "ios",
+      "to": "lead",
+      "status": "delivered",
+      "via": "reply",
+      "preview": "翻译完成：docs/README.zh.md（56 行，代码块原样保留）…",
+      "msgId": "8e9469c2"
+    },
+    {
+      "at": "05:33",
+      "from": "review",
+      "to": "lead",
+      "status": "delivered",
+      "via": "reply",
+      "preview": "校对完成，直接改了 3 处：依托改为依赖、简介换行重排…",
+      "msgId": "5aa9e4e9"
+    },
+    {
+      "at": "05:33",
+      "from": "lead",
+      "to": "你",
+      "status": "delivered",
+      "via": "reply",
+      "preview": "翻译与校对均已完成。中文版本：docs/README.zh.md…",
+      "msgId": "fc5b2b31"
+    },
+    {
+      "at": "05:46",
+      "from": "你",
+      "to": "lead",
+      "status": "delivered",
+      "via": "uds+screen",
+      "preview": "问一下 ops：review 现在归你了吗？",
+      "msgId": "24a3b38d"
+    },
+    {
+      "at": "05:46",
+      "from": "lead",
+      "to": "ops",
+      "status": "queued",
+      "via": "policy",
+      "preview": "[lead#SSL-0045 → ops#SSL-0046][主脑] review 现在归你了吗？",
+      "msgId": "003f9c0b"
+    }
+  ],
+  "ui": {
+    "view": "console",
+    "team": "lead",
+    "thread": null,
+    "selected": "SSL-0048"
+  }
+}
