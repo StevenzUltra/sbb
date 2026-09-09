@@ -269,15 +269,17 @@ export function createFixtureClient() {
       };
     },
 
-    // Mirrors the server contract: one frame with the current screen on open, then live output.
-    openPane(paneId, { onData, onClosed }) {
-      const lines = panes[paneId] ?? [];
-      later(() => onData?.(new TextEncoder().encode(`${lines.join('\r\n')}\r\n`)), 60);
+    // Mirrors the server contract: the pane's geometry first (the console sizes the terminal
+    // from it and never soft-wraps), then one frame with the current screen, then live output.
+    openPane(paneId, { onData, onGeometry }) {
+      const pane = panes[paneId] ?? { cols: 80, rows: 24, lines: [] };
+      later(() => onGeometry?.({ cols: pane.cols, rows: pane.rows }), 30);
+      later(() => onData?.(new TextEncoder().encode(`${pane.lines.join('\r\n')}\r\n`)), 60);
       return {
         send(frame) {
           if (frame.type === 'input') onData?.(new TextEncoder().encode(frame.data));
           if (frame.type === 'key' && frame.name === 'Enter') onData?.(new TextEncoder().encode('\r\n'));
-          if (frame.type === 'resize') onClosed?.();
+          // resize is a request the real server may decline; fixture mode has no pane to resize.
         },
         close() {},
       };

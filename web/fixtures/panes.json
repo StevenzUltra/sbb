@@ -1,42 +1,58 @@
 {
-  "_note": "Canned pane screens (ANSI) replayed by src/api/fixture.js on openPane, mirroring what the server sends on connect (ui-server.md, 'Live pane stream').",
-  "%30": [
-    "\u001b[32m> Message from @user: [user@cli][用户] 问一下 ops：review 现在归你了吗？   (sbb:24a3b38d)\u001b[0m",
-    "⏺ Bash(sbb ask ops --wait 3m \"review 现在归你了吗？\")",
-    "\u001b[33m  ⎿  blocked     msg=003f9c0b  via=policy  reason=moderated  detail=held for user approval: sbb approve 003f9c0b; 请向上级或用户上报\u001b[0m",
-    "⏺ 消息被策略扣住，需要用户批准后才会送达 ops。",
-    "⏺ Bash(sbb reply 24a3b38d \"sbb ask ops 被策略阻止：msg=003f9c0b，需用户执行 sbb approve 003f9c0b 放行\")",
-    "\u001b[90m  ⎿  delivered  msg=fc5b2b31  via=uds+screen\u001b[0m",
-    "",
-    "\u001b[32m❯\u001b[0m",
-    "\u001b[90m  @ai-a · latest · 5h:17%/1h38m · 7d:11%/2d21h\u001b[0m"
-  ],
-  "%48": [
-    "\u001b[90m╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode\u001b[0m",
-    "\u001b[32m› [lead#SSL-0045@a/claude:sbb-rehearsal:3.1][主脑] 校对 /Users/steven/developer/sbb/docs/README.zh.md：确保准确性、术语一致、自然流畅。直接修改该文件。完成后回报。   (sbb:628cdaff)\u001b[0m",
-    "• 已登记 path:/Users/steven/developer/sbb/docs/README.zh.md",
-    "• Ran sbb claim add path:/Users/steven/developer/sbb/docs/README.zh.md --note 校对",
-    "• 逐段对照原文：依托 → 依赖；简介两段换行重排；M1 列表重排",
-    "• Ran sbb reply 628cdaff '校对完成，直接改了 3 处：依托改为依赖、简介换行重排、M1 列表重排；结构与语义未动。'",
-    "\u001b[90m  └ inbox lead msg=8e9469c2 replyTo=628cdaff\u001b[0m",
-    "\u001b[33m• Working (12s · esc to interrupt)\u001b[0m",
-    "",
-    "\u001b[32m› Ask Codex to do anything\u001b[0m",
-    "\u001b[90m  latest · deepseek-v4-flash-vision-exp xhigh · Context 91% left\u001b[0m"
-  ],
-  "%47": [
-    "\u001b[90m╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode\u001b[0m",
-    "\u001b[32m› [lead#SSL-0045@a/claude:sbb-rehearsal:3.1][主脑] 翻译 /Users/steven/developer/sbb/README.md 为中文，保留代码块与结构，写到 docs/README.zh.md，完成后 sbb reply。   (sbb:628cdaff)\u001b[0m",
-    "• 已写入 docs/README.zh.md（56 行）",
-    "• Ran sbb reply 628cdaff '翻译完成：docs/README.zh.md（56 行，代码块原样保留）'",
-    "",
-    "\u001b[32m› Ask Codex to do anything\u001b[0m",
-    "\u001b[90m  latest · gpt-6-astra high · Context 96% left\u001b[0m"
-  ],
-  "%21": [
-    "\u001b[90m╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode\u001b[0m",
-    "",
-    "\u001b[32m› Ask Codex to do anything\u001b[0m",
-    "\u001b[90m  latest · gpt-6-astra high · Context 100% left\u001b[0m"
-  ]
+  "_note": "Canned pane screens (ANSI) replayed by src/api/fixture.js on openPane, mirroring what the server sends on connect (ui-server.md, \"Live pane stream\"): geometry first, then one frame with the current screen. `cols` is the widest visible line of the canned screen - a lower bound on the pane tmux captured, which is the safe direction because the console never soft-wraps: xterm is told these columns and the pane area scrolls horizontally.",
+  "%30": {
+    "cols": 132,
+    "rows": 9,
+    "lines": [
+      "\u001b[32m> Message from @user: [user@cli][用户] 问一下 ops：review 现在归你了吗？   (sbb:24a3b38d)\u001b[0m",
+      "⏺ Bash(sbb ask ops --wait 3m \"review 现在归你了吗？\")",
+      "\u001b[33m  ⎿  blocked     msg=003f9c0b  via=policy  reason=moderated  detail=held for user approval: sbb approve 003f9c0b; 请向上级或用户上报\u001b[0m",
+      "⏺ 消息被策略扣住，需要用户批准后才会送达 ops。",
+      "⏺ Bash(sbb reply 24a3b38d \"sbb ask ops 被策略阻止：msg=003f9c0b，需用户执行 sbb approve 003f9c0b 放行\")",
+      "\u001b[90m  ⎿  delivered  msg=fc5b2b31  via=uds+screen\u001b[0m",
+      "",
+      "\u001b[32m❯\u001b[0m",
+      "\u001b[90m  @ai-a · latest · 5h:17%/1h38m · 7d:11%/2d21h\u001b[0m"
+    ]
+  },
+  "%48": {
+    "cols": 180,
+    "rows": 11,
+    "lines": [
+      "\u001b[90m╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode\u001b[0m",
+      "\u001b[32m› [lead#SSL-0045@a/claude:sbb-rehearsal:3.1][主脑] 校对 /Users/steven/developer/sbb/docs/README.zh.md：确保准确性、术语一致、自然流畅。直接修改该文件。完成后回报。   (sbb:628cdaff)\u001b[0m",
+      "• 已登记 path:/Users/steven/developer/sbb/docs/README.zh.md",
+      "• Ran sbb claim add path:/Users/steven/developer/sbb/docs/README.zh.md --note 校对",
+      "• 逐段对照原文：依托 → 依赖；简介两段换行重排；M1 列表重排",
+      "• Ran sbb reply 628cdaff '校对完成，直接改了 3 处：依托改为依赖、简介换行重排、M1 列表重排；结构与语义未动。'",
+      "\u001b[90m  └ inbox lead msg=8e9469c2 replyTo=628cdaff\u001b[0m",
+      "\u001b[33m• Working (12s · esc to interrupt)\u001b[0m",
+      "",
+      "\u001b[32m› Ask Codex to do anything\u001b[0m",
+      "\u001b[90m  latest · deepseek-v4-flash-vision-exp xhigh · Context 91% left\u001b[0m"
+    ]
+  },
+  "%47": {
+    "cols": 179,
+    "rows": 7,
+    "lines": [
+      "\u001b[90m╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode\u001b[0m",
+      "\u001b[32m› [lead#SSL-0045@a/claude:sbb-rehearsal:3.1][主脑] 翻译 /Users/steven/developer/sbb/README.md 为中文，保留代码块与结构，写到 docs/README.zh.md，完成后 sbb reply。   (sbb:628cdaff)\u001b[0m",
+      "• 已写入 docs/README.zh.md（56 行）",
+      "• Ran sbb reply 628cdaff '翻译完成：docs/README.zh.md（56 行，代码块原样保留）'",
+      "",
+      "\u001b[32m› Ask Codex to do anything\u001b[0m",
+      "\u001b[90m  latest · gpt-6-astra high · Context 96% left\u001b[0m"
+    ]
+  },
+  "%21": {
+    "cols": 59,
+    "rows": 4,
+    "lines": [
+      "\u001b[90m╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode\u001b[0m",
+      "",
+      "\u001b[32m› Ask Codex to do anything\u001b[0m",
+      "\u001b[90m  latest · gpt-6-astra high · Context 100% left\u001b[0m"
+    ]
+  }
 }

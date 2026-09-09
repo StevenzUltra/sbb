@@ -166,7 +166,7 @@ export const useSbb = defineStore('sbb', {
         tps: snapshot.tps ?? this.tps,
         teams: snapshot.teams ?? [],
         threads: snapshot.threads ?? [],
-        receipts: snapshot.receipts ?? [],
+        receipts: (snapshot.receipts ?? []).slice(0, 500),
       });
       const ui = snapshot.ui ?? {};
       this.view = ui.view ?? this.view;
@@ -192,6 +192,8 @@ export const useSbb = defineStore('sbb', {
         }
         case 'receipt': {
           this.receipts.unshift(data);
+          // /api/state seeds the newest 500; keep the same window as events accumulate.
+          if (this.receipts.length > 500) this.receipts.length = 500;
           // A later receipt for a message already in the stream replaces the earlier one,
           // so an approved held message stops reading "held" (web-console.md, screen 4).
           if (data?.msgId) {
