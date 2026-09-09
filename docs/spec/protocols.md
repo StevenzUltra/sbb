@@ -147,7 +147,7 @@ CODEX_HOME=<account codexDir> codex queue --thread <uuid|exact name> --message "
 
 ## 3. Typed input: `tmux send-keys` with screen verification
 
-Used for Antigravity (`agy`), Cursor agent, and as the fallback for everything else.
+Used for Antigravity (`agy`), Cursor agent, Kimi, Grok, and as the fallback for everything else.
 
 Preconditions (any failure -> `blocked`, do not type):
 
@@ -179,9 +179,23 @@ Per-CLI profiles (screen fingerprints):
 | codex  | `› Ask Codex to do anything` placeholder; status line `weekly N% left` | `• Working`, spinner | 1 |
 | agy    | `> Accept-edits mode` placeholder; status `accept-edits · Gemini ...` | `Working` | 1 |
 | cursor | `→ Add a follow-up` placeholder; status `... · auto`; `Tip` line mentions Cursor | `1 task` badge = queued | 2 |
+| kimi   | boxed composer `│ > │`; footer `Ask When Needed  K3 thinking: max` | `⠹ thinking…` / `⠸ working…` (composer stays empty) | 1 |
+| grok   | boxed composer `│ ❯ │`; footer `Grok 4.6 (xhigh) · always-approve` | `Waiting for response…`, `Thinking…`, `Responding…`, `Retrying (attempt N)…`, footer `Esc:cancel` | 1 |
 
 Measured: a freshly started Codex swallowed the first `Enter`; the text stayed on the `›`
 line for 3 s and one extra `Enter` submitted it.
+
+Measured again 2026-09-10 on scratch panes (`tmux -L sbb-h1-clis`, cloned config homes):
+
+- kimi 0.41.0: an `Enter` sent immediately after the literal text is swallowed; the text sat
+  in the composer for 30 s+. A 600 ms gap between text and `Enter` submitted on the first
+  `Enter`. The one-extra-`Enter` retry above covers this; never resend the text.
+- kimi does not queue while busy: the composer stays empty, `acceptsInput` is false and a
+  send is `blocked target_busy`. There is no `C-s` consume step (the footer hint
+  `ctrl-s to add guidance` is guidance, not a queue).
+- grok 1.0.13: one `Enter`, no follow-up queue. It echoes the user's turn above the box as
+  an indented `❯ <text>` with no border, so only the boxed `│ ❯ … │` line is the composer;
+  `lastPromptIndex` never picks an echo.
 
 ## 4. tmux facts
 
@@ -192,11 +206,18 @@ line for 3 s and one extra `Enter` submitted it.
 - Pane ids (`%30`) survive window moves but die with the pane; coordinates (`24:3.3`) are
   stable while layout is unchanged. Resolve at send time, never cache.
 
-## 5. Antigravity and Cursor
+## 5. Antigravity, Cursor, Kimi and Grok
 
 - `agy` (Antigravity CLI): no inject/queue entry point for a running interactive session
   (only `--conversation` resume and `--input-format stream-json` print mode). Typed input only.
 - `cursor-agent`: only `--resume` / `--continue`. Typed input only, two `Enter`s.
+- `kimi` (kimi-code 0.41.0): typed input only; no inject or queue entry point for a running
+  session. A folder it has not been trusted in shows `Trust this folder?` before the composer
+  is usable (`--auto` does not skip it). No brief channel: `--agent-file`, `KIMI_AGENTS_MD`
+  and `--add-dir` are not read as a system brief, and there is no positional prompt; only a
+  cwd `AGENTS.md` is honoured. Config dir: `KIMI_CODE_HOME`.
+- `grok` (grok 1.0.13): typed input only; a positional first prompt works as the brief and
+  needs no proxy. Config dir: `GROK_HOME`.
 
 ## 6. Usage Guard (quota source)
 
