@@ -56,8 +56,11 @@ export async function run(argv, deps = {}) {
       return EXIT.BLOCKED;
     }
 
-    for (const brain of plan.victims) console.log(`kill      ${line(brain)}`);
-    for (const child of plan.keep) console.log(`keep      ${line(child)}  (re-parented)`);
+    // --json prints exactly one JSON document: the plan lines are for a person.
+    if (!values.json) {
+      for (const brain of plan.victims) console.log(`kill      ${line(brain)}`);
+      for (const child of plan.keep) console.log(`keep      ${line(child)}  (re-parented)`);
+    }
     if (!values.yes) {
       const ok = await confirm(`kill ${plan.victims.length} brain(s)? [y/N] `, deps);
       if (!ok) {
