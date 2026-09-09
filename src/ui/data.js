@@ -5,7 +5,8 @@
 import { readFileSync, readdirSync, watch as fsWatch } from 'node:fs';
 import { join } from 'node:path';
 import { accountList } from '../account/account.js';
-import { listBrains } from '../registry/brains.js';
+import { listBrains, listRetiredBrains } from '../registry/brains.js';
+import { catalog as defaultCatalog } from '../quota/catalog.js';
 import { readReceiptEntries, receiptLogPath } from '../registry/receipts.js';
 import { inboxRoot, listInbox } from '../registry/inbox.js';
 import { listHeld } from '../policy/held.js';
@@ -176,6 +177,47 @@ export function consoleMessage(entry, place = {}) {
 /** The console shows this many lines per team channel and per private thread from cold. */
 export const CHANNEL_LIMIT = 300;
 
+/** @param {Record<string, any>} opts */
+function safeCatalog(opts) {
+  try {
+    return (opts.catalog ?? defaultCatalog)();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * @param {Record<string, any>[]} accounts @param {{ account: string, cli: string }[]} rows
+ */
+function withClis(accounts, rows) {
+  return accounts.map((account) => {
+    const known = new Set(Array.isArray(account.clis) ? account.clis : []);
+    for (const row of rows) if (row.account === account.name && row.cli) known.add(row.cli);
+    return { ...account, clis: [...known] };
+  });
+}
+
+/**
+ * Working directories used before, newest first and unique: what the spawn dialog offers as
+ * quick picks (docs/spec/ui-server.md).
+ * @param {Record<string, any>[]} brains @param {Record<string, any>[]} retired
+ * @returns {string[]}
+ */
+export function recentCwds(brains, retired, limit = 10) {
+  const seen = new Set();
+  const out = [];
+  const all = [...brains, ...retired]
+    .filter((b) => typeof b?.cwd === 'string' && b.cwd.trim() !== '')
+    .sort((a, b) => (b.retiredAt ?? b.createdAt ?? 0) - (a.retiredAt ?? a.createdAt ?? 0));
+  for (const brain of all) {
+    if (seen.has(brain.cwd)) continue;
+    seen.add(brain.cwd);
+    out.push(brain.cwd);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 /** @param {{ sbbDir: string }} where @param {Record<string, any>} opts */
 function teamsState(where, opts) {
   const channels = (opts.allChannels ?? allChannels)({ listBrains: opts.listBrains ?? listBrains });
@@ -253,10 +295,14 @@ export async function snapshot(opts = {}) {
   }
   const receipts = (opts.readReceipts ?? readReceiptEntries)();
   const teams = teamsState(where, opts);
+  const catalogRows = safeCatalog(opts);
   return {
     brains,
     tree: buildTree(brains),
-    accounts: (opts.accountList ?? accountList)({ ...where, brains }),
+    // Every CLI the catalog knows for the account (claude, codex, agy, cursor, ...), so the
+    // spawn dialog offers what can actually be launched there, not just claude/codex.
+    accounts: withClis((opts.accountList ?? accountList)({ ...where, brains }), catalogRows),
+    recentCwds: recentCwds(brains, (opts.listRetiredBrains ?? listRetiredBrains)()),
     quota,
     policy: (opts.readConfig ?? readConfig)(where),
     held: (opts.listHeld ?? listHeld)(where),
