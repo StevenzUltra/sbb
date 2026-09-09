@@ -4,7 +4,8 @@ import { EXIT, main, parse, renderTable, writeJson } from './util.js';
 
 const USAGE = `usage: sbb catalog [--json]
 
-CLIs are detected by binaries on PATH plus per-account Codex config.toml.
+CLIs are detected by binaries on PATH plus the account's own config dir; Codex models
+come from that account's config.toml.
 Model lists for claude, agy and cursor come from hand-maintained static tables;
 no network is used.`;
 

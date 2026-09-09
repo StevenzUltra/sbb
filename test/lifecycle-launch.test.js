@@ -18,7 +18,16 @@ import {
 import { createFakeTmux, screen, tmuxCommands, typedLiterals } from './fixtures/lifecycle/fake-tmux.js';
 
 const execFileP = promisify(execFile);
-const ACCOUNTS = [{ name: 'a', baseDir: '/tmp/home/.ai-account-a', claudeDir: '/tmp/home/.ai-account-a/claude', codexDir: '/tmp/home/.ai-account-a/codex' }];
+const ACCOUNTS = [{
+  name: 'a',
+  baseDir: '/tmp/home/.ai-account-a',
+  claudeDir: '/tmp/home/.ai-account-a/claude',
+  codexDir: '/tmp/home/.ai-account-a/codex',
+  agyDir: '/tmp/home/.ai-account-a/gemini',
+  cursorDir: '/tmp/home/.ai-account-a/cursor-agent',
+  kimiDir: '/tmp/home/.ai-account-a/kimi',
+  grokDir: '/tmp/home/.ai-account-a/grok',
+}];
 
 /** @param {string} value @param {string} shell */
 async function throughShell(value, shell) {
@@ -72,7 +81,10 @@ test('buildCommand: agy and cursor read the brief through $(cat <file>) too', ()
   assert.deepEqual(agy.env, {});
   const cursor = buildCommand({ cli: 'cursor', briefFile: '/tmp/briefs/b.md', account: 'a', accounts: ACCOUNTS });
   assert.deepEqual(cursor.argv, ['cursor-agent', '$(cat /tmp/briefs/b.md)']);
-  assert.match(cursor.shellLine, /^exec cursor-agent /, 'no env assignments means no env wrapper');
+  assert.deepEqual(cursor.env, {
+    CURSOR_CONFIG_DIR: '/tmp/home/.ai-account-a/cursor-agent',
+    CURSOR_DATA_DIR: '/tmp/home/.ai-account-a/cursor-agent',
+  });
 });
 
 test('buildCommand: a brief file path with spaces survives as one argument', () => {

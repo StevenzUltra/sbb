@@ -35,11 +35,15 @@ export async function run(argv, deps = {}) {
         return EXIT.OK;
       }
       console.log(renderTable(
-        ['ACCOUNT', 'CLAUDE', 'CODEX', 'BRAINS', 'WRAPPER'],
+        ['ACCOUNT', 'CLAUDE', 'CODEX', 'AGY', 'CURSOR', 'KIMI', 'GROK', 'BRAINS', 'WRAPPER'],
         accounts.map((a) => [
           a.name,
           a.hasClaudeCreds ? 'yes' : 'no',
           a.hasCodexCreds ? 'yes' : 'no',
+          a.hasAgyCreds ? 'yes' : 'no',
+          a.hasCursorCreds ? 'yes' : 'no',
+          a.hasKimiCreds ? 'yes' : 'no',
+          a.hasGrokCreds ? 'yes' : 'no',
           a.brains.length || '-',
           a.wrapper ?? '-',
         ]),
@@ -63,10 +67,14 @@ export async function run(argv, deps = {}) {
       }
       console.log(`account ${result.name} ready`);
       console.log(`  base    ${result.baseDir}`);
-      console.log(`  claude  ${result.claudeDir}`);
-      console.log(`  codex   ${result.codexDir}`);
-      console.log(`  wrapper ${result.wrapper}`);
-      console.log(`next: log in once with \`ai-${result.name} claude\` or \`ai-${result.name} codex\`; SBB never touches credentials`);
+      console.log(`  claude   ${result.claudeDir}`);
+      console.log(`  codex    ${result.codexDir}`);
+      console.log(`  agy      ${result.agyDir}`);
+      console.log(`  cursor   ${result.cursorDir}`);
+      console.log(`  kimi     ${result.kimiDir}`);
+      console.log(`  grok     ${result.grokDir}`);
+      console.log(`  wrapper  ${result.wrapper}`);
+      console.log(`next: log in once with \`ai-${result.name} <cli>\` (claude, codex, grok, cursor, kimi); SBB never touches credentials`);
       return EXIT.OK;
     }
 

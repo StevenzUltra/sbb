@@ -238,6 +238,9 @@ export async function createUiServer(opts = {}) {
       readReceipts: deps.readReceipts,
       listBrains: deps.listBrains,
       accountList: deps.accountList,
+      // Same catalog the flattened `catalog` field below uses: data.js withClis() derives each
+      // account's CLI chips from it, and a test-injected catalog must drive both.
+      catalog: deps.catalog,
       allChannels: deps.allChannels,
       tps: deps.tps,
     });

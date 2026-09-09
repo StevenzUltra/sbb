@@ -37,6 +37,11 @@ Write atomically (temp file + rename). Reads tolerate missing dir (= no brains).
 `sbb ls` shows the union of three sources; a row exists for every live CLI session found,
 brains are overlaid by matching pane id (or pid for Claude).
 
+An account's config dirs are the ones that exist: `~/.claude`, `~/.codex`, `~/.gemini`,
+`~/.cursor`, `~/.kimi-code`, `~/.grok` for `default`, and
+`~/.ai-account-<name>/{claude,codex,gemini,cursor-agent,kimi,grok}` for a named account
+(`src/lib/paths.js` `CLI_DIR_FIELD`; `sbb account add` creates all six).
+
 1. tmux panes: `listPanes()` from `src/lib/tmux.js`. `cli` is inferred:
    - `pane_current_command` matches `^\d+\.\d+\.\d+$` (Claude prints its version) -> `claude`
    - `agy` -> `agy`

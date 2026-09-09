@@ -33,20 +33,66 @@ export function claudeSocksDirs() {
 }
 
 /**
- * Discover accounts: 'default' (~/.claude, ~/.codex) plus every ~/.ai-account-<name>.
- * An account is listed when at least one of its claude/codex dirs exists.
+ * CLI -> the Account field that holds its config dir. One table, so discovery, the
+ * catalog and `launch.js` cannot drift apart.
+ */
+export const CLI_DIR_FIELD = Object.freeze({
+  claude: 'claudeDir',
+  codex: 'codexDir',
+  agy: 'agyDir',
+  cursor: 'cursorDir',
+  kimi: 'kimiDir',
+  grok: 'grokDir',
+});
+
+/**
+ * CLI -> directory name under `~/.ai-account-<name>/`. Mirrors the user's own
+ * `~/bin/ai-a`: claude/codex/grok plus cursor-agent (config+data) and kimi.
+ */
+export const ACCOUNT_CLI_DIRS = Object.freeze({
+  claude: 'claude',
+  codex: 'codex',
+  agy: 'gemini',
+  cursor: 'cursor-agent',
+  kimi: 'kimi',
+  grok: 'grok',
+});
+
+/** CLI -> directory name under HOME, used by the 'default' account. */
+export const DEFAULT_CLI_DIRS = Object.freeze({
+  claude: '.claude',
+  codex: '.codex',
+  agy: '.gemini',
+  cursor: '.cursor',
+  kimi: '.kimi-code',
+  grok: '.grok',
+});
+
+/**
+ * Discover accounts: 'default' (the global dirs under HOME) plus every
+ * ~/.ai-account-<name>. An account is listed when at least one CLI dir exists; the
+ * Account carries only the dirs that are really there.
  * @returns {Account[]}
  */
 export function discoverAccounts() {
   const home = homeDir();
   /** @type {Account[]} */
   const out = [];
-  const push = (name, baseDir, claudeDir, codexDir) => {
-    const c = existsSync(claudeDir) ? claudeDir : undefined;
-    const x = existsSync(codexDir) ? codexDir : undefined;
-    if (c || x) out.push({ name, baseDir, claudeDir: c, codexDir: x });
+  /** @param {string} baseDir @param {Record<string,string>} layout */
+  const probe = (baseDir, layout) => {
+    /** @type {Record<string,string>} */
+    const found = {};
+    for (const [cli, field] of Object.entries(CLI_DIR_FIELD)) {
+      const dir = join(baseDir, layout[cli]);
+      if (existsSync(dir)) found[field] = dir;
+    }
+    return found;
   };
-  push('default', '', join(home, '.claude'), join(home, '.codex'));
+  /** @param {string} name @param {string} baseDir @param {Record<string,string>} found */
+  const push = (name, baseDir, found) => {
+    if (Object.keys(found).length) out.push({ name, baseDir, ...found });
+  };
+  push('default', '', probe(home, DEFAULT_CLI_DIRS));
   let entries = [];
   try {
     entries = readdirSync(home, { withFileTypes: true });
@@ -58,7 +104,7 @@ export function discoverAccounts() {
     const name = e.name.slice('.ai-account-'.length);
     if (!name) continue;
     const base = join(home, e.name);
-    push(name, base, join(base, 'claude'), join(base, 'codex'));
+    push(name, base, probe(base, ACCOUNT_CLI_DIRS));
   }
   return out;
 }

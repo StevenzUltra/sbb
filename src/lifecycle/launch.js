@@ -155,7 +155,17 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
     if (name) env.CLAUDE_CODE_SESSION_NAME = name;
   } else if (cli === 'codex' && acct.codexDir) {
     env.CODEX_HOME = acct.codexDir;
+  } else if (cli === 'grok' && acct.grokDir) {
+    env.GROK_HOME = acct.grokDir;
+  } else if (cli === 'cursor' && acct.cursorDir) {
+    // cursor-agent reads both; the user's ~/bin/ai-a points them at one dir (paths.js).
+    env.CURSOR_CONFIG_DIR = acct.cursorDir;
+    env.CURSOR_DATA_DIR = acct.cursorDir;
+  } else if (cli === 'kimi' && acct.kimiDir) {
+    env.KIMI_CODE_HOME = acct.kimiDir;
   }
+  // agy has no documented per-account config variable on this machine, so it gets no env
+  // entry rather than a guessed one (docs/spec/policy.md "sbb account").
 
   const extra = splitArgs(extraArgs);
   const briefArg = `$(cat ${shellQuote(briefFile)})`;
