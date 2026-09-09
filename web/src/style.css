@@ -41,6 +41,9 @@
   --es-divider: rgba(26, 26, 26, 0.06);
   --es-terminal-fill: #111513;
   --es-terminal-text: #d5dbd7;
+  /* Desktop shell appearance (settings 外观, web/src/lib/appearance.js). */
+  --sbb-tint-alpha: 0.42;
+  --sbb-blur: 28px;
 }
 
 .dark {
@@ -301,7 +304,7 @@
 /* Desktop shell (docs/spec/desktop.md): the macOS window is a vibrancy surface, so the page
    paints only a thin dark tint and the panels are translucent glass over it. */
 :root[data-shell="desktop"].dark body {
-  background-color: rgba(10, 13, 11, 0.42);
+  background-color: rgba(10, 13, 11, var(--sbb-tint-alpha));
   background-image: radial-gradient(1200px 600px at 20% -10%, rgba(45, 107, 79, 0.18), transparent 60%),
     radial-gradient(900px 500px at 100% 100%, rgba(229, 168, 53, 0.06), transparent 60%);
 }
@@ -315,8 +318,8 @@
 }
 :root[data-shell="desktop"].dark .glass,
 :root[data-shell="desktop"].dark .bar {
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(var(--sbb-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--sbb-blur)) saturate(150%);
 }
 :root[data-shell="desktop"].dark .pane-frame {
   backdrop-filter: blur(18px);

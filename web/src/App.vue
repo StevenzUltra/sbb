@@ -5,7 +5,8 @@ import TopBar from './components/TopBar.vue';
 import ConsoleView from './components/ConsoleView.vue';
 import OrgChart from './components/OrgChart.vue';
 import ReceiptLog from './components/ReceiptLog.vue';
-import TpsBar from './components/TpsBar.vue';
+import SettingsView from './components/SettingsView.vue';
+import StatusBar from './components/StatusBar.vue';
 import SpawnDialog from './components/SpawnDialog.vue';
 import KillConfirm from './components/KillConfirm.vue';
 import ToastStack from './components/ToastStack.vue';
@@ -44,18 +45,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
         <div v-if="!store.brains.length" class="flex flex-1 items-center justify-center">
           <div class="glass flex w-[420px] flex-col items-center gap-3 rounded-[16px] px-6 py-6">
             <div class="text-[14px] font-semibold">还没有脑</div>
-            <div class="text-center text-[12px] text-es-muted">开一个主脑，让它带子脑干活。</div>
-            <button class="btn-primary px-4 py-2 text-[13px]" @click="store.dialog = 'spawn'">开脑</button>
+            <div class="text-center text-[12px] text-es-muted">新建一个主脑，让它带子脑干活。</div>
+            <button class="btn-primary px-4 py-2 text-[13px]" @click="store.dialog = 'spawn'">新建</button>
           </div>
         </div>
 
         <ConsoleView v-else-if="store.view === 'console'" />
         <OrgChart v-else-if="store.view === 'org'" />
-        <ReceiptLog v-else />
+        <ReceiptLog v-else-if="store.view === 'log'" />
+        <SettingsView v-else />
       </template>
     </main>
 
-    <TpsBar />
+    <StatusBar />
     <SpawnDialog v-if="store.dialog === 'spawn'" />
     <KillConfirm />
     <ToastStack />

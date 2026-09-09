@@ -41,8 +41,11 @@ export function createHttpClient() {
     loadState: () => request('/api/state'),
     post: (path, body) => request(path, { method: 'POST', body }),
 
-    subscribe(onEvent) {
+    subscribe(onEvent, onStatus) {
       const source = new EventSource(`/api/events?t=${encodeURIComponent(token)}`);
+      // The status bar's connection dot follows the stream, not just the first snapshot.
+      source.onopen = () => onStatus?.(true);
+      source.onerror = () => onStatus?.(false);
       const names = ['brain', 'receipt', 'message', 'held', 'plan', 'claim', 'quota', 'tps', 'policy'];
       for (const event of names) {
         source.addEventListener(event, (msg) => {

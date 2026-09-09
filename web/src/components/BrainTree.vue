@@ -1,10 +1,8 @@
 <script setup>
-import { ref } from 'vue';
 import { useSbb, STATUS_LABEL } from '../store/sbb.js';
 import Icon from './Icon.vue';
 
 const store = useSbb();
-const searchInput = ref(null);
 
 const DOT = { idle: 'dot-idle', busy: 'dot-busy', blocked: 'dot-blocked', '?': 'dot-unknown', gone: 'dot-unknown' };
 const indent = (brain) => (brain.role === 'sub' && brain.parent ? 'pl-[30px]' : 'pl-[10px]');
@@ -15,25 +13,17 @@ function detail(brain) {
   return parts.filter(Boolean).join(' · ');
 }
 
-// ⌘K focuses the search box (web-console.md, "Keyboard").
-store.focusSearch = () => searchInput.value?.focus();
 </script>
 
 <template>
   <aside class="glass flex min-h-0 flex-col overflow-hidden rounded-[16px]">
-    <div class="flex items-center justify-between border-b px-4 py-3" style="border-color: var(--es-divider)">
+    <div class="flex items-center gap-[10px] border-b px-4 py-3" style="border-color: var(--es-divider)">
       <div class="text-[14px] font-semibold">脑图</div>
       <div class="text-[12px] text-es-muted">{{ store.brainCount }} 个脑 · {{ store.teamCount }} 个组</div>
-    </div>
-
-    <div class="mx-3 my-[10px] flex items-center gap-2 rounded-[8px] px-[10px] py-[7px] text-[12px]" style="background: var(--es-sunken)">
-      <Icon name="search" :size="14" class="text-es-muted" />
-      <input
-        ref="searchInput"
-        v-model="store.search"
-        class="field w-full bg-transparent outline-none"
-        placeholder="按名字或编号找脑"
-      />
+      <button class="btn-primary ml-auto flex items-center gap-[4px] px-[9px] py-[4px] text-[12px]" @click="store.dialog = 'spawn'">
+        <Icon name="plus" :size="12" stroke="#ffffff" />
+        新建
+      </button>
     </div>
 
     <div class="flex min-h-0 flex-1 flex-col gap-[2px] overflow-y-auto px-2">

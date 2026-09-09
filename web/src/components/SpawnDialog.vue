@@ -47,7 +47,7 @@ async function submit() {
     <div class="glass w-[520px] rounded-[16px] p-4" style="box-shadow: 0 16px 48px rgba(0, 0, 0, 0.16)">
       <div class="flex flex-col gap-[12px]">
         <div class="flex items-center justify-between">
-          <div class="text-[14px] font-semibold">开脑</div>
+          <div class="text-[14px] font-semibold">新建</div>
           <button class="text-es-muted" @click="store.dialog = null">关闭</button>
         </div>
 
@@ -118,7 +118,7 @@ async function submit() {
           </span>
           <span class="flex gap-[6px]">
             <button class="px-3 py-[7px] text-[12px] text-es-dim dark:text-es-dark-muted" @click="store.dialog = null">取消</button>
-            <button class="btn-primary px-[14px] py-[7px] text-[12px] disabled:opacity-60" :disabled="!ready" @click="submit">开脑</button>
+            <button class="btn-primary px-[14px] py-[7px] text-[12px] disabled:opacity-60" :disabled="!ready" @click="submit">新建</button>
           </span>
         </div>
       </div>

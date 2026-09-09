@@ -1,37 +1,121 @@
 {
   "_note": "Overlays applied by src/api/fixture.js when the page is opened with ?scene=<name>, so each reference state is reachable without a server.",
   "held": {
-    "ui": { "view": "console", "team": "lead", "thread": "lead-ops", "selected": "SSL-0045" },
-    "policy": { "peers": "moderated" },
+    "ui": {
+      "view": "console",
+      "team": "lead",
+      "thread": "lead-ops",
+      "selected": "SSL-0045"
+    },
+    "policy": {
+      "peers": "moderated"
+    },
     "held": [
       {
-        "msgId": "003f9c0b", "from": "SSL-0045", "to": "SSL-0046",
-        "fromName": "lead", "toName": "ops", "role": "main",
+        "msgId": "003f9c0b",
+        "from": "SSL-0045",
+        "to": "SSL-0046",
+        "fromName": "lead",
+        "toName": "ops",
+        "role": "main",
         "text": "[lead#SSL-0045 → ops#SSL-0046][主脑] review 现在归你了吗？",
-        "at": "05:46", "reason": "moderated", "policy": "moderated",
+        "at": "05:46",
+        "reason": "moderated",
+        "policy": "moderated",
         "thread": "lead-ops"
       }
     ],
     "brains": [
       {
-        "id": "SSL-0045", "name": "lead", "account": "a", "cli": "claude",
-        "model": "claude-haiku-4-5", "modelLabel": "haiku 4.5", "role": "main",
-        "status": "blocked", "parent": null, "team": "lead", "paneId": "%30",
-        "coord": "sbb-rehearsal:3.1", "cwd": "/Users/steven/developer/sbb",
-        "claude": { "pid": 4242 },
+        "id": "SSL-0045",
+        "name": "lead",
+        "account": "a",
+        "cli": "claude",
+        "model": "claude-haiku-4-5",
+        "modelLabel": "haiku 4.5",
+        "role": "main",
+        "status": "blocked",
+        "parent": null,
+        "team": "lead",
+        "paneId": "%30",
+        "coord": "sbb-rehearsal:3.1",
+        "cwd": "/Users/steven/developer/sbb",
+        "claude": {
+          "pid": 4242
+        },
         "lastMessage": "等你批准一条发给 ops 的消息"
       },
       {
-        "id": "SSL-0048", "name": "review", "account": "c", "cli": "codex",
-        "model": "deepseek-v4-flash-vision-exp", "modelLabel": "deepseek-v4-flash",
-        "role": "sub", "status": "idle", "parent": "SSL-0046", "team": "ops",
-        "paneId": "%48", "coord": "sbb-rehearsal:6.1", "cwd": "/Users/steven/developer/sbb",
+        "id": "SSL-0048",
+        "name": "review",
+        "account": "c",
+        "cli": "codex",
+        "model": "deepseek-v4-flash-vision-exp",
+        "modelLabel": "deepseek-v4-flash",
+        "role": "sub",
+        "status": "idle",
+        "parent": "SSL-0046",
+        "team": "ops",
+        "paneId": "%48",
+        "coord": "sbb-rehearsal:6.1",
+        "cwd": "/Users/steven/developer/sbb",
         "lastMessage": "刚从 lead 转来"
       }
     ]
   },
   "transfer": {
-    "ui": { "view": "org", "team": "lead", "thread": null, "selected": "SSL-0048" },
-    "moveDraft": { "brain": "SSL-0048", "to": "SSL-0046", "mode": "afterIdle", "handoff": true }
+    "ui": {
+      "view": "org",
+      "team": "lead",
+      "thread": null,
+      "selected": "SSL-0048"
+    },
+    "moveDraft": {
+      "brain": "SSL-0048",
+      "to": "SSL-0046",
+      "mode": "afterIdle",
+      "handoff": true
+    }
+  },
+  "quota": {
+    "_note": "状态栏额度：多于四项时收进 +N 弹层（Layout2 验收用）",
+    "quota": [
+      {
+        "key": "a/claude",
+        "label": "a · Claude",
+        "pct": 78,
+        "note": "5h 41% · 7d 78%"
+      },
+      {
+        "key": "a/codex",
+        "label": "a · Codex",
+        "pct": 88,
+        "note": "weekly 88% left"
+      },
+      {
+        "key": "default/claude",
+        "label": "default · Claude",
+        "pct": 75,
+        "note": "weekly 75% left"
+      },
+      {
+        "key": "b/codex",
+        "label": "b · Codex",
+        "pct": 41,
+        "note": "weekly 41% left"
+      },
+      {
+        "key": "c/codex",
+        "label": "c · DeepSeek",
+        "pct": 63,
+        "note": "weekly 63% left"
+      },
+      {
+        "key": "d/claude",
+        "label": "d · Claude",
+        "pct": 9,
+        "note": "weekly 9% left"
+      }
+    ]
   }
 }

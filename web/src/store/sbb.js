@@ -2,6 +2,10 @@
 // It holds the /api/state snapshot, applies SSE events, and exposes the actions the UI calls.
 import { defineStore } from 'pinia';
 import { toQuotaChips } from '../lib/quota.js';
+import { peersBody, uiPeerMode } from '../lib/policy.js';
+import {
+  THEMES, applyAppearance, applyTheme as paintTheme, readAppearance, readTheme, resolveDark, writeTheme,
+} from '../lib/appearance.js';
 import { receiptRow } from '../lib/receipts.js';
 import { createClient, FIXTURE } from '../api/index.js';
 
@@ -29,6 +33,24 @@ export const POLICY_LABEL = { open: '开', moderated: '先经我过目', closed:
 
 const clock = () => new Date().toTimeString().slice(0, 5);
 
+/** localStorage can be unavailable (private windows); the choice then lives for this page load. */
+function storage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The desktop shell is a dark translucent window, so it prefers dark over the OS. */
+function prefersDark() {
+  return document.documentElement.dataset.shell === 'desktop'
+    || window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** Chips the status bar keeps at hand; it shows four and collapses the rest behind `+N`. */
+const QUOTA_CHIPS = 24;
+
 export const useSbb = defineStore('sbb', {
   state: () => ({
     client: null,
@@ -42,7 +64,16 @@ export const useSbb = defineStore('sbb', {
     accounts: [],
     quota: [],
     catalog: [],
-    policy: { peers: 'open', rows: [] },
+    connected: false,
+    policy: {
+      peers: 'on',
+      brains: {},
+      teams: { subsDirect: true },
+      allow: [],
+      quota: { floorWeekly: 10, mainReserve: 20 },
+      spawn: { cliArgs: {}, preamble: {}, command: {} },
+      rows: [],
+    },
     held: [],
     plans: [],
     claims: [],
@@ -63,6 +94,7 @@ export const useSbb = defineStore('sbb', {
     pending: {},
     waiting: {},
     theme: 'light',
+    themeChoice: 'system',
     drawer: false,
   }),
 
@@ -72,7 +104,7 @@ export const useSbb = defineStore('sbb', {
     brainCount: (state) => state.brains.length,
     teamCount: (state) => state.teams.length,
     heldCount: (state) => state.held.length,
-    policyMode: (state) => state.policy?.peers ?? 'open',
+    policyMode: (state) => uiPeerMode(state.policy?.peers),
     tabs: (state) => [
       ...state.teams.map((team) => ({
         id: `team:${team.id}`,
@@ -153,13 +185,20 @@ export const useSbb = defineStore('sbb', {
     async init() {
       if (this.client) return;
       this.client = createClient();
-      this.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      this.themeChoice = readTheme(storage());
+      this.applyTheme();
+      applyAppearance(document.documentElement, readAppearance(storage()));
       try {
         const snapshot = await this.client.loadState();
         this.applySnapshot(snapshot);
-        this.client.subscribe((event) => this.applyEvent(event));
+        this.connected = true;
+        this.client.subscribe(
+          (event) => this.applyEvent(event),
+          (up) => { this.connected = up; },
+        );
         this.ready = true;
       } catch (err) {
+        this.connected = false;
         this.error = err.message;
       }
     },
@@ -171,7 +210,7 @@ export const useSbb = defineStore('sbb', {
         brains: snapshot.brains ?? [],
         tree: snapshot.tree ?? null,
         accounts: snapshot.accounts ?? [],
-        quota: toQuotaChips(snapshot.quota ?? [], { brains: snapshot.brains ?? [] }),
+        quota: toQuotaChips(snapshot.quota ?? [], { brains: snapshot.brains ?? [], limit: QUOTA_CHIPS }),
         catalog: snapshot.catalog ?? [],
         policy: snapshot.policy ?? this.policy,
         held: snapshot.held ?? [],
@@ -245,7 +284,7 @@ export const useSbb = defineStore('sbb', {
           this.tps = data;
           break;
         case 'quota':
-          this.quota = toQuotaChips(data, { brains: this.brains });
+          this.quota = toQuotaChips(data, { brains: this.brains, limit: QUOTA_CHIPS });
           break;
         case 'claim':
           this.claims = data;
@@ -288,10 +327,16 @@ export const useSbb = defineStore('sbb', {
     openThread(id) {
       this.threadId = id;
     },
-    toggleTheme() {
-      this.theme = this.theme === 'dark' ? 'light' : 'dark';
-      document.documentElement.classList.toggle('dark', this.theme === 'dark');
-      localStorage.setItem('sbb-theme', this.theme);
+    /** 深色 / 浅色 / 跟随系统 (web-console.md, "Theme"). */
+    setTheme(choice) {
+      this.themeChoice = THEMES.includes(choice) ? choice : 'system';
+      writeTheme(storage(), this.themeChoice);
+      this.applyTheme();
+    },
+    applyTheme() {
+      const dark = prefersDark();
+      this.theme = resolveDark(this.themeChoice, dark) ? 'dark' : 'light';
+      paintTheme(document.documentElement, this.themeChoice, dark);
     },
 
     toast(text, tone = 'ok') {
@@ -350,8 +395,22 @@ export const useSbb = defineStore('sbb', {
       if (result) this.toast(`已拒绝 ${msgId}`, 'warn');
     },
     async setPolicy(mode) {
-      const policy = await this.act('/api/policy', { set: { peers: mode } });
+      const policy = await this.act('/api/policy', peersBody(mode));
       if (policy) this.toast(`主脑互通已切到${POLICY_LABEL[mode] ?? mode}`, 'ok');
+    },
+    /** The settings view: one POST /api/policy per control (web/src/lib/policy.js shapes). */
+    async updatePolicy(body, ok) {
+      const result = await this.act('/api/policy', body);
+      if (result && ok) this.toast(ok, 'ok');
+      return result;
+    },
+
+    /** The status bar's 待批准 pill: open the thread the oldest hold sits in. */
+    openHeld() {
+      const first = this.held[0];
+      this.setView('console');
+      if (first?.from) this.select(first.from);
+      if (first?.thread) this.openThread(first.thread);
     },
 
     openMove(brainId, target) {
@@ -372,7 +431,7 @@ export const useSbb = defineStore('sbb', {
     async spawn(payload) {
       const result = await this.act('/api/spawn', payload);
       if (result) {
-        this.toast(`开脑 ${result.name ?? payload.name}（${result.coord ?? ''}）`, 'ok');
+        this.toast(`新建 ${result.name ?? payload.name}（${result.coord ?? ''}）`, 'ok');
         this.dialog = null;
       }
       return result;
@@ -404,9 +463,14 @@ export const useSbb = defineStore('sbb', {
         if (this.selectedId) this.goTerminal(this.selectedId);
         return;
       }
-      if (event.metaKey && ['1', '2', '3'].includes(event.key)) {
+      if (event.metaKey && ['1', '2', '3', '4'].includes(event.key)) {
         event.preventDefault();
-        this.setView(['console', 'org', 'log'][Number(event.key) - 1]);
+        this.setView(['console', 'org', 'log', 'settings'][Number(event.key) - 1]);
+        return;
+      }
+      if (event.metaKey && event.key === ',') {
+        event.preventDefault();
+        this.setView('settings');
         return;
       }
       if (event.metaKey && event.key.toLowerCase() === 'k') {
