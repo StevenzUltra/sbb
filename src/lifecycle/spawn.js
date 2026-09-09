@@ -72,6 +72,12 @@ export function spawnCliArgs(cli, { dir, readConfig = readPolicyConfig, onWarn }
  *           onWarn?: (message: string) => void }} [opts]
  * @returns {{ preamble?: string, command?: string, shell?: string }}
  */
+/** The tmux session new brains go to (config `spawn.session`, default `sbb`). */
+export function spawnSession({ dir, readConfig = readPolicyConfig, onWarn } = {}) {
+  const value = readConfig({ sbbDir: dir, onWarn })?.spawn?.session;
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : 'sbb';
+}
+
 export function spawnLauncher(cli, { dir, readConfig = readPolicyConfig, onWarn } = {}) {
   const spawn = readConfig({ sbbDir: dir, onWarn })?.spawn ?? {};
   const pick = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
@@ -260,10 +266,17 @@ export async function spawnBrain(input = {}, deps = {}) {
   try {
     // The CLI is the pane command: nothing is typed into an interactive shell, so a
     // multi-kilobyte brief cannot stall behind the shell's completion or paste handling.
-    if (!input.split) await tmuxApi.ensureServer?.();
+    // Brains live in SBB's own tmux session (config spawn.session, default `sbb`), never in
+    // whatever session happens to be current: a spawn from the desktop app or from another
+    // terminal must not drop a window into the user's working session. `--here` keeps the
+    // old behaviour (the caller's session), `--split` splits the caller's window.
+    const session = input.here || input.split ? null : (deps.spawnSession ?? spawnSession)({ dir: deps.configDir, onWarn: deps.onWarn });
+    if (session) await tmuxApi.ensureSession?.(session, { cwd });
+    else if (!input.split) await tmuxApi.ensureServer?.();
+    const target = session ? ['-t', `=${session}:`] : [];
     paneId = input.split
       ? await tmuxApi.tmux(['split-window', '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand])
-      : await tmuxApi.tmux(['new-window', '-n', `ai-${accountName}`, '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand]);
+      : await tmuxApi.tmux(['new-window', ...target, '-n', `ai-${accountName}`, '-c', cwd, '-P', '-F', '#{pane_id}', ...command.paneCommand]);
   } catch (err) {
     return blocked('tmux_failed', `cannot create a pane: ${err?.message ?? err}`);
   }

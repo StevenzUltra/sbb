@@ -165,3 +165,12 @@ Levels, lowest to highest: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. C
 `low`..`max`; Codex takes `minimal`..`xhigh`. A level the CLI does not have is lowered to its
 highest supported one (`max` on Codex runs as `xhigh`); a request below its range becomes its
 lowest; other CLIs ignore it. The record keeps `effort` (requested) and `effortApplied`.
+
+## Where a brain lives
+
+`sbb spawn` creates the pane in SBB's own tmux session, `spawn.session` in the config
+(default `sbb`), creating that session detached when it is missing (`has-session -t =name` so a
+session that merely starts with the name does not count). A spawn from the desktop app or
+from another terminal therefore never drops a window into the session the person is working
+in. `--here` uses the caller's current session instead; `--split` splits the caller's window.
+去终端 attaches to the brain's session.

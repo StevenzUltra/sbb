@@ -27,6 +27,8 @@
 - `spawn.cliArgs.<cli>`: default extra flags for `sbb spawn` of that CLI, written by
   `sbb policy spawn-args` and passed through as `--cli-args=<text>` (whitespace-split by
   `sbb spawn`; a plan node's own `cliArgs` is appended after them). Blank entries are dropped.
+- `spawn.session`: the tmux session new brains are created in (default `sbb`; lifecycle.md
+  "Where a brain lives").
 - `spawn.preamble.<cli>`: a shell line run in the new pane before the CLI starts (a proxy
   script, extra environment); `spawn.command.<cli>`: a launcher that replaces the CLI binary
   and must forward its arguments; `spawn.shell`: the shell that runs the pane line (default
