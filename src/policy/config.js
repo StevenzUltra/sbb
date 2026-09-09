@@ -33,7 +33,7 @@ export function defaultConfig(opts = {}) {
     teams: { subsDirect: true },
     allow: [],
     quota: { ...DEFAULT_QUOTA },
-    spawn: { cliArgs: {}, preamble: {}, command: {} },
+    spawn: { cliArgs: {}, preamble: {}, command: {}, session: 'sbb' },
   };
 }
 
@@ -98,6 +98,8 @@ export function mergeConfig(raw, opts = {}) {
   const preamble = stringMap(spawnRaw.preamble);
   const command = stringMap(spawnRaw.command);
   const shell = typeof spawnRaw.shell === 'string' && spawnRaw.shell.trim() !== '' ? spawnRaw.shell.trim() : undefined;
+  // The tmux session brains are created in (docs/spec/lifecycle.md "Where a brain lives").
+  const session = typeof spawnRaw.session === 'string' && /^[A-Za-z0-9_.-]{1,40}$/.test(spawnRaw.session.trim()) ? spawnRaw.session.trim() : 'sbb';
   return {
     machineTag: typeof source.machineTag === 'string' && source.machineTag.trim() !== ''
       ? source.machineTag.trim()
@@ -111,7 +113,7 @@ export function mergeConfig(raw, opts = {}) {
       floorWeekly: percent(quota.floorWeekly, base.quota.floorWeekly),
       mainReserve: percent(quota.mainReserve, base.quota.mainReserve),
     },
-    spawn: { cliArgs, preamble, command, ...(shell ? { shell } : {}) },
+    spawn: { cliArgs, preamble, command, session, ...(shell ? { shell } : {}) },
     ...(TERMINALS.includes(String(source.terminal ?? '').toLowerCase())
       ? { terminal: String(source.terminal).toLowerCase() }
       : {}),

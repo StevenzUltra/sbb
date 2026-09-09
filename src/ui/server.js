@@ -611,6 +611,7 @@ export async function createUiServer(opts = {}) {
           if (body[key] !== undefined && body[key] !== null && body[key] !== '') argv.push(flag, String(body[key]));
         }
         if (body.split) argv.push('--split');
+        if (body.here) argv.push('--here');
         if (body.force) argv.push('--force');
         argv.push('--json');
         const out = await runCli('spawn', argv);
@@ -767,12 +768,18 @@ export async function createUiServer(opts = {}) {
 
   /** @param {string} paneId @returns {Promise<string|null>} */
   async function sessionForPane(paneId) {
-    try {
-      const panes = await api.listPanes();
-      return panes.find((p) => p.paneId === paneId)?.session ?? null;
-    } catch {
-      return null;
+    // A pane that was created a moment ago can be missing from one listing; look three times.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const panes = await api.listPanes();
+        const session = panes.find((p) => p.paneId === paneId)?.session;
+        if (session) return session;
+      } catch {
+        // tmux hiccup: retry
+      }
+      await new Promise((r) => setTimeout(r, 300));
     }
+    return null;
   }
 
   /** @param {string} session */

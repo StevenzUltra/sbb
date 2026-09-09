@@ -208,6 +208,23 @@ export async function ensureServer({ session = 'sbb', cwd = process.env.HOME, wi
 }
 
 /**
+ * Make sure a session with exactly this name exists (tmux matches names by prefix, so the
+ * lookup uses `=name`), creating it detached when missing.
+ * @param {string} name @param {{ cwd?: string, width?: number, height?: number }} [opts]
+ * @returns {Promise<{ created: boolean }>}
+ */
+export async function ensureSession(name, { cwd = process.env.HOME, width = 220, height = 50 } = {}) {
+  try {
+    await tmux(['has-session', '-t', `=${name}`]);
+    return { created: false };
+  } catch {
+    // missing (or no server at all): create it
+  }
+  await tmux(['new-session', '-d', '-s', name, '-x', String(width), '-y', String(height), ...(cwd ? ['-c', cwd] : [])]);
+  return { created: true };
+}
+
+/**
  * Create a window and return its pane id.
  * @param {{ name?: string, cwd?: string, command?: string[] }} [opts]
  * @returns {Promise<string>}

@@ -92,11 +92,11 @@ test('spawnBrain: happy path registers the brain and notifies the parent', async
       ['@codex_home', '/tmp/home/.ai-account-a/codex'],
     ]);
     const created = tmuxCommands(deps.tmuxApiRef)[0];
-    assert.deepEqual(created.slice(0, 7), ['new-window', '-n', 'ai-a', '-c', '/tmp/proj', '-P', '-F']);
-    assert.deepEqual(created.slice(7, 10), ['#{pane_id}', 'sh', '-c'], 'the CLI is the pane command');
-    assert.match(created[10], /^exec env /);
-    assert.match(created[10], /--append-system-prompt-file/);
-    assert.match(created[10], /SMS-0042\.md/);
+    assert.deepEqual(created.slice(0, 9), ['new-window', '-t', '=sbb:', '-n', 'ai-a', '-c', '/tmp/proj', '-P', '-F'], 'the pane goes to the sbb session');
+    assert.deepEqual(created.slice(9, 12), ['#{pane_id}', 'sh', '-c'], 'the CLI is the pane command');
+    assert.match(created[12], /^exec env /);
+    assert.match(created[12], /--append-system-prompt-file/);
+    assert.match(created[12], /SMS-0042\.md/);
     assert.equal(
       deps.tmuxApiRef.calls.filter((c) => Array.isArray(c) && c[0].startsWith('send-')).length,
       0,
@@ -139,8 +139,8 @@ test('spawnBrain: the brief always goes to ~/.sbb/briefs and the pane command on
     assert.equal(result.briefFile, join(dir, 'briefs', 'SMS-0042.md'));
     assert.equal(readFileSync(result.briefFile, 'utf8').length, 20001);
     const created = tmuxCommands(deps.tmuxApiRef)[0];
-    assert.match(created[10], /SMS-0042\.md/);
-    assert.ok(created[10].length < 4000, 'the pane command stays small');
+    assert.match(created[12], /SMS-0042\.md/);
+    assert.ok(created[12].length < 4000, 'the pane command stays small');
   } finally {
     restore();
   }

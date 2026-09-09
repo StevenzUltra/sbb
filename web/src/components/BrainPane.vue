@@ -18,6 +18,8 @@ let observer = null;
 let requestTimer = null;
 let reopenTimer = null;
 let lastReopen = 0;
+let goneRetries = 0;
+let lastPaneId = null;
 let escapeAt = 0;
 // The pane's own geometry (canned in fixture mode, reported by the server when it knows it).
 let paneCols = 0;
@@ -53,6 +55,8 @@ function openPane() {
   paneCols = 0;
   paneRows = 0;
   const id = paneId();
+  if (id !== lastPaneId) goneRetries = 0;
+  lastPaneId = id;
   if (!id) {
     writeText('这个脑没有窗格（可能已经结束）。\r\n');
     syncSize({ request: false });
@@ -71,6 +75,13 @@ function openPane() {
       terminal.write(bytes);
     },
     onClosed: (reason) => {
+      // A pane that was created a moment ago can be reported gone once; try again shortly,
+      // at most three times, before showing the closure.
+      if (reason === 'pane_gone' && goneRetries < 3 && paneId()) {
+        goneRetries += 1;
+        setTimeout(() => { if (paneId() === id) openPane(); }, 1200);
+        return;
+      }
       if (reason) writeText(`\r\n[连接关闭：${reason}]\r\n`);
     },
     onRefused: (reason) => {
