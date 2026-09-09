@@ -223,8 +223,11 @@ watch(() => store.theme, () => {
     <!-- Padding lives on this frame, not on the scroller: FitAddon measures the scroller's
          box, so padding there would over-estimate the panel's column count. -->
     <div class="relative m-3 min-h-0 flex-grow overflow-hidden rounded-[12px] p-3" :class="{ 'ring-2 ring-es-green': store.paneMode === 'input' }" :style="{ background: store.theme === 'dark' ? '#0c0f0d' : '#111513' }">
+      <!-- The host grows with the terminal's own width (cols x cell): xterm's viewport, and
+           with it the vertical scrollbar, is as wide as the host, so a host narrower than
+           the screen canvas would draw that scrollbar in the middle of the pane. -->
       <div ref="scroller" class="h-full w-full overflow-auto">
-        <div ref="host" class="h-full w-full" />
+        <div ref="host" class="pane-host h-full" />
       </div>
     </div>
 

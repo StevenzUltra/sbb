@@ -290,3 +290,17 @@
   --es-highlight-fill: rgba(45, 107, 79, 0.32);
   --es-highlight-text: #a8d8bf;
 }
+
+/* Brain pane terminal: the host follows the rendered screen width, and xterm's own
+   scrollback bar stays invisible (wheel scrolling still works); the pane area scrolls
+   sideways when the tmux pane is wider than the panel (web-console.md). */
+.pane-host {
+  width: max-content;
+  min-width: 100%;
+}
+.pane-host .xterm-viewport {
+  scrollbar-width: none;
+}
+.pane-host .xterm-viewport::-webkit-scrollbar {
+  display: none;
+}
