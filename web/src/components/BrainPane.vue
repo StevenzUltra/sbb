@@ -22,8 +22,11 @@ let paneRows = 0;
 const width = new ScreenWidth();
 const decoder = new TextDecoder();
 
+const desktopShell = document.documentElement.dataset.shell === 'desktop';
+/** The pane frame paints the ground; in the desktop shell it is translucent glass. */
+const frameFill = () => (desktopShell && store.theme === 'dark' ? 'var(--es-terminal-fill)' : store.theme === 'dark' ? '#0c0f0d' : '#111513');
 const theme = () => ({
-  background: store.theme === 'dark' ? '#0c0f0d' : '#111513',
+  background: desktopShell && store.theme === 'dark' ? 'rgba(0, 0, 0, 0)' : store.theme === 'dark' ? '#0c0f0d' : '#111513',
   foreground: '#d5dbd7',
   cursor: '#7fbf9f',
   selectionBackground: 'rgba(127, 191, 159, 0.28)',
@@ -147,6 +150,7 @@ onMounted(() => {
     lineHeight: 1.7,
     fontFamily: '"SF Mono", Menlo, Consolas, monospace',
     scrollback: 2000,
+    allowTransparency: desktopShell,
     disableStdin: true,
     theme: theme(),
   });
@@ -222,7 +226,7 @@ watch(() => store.theme, () => {
 
     <!-- Padding lives on this frame, not on the scroller: FitAddon measures the scroller's
          box, so padding there would over-estimate the panel's column count. -->
-    <div class="relative m-3 min-h-0 flex-grow overflow-hidden rounded-[12px] p-3" :class="{ 'ring-2 ring-es-green': store.paneMode === 'input' }" :style="{ background: store.theme === 'dark' ? '#0c0f0d' : '#111513' }">
+    <div class="pane-frame relative m-3 min-h-0 flex-grow overflow-hidden rounded-[12px] p-3" :class="{ 'ring-2 ring-es-green': store.paneMode === 'input' }" :style="{ background: frameFill() }">
       <!-- The host grows with the terminal's own width (cols x cell): xterm's viewport, and
            with it the vertical scrollbar, is as wide as the host, so a host narrower than
            the screen canvas would draw that scrollbar in the middle of the pane. -->

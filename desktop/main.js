@@ -111,7 +111,11 @@ async function openConsole() {
     title: 'SBB',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 20 },
-    backgroundColor: '#f6f7f6',
+    // A translucent dark window, like a terminal with background blur: macOS vibrancy under
+    // a page that paints no opaque ground (web/src/style.css, data-shell="desktop").
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundColor: '#00000000',
     show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -139,7 +143,7 @@ async function openConsole() {
     }
   });
   win.on('closed', () => { win = null; });
-  await win.loadURL(started.info.url);
+  await win.loadURL(`${started.info.url}&shell=desktop`);
   log('loaded');
 }
 
