@@ -159,7 +159,7 @@ account.
 - M2 lifecycle: `spawn`, `kill`, `switch`, `move` with handoff, `policy`, `claim`, `plan`,
   `account add`. Done, rehearsed end to end with Claude Code and Codex brains (`docs/reports/`).
 - M3 console: `sbb ui` server, Vue 3 web console, team channels, live panes, TPS. Done.
-- M4 desktop: an Electron shell around `sbb ui` (`desktop/`, `npm run dist` builds the macOS dmg). Done.
+- M4 desktop: an Electron shell around `sbb ui` (`desktop/`, `npm run dist` builds the macOS dmg); updates come from GitHub Releases. Done.
 - Next: more terminal adapters, Linux verification, npm release.
 
 Design notes and measured protocols live in `docs/spec/`; contributor rules in `AGENTS.md`.
@@ -297,7 +297,7 @@ SBB 依赖的投递协议（Claude Code 的跨会话 socket、`codex queue`）�
 - M2 生命周期：`spawn`、`kill`、`switch`、带交接的 `move`、`policy`、`claim`、`plan`、`account add`。
   已完成，并用 Claude Code 与 Codex 脑做过完整的端到端排练（`docs/reports/`）。
 - M3 控制台：`sbb ui` 服务、Vue 3 网页控制台、组频道、实时画面、TPS。已完成。
-- M4 桌面版：包住 `sbb ui` 的 Electron 壳（`desktop/`，`npm run dist` 产出 macOS dmg）。已完成。
+- M4 桌面版：包住 `sbb ui` 的 Electron 壳（`desktop/`，`npm run dist` 产出 macOS dmg），更新走 GitHub Releases。已完成。
 - 下一步：更多终端适配、Linux 验证、发布到 npm。
 
 设计说明与实测协议在 `docs/spec/`，贡献者规则在 `AGENTS.md`。
