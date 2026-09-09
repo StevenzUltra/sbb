@@ -1,0 +1,79 @@
+{
+  "name": "switch-brain-brain-desktop",
+  "version": "0.1.0",
+  "description": "SBB desktop: the Switch Brain Brain console as a macOS app (Electron shell around sbb ui).",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "SBB_DESKTOP_SMOKE=./smoke.png electron .",
+    "dist": "electron-builder --mac --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.stevenzultra.sbb",
+    "productName": "SBB",
+    "artifactName": "SBB-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "lib/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../bin",
+        "to": "sbb/bin"
+      },
+      {
+        "from": "../src",
+        "to": "sbb/src"
+      },
+      {
+        "from": "../web/dist",
+        "to": "sbb/web/dist"
+      },
+      {
+        "from": "../package.json",
+        "to": "sbb/package.json"
+      },
+      {
+        "from": "../node_modules/ws",
+        "to": "sbb/node_modules/ws"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null,
+      "hardenedRuntime": false,
+      "notarize": false,
+      "minimumSystemVersion": "13.0"
+    },
+    "dmg": {
+      "sign": false
+    },
+    "publish": []
+  },
+  "allowScripts": {
+    "electron@43.6.0": true
+  }
+}
