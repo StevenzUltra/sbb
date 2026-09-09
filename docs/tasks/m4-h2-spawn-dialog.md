@@ -35,3 +35,14 @@ same pattern as the cwd combo). The typed value goes to `/api/spawn` as `model`;
 already passes any string to the CLI (`--model` / `-m`). Show the typed id in the footer line
 (`default · Claude · my-local-model`) and keep the last custom id per CLI in localStorage as
 the first suggestion. Same branch or a new one from main; report + `sbb reply`.
+
+## Follow-up 2 (2026-09-10): effort and names
+
+- **思考强度**: a select next to 模型 (无 / low / medium / high / xhigh) posted as `effort` to
+  `/api/spawn` (main 6b7100e maps it: claude `--effort`, codex `-c model_reasoning_effort=`;
+  hide or disable it for agy / cursor / kimi / grok). Show it in the footer line and in the
+  brain row's meta when the record carries `effort`.
+- **名字**: the server now accepts letters in any script, digits, `-`, `_`, `.` and keeps case
+  (`Main`, `审核` are fine); spaces are still refused. In the field, replace spaces with `-` as
+  the user types, and on a server `invalid_name` show one toast with the plain rule (字母、数字、
+  中文、-、_、.，不能有空格) instead of the regex; never stack duplicate toasts.
