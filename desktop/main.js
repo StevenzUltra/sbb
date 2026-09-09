@@ -48,6 +48,11 @@ function setupUpdates() {
     if (response === 0) autoUpdater.quitAndInstall();
   });
   autoUpdater.checkForUpdates().catch((err) => updateLog(`check failed ${err?.message ?? err}`));
+  // A long-running window would otherwise only learn about releases at the next launch.
+  const every = setInterval(() => {
+    autoUpdater.checkForUpdates().catch((err) => updateLog(`check failed ${err?.message ?? err}`));
+  }, 30 * 60 * 1000);
+  every.unref?.();
 }
 async function checkUpdatesFromMenu() {
   if (!app.isPackaged) {
