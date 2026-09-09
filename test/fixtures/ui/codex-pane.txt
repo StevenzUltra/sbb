@@ -1,0 +1,5 @@
+› fix the login endpoint
+• Working (4s • esc to interrupt)
+  Responses API inference: 3.2s
+  Responses API inference: 1.5s
+› add a follow-up

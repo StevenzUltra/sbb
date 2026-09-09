@@ -167,10 +167,12 @@ export async function enforceDelivery(input) {
  * util.parseArgs with strict unknown-option checking.
  * @param {string[]} argv
  * @param {Record<string, any>} options
+ * @param {{ allowNegative?: boolean }} [extra] `allowNegative` lets a boolean option be
+ *   spelled `--no-<name>` (used by `sbb ui --no-open`).
  */
-export function parse(argv, options = {}) {
+export function parse(argv, options = {}, extra = {}) {
   try {
-    return parseArgs({ args: argv, options, allowPositionals: true, strict: true });
+    return parseArgs({ args: argv, options, allowPositionals: true, strict: true, ...extra });
   } catch (err) {
     throw new UsageError(err?.message ?? String(err));
   }

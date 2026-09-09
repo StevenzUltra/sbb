@@ -42,6 +42,7 @@ export const COMMANDS = Object.freeze([
     'Register resources a brain is working on; detect conflicts'],
   ['plan', 'sbb plan propose --file <plan.json> | ls [--json] | show <planId> [--json] | approve <planId> [--edit <file>] | reject <planId> --reason <text>',
     'Propose, review, approve or reject a staffing plan'],
+  ['ui', 'sbb ui [--port <n>] [--no-open] [--json]', 'Serve the local web console (view brains, panes, quota, TPS)'],
   ['account', 'sbb account ls [--json] | add <name> [--force]', 'List isolated accounts or create a new one'],
   ['help', 'sbb help [protocol]', 'Show the command overview, or the protocol rules'],
 ]);
