@@ -13,6 +13,10 @@ import { createControlFactory } from './fixtures/ui/fake-control.js';
 const TMP = mkdtempSync(join(tmpdir(), 'sbb-h1-ui-'));
 const SBB = join(TMP, 'sbb');
 mkdirSync(SBB, { recursive: true });
+// data.js `watch()` only watches paths that exist when it starts (a path created later is
+// covered by its 30 s re-snapshot), so the log dir a running sbb has already made is created
+// here. See the report: a `log/` born after `sbb ui` starts is only picked up on re-snapshot.
+mkdirSync(join(SBB, 'log'), { recursive: true });
 process.env.SBB_DIR = SBB;
 const {
   ERROR_STATUS,
@@ -72,7 +76,8 @@ const deps = {
   roster: async () => [
     { brainId: brainA.id, status: 'busy', where: 'work:0.0', paneId: '%1', name: 's1', threadId: 'th-1' },
   ],
-  catalog: () => [{ account: 'a', cli: 'claude', models: [] }],
+  catalog: () => [{ account: 'a', cli: 'claude', models: [{ id: 'claude-opus-5', label: 'Opus 5' }] }],
+  accountList: () => [{ name: 'a', clis: ['claude', 'codex'], label: 'a' }],
   readQuota: async () => [{ account: 'a', window: 'session', usedPercent: 11 }],
   readConfig: () => ({ policy: { peers: 'all' }, terminal: 'ghostty' }),
   listHeld: () => [{ msgId: 'm-held' }],
@@ -164,10 +169,13 @@ test('/api/state serves the injected snapshot and enriches brains from the roste
   assert.deepEqual(body.held, [{ msgId: 'm-held' }]);
   assert.deepEqual(body.plans, [{ planId: 'p-1' }]);
   assert.deepEqual(body.claims, [{ brainId: brainA.id, resource: 'branch:h1' }]);
-  assert.deepEqual(body.accounts, [{ account: 'a', cli: 'claude', models: [] }]);
+  assert.deepEqual(body.accounts, [{ name: 'a', clis: ['claude', 'codex'], label: 'a' }], 'data.js accountList');
+  assert.deepEqual(body.catalog, [{ account: 'a', cli: 'claude', model: 'claude-opus-5', label: 'Opus 5' }]);
   assert.deepEqual(body.receipts, [], 'no receipt log yet');
-  assert.ok(Array.isArray(body.tps));
+  assert.ok(Array.isArray(body.tps.list), 'TpsBar reads { list, total }');
+  assert.equal(typeof body.tps.total, 'number');
   assert.ok(Array.isArray(body.teams));
+  for (const team of body.teams) assert.ok(Array.isArray(team.messages), 'ConversationStream pushes into team.messages');
   assert.equal(typeof body.version, 'string');
   const one = body.brains.find((b) => b.id === brainA.id);
   assert.equal(one.status, 'busy');
@@ -178,7 +186,13 @@ test('/api/state serves the injected snapshot and enriches brains from the roste
   const two = body.brains.find((b) => b.id === brainB.id);
   assert.equal(two.status, '?', 'no roster row: the console shows unknown, not a guess');
   assert.equal(two.live, false);
-  assert.deepEqual(body.tree.find((t) => t.id === brainA.id), { id: brainA.id, name: 'h1-one', role: 'main', parent: null });
+  assert.equal(body.tree.id, 'user');
+  assert.equal(body.tree.kind, 'user');
+  assert.deepEqual(
+    body.tree.children.find((t) => t.id === brainA.id),
+    { id: brainA.id, name: 'h1-one', kind: 'brain', children: [] },
+    'OrgChart.vue walks nested children',
+  );
 });
 
 test('/api/state carries the newest 500 receipts, newest first', async () => {
@@ -211,7 +225,7 @@ test('/api/state still answers when tmux cannot be listed', async () => {
   }
 });
 
-test('/api/events streams SSE frames', async () => {
+test('/api/events streams named events with the raw object as payload', async () => {
   const res = await request('/api/events');
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/event-stream/);
@@ -219,10 +233,54 @@ test('/api/events streams SSE frames', async () => {
   const decoder = new TextDecoder();
   const first = decoder.decode((await reader.read()).value);
   assert.match(first, /: sbb ui events/);
-  server.emit({ type: 'probe', n: 1 });
+  server.emitEvent('receipt', { msgId: 'm-probe', status: 'delivered' });
   const next = decoder.decode((await reader.read()).value);
-  assert.match(next, /data: \{"type":"probe","n":1\}/);
+  assert.equal(next, 'event: receipt\ndata: {"msgId":"m-probe","status":"delivered"}\n\n');
   await reader.cancel();
+});
+
+test('/api/events follows the state files through src/ui/data.js watch', async () => {
+  const { appendReceipt } = await import('../src/registry/receipts.js');
+  const res = await request('/api/events');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  await reader.read(); // the opening comment frame
+  let seen = '';
+  const pump = () => {
+    reader.read().then((chunk) => {
+      seen += decoder.decode(chunk.value ?? new Uint8Array(), { stream: true });
+      if (!chunk.done) pump();
+    });
+  };
+  pump();
+  appendReceipt({ msgId: 'm-live', status: 'delivered', via: 'uds' });
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && !seen.includes('m-live')) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.match(seen, /event: receipt\ndata: \{[^}]*"msgId":"m-live"/, `saw ${JSON.stringify(seen.slice(0, 400))}`);
+  await reader.cancel();
+});
+
+test('/api/events sends a named heartbeat frame', async () => {
+  const other = await createUiServer({ port: 0, token: TOKEN, host, deps: { ...deps, heartbeatMs: 20 } });
+  const otherInfo = await other.start({ port: 0 });
+  try {
+    const res = await fetch(`http://127.0.0.1:${otherInfo.port}/api/events?t=${TOKEN}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let seen = '';
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && !seen.includes('event: heartbeat')) {
+      const chunk = await reader.read();
+      seen += decoder.decode(chunk.value ?? new Uint8Array(), { stream: true });
+      if (chunk.done) break;
+    }
+    assert.match(seen, /event: heartbeat\ndata: \{"t":\d+\}/);
+    await reader.cancel();
+  } finally {
+    await other.stop();
+  }
 });
 
 test('/api read routes answer for unknown and known brains', async () => {
