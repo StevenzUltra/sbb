@@ -17,7 +17,7 @@
 
 /**
  * Which CLI a session is running. 'other' covers anything SBB does not have a profile for.
- * @typedef {'claude'|'codex'|'agy'|'cursor'|'other'} CliKind
+ * @typedef {'claude'|'codex'|'agy'|'cursor'|'kimi'|'grok'|'other'} CliKind
  */
 
 /**

@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { CLI_PROFILES, profileFor } from '../src/transports/cli-profiles.js';
 import { createTmuxKeys, MAX_TEXT_CHARS } from '../src/transports/tmux-keys.js';
 import { newMsgId } from '../src/lib/ids.js';
+import { screen } from './fixtures/lifecycle/fake-tmux.js';
 
 // --- live samples (claude: %30 / %74, codex: %20 idle, %21 busy, agy / cursor: scratch) -----
 
@@ -259,6 +260,55 @@ test('submitted(): wrapped long text still matches through the 32-char probe', (
   const text = 'x'.repeat(200);
   const after = ['• ' + 'x'.repeat(60), '  ' + 'x'.repeat(60), '› Ask Codex to do anything'].join('\n');
   assert.equal(CLI_PROFILES.codex.submitted(CODEX_IDLE, after, text), 'delivered');
+});
+
+// --- kimi and grok fingerprints (live captures 2026-09-10, test/fixtures/lifecycle) --------
+
+const KIMI_IDLE = screen('kimi-idle');
+const KIMI_BUSY = screen('kimi-busy');
+const KIMI_TRUST = screen('kimi-trust');
+const GROK_IDLE = screen('grok-idle');
+const GROK_BUSY = screen('grok-busy');
+const GROK_ANSWERED = screen('grok-answered');
+
+test('kimi profile: live idle, busy and trust-dialog samples', () => {
+  const p = CLI_PROFILES.kimi;
+  assert.equal(p.enters, 1);
+  assert.equal(p.idle(KIMI_IDLE), true);
+  assert.equal(p.busy(KIMI_IDLE), false);
+  assert.equal(p.prompting(KIMI_IDLE), false);
+  assert.equal(p.acceptsInput(KIMI_IDLE), true);
+
+  // 'thinking...' with an empty composer: a turn is running.
+  assert.equal(p.idle(KIMI_BUSY), false);
+  assert.equal(p.busy(KIMI_BUSY), true);
+  assert.equal(p.acceptsInput(KIMI_BUSY), false);
+
+  // First visit to an untrusted folder replaces the composer with the trust dialog.
+  assert.equal(p.prompting(KIMI_TRUST), true);
+  assert.equal(p.idle(KIMI_TRUST), false);
+  assert.equal(p.acceptsInput(KIMI_TRUST), false);
+});
+
+test('grok profile: live idle and busy samples', () => {
+  const p = CLI_PROFILES.grok;
+  assert.equal(p.enters, 1);
+  assert.equal(p.idle(GROK_IDLE), true);
+  assert.equal(p.busy(GROK_IDLE), false);
+  assert.equal(p.acceptsInput(GROK_IDLE), true);
+
+  // 'Waiting for response...' plus the Esc:cancel footer: a turn is running.
+  assert.equal(p.idle(GROK_BUSY), false);
+  assert.equal(p.busy(GROK_BUSY), true);
+  assert.equal(p.acceptsInput(GROK_BUSY), false);
+});
+
+test('kimi and grok submitted(): the echo above the composer means delivered', () => {
+  assert.equal(CLI_PROFILES.kimi.submitted(KIMI_IDLE, KIMI_BUSY, 'Write a 60 word paragraph about deserts.'), 'delivered');
+  assert.equal(CLI_PROFILES.grok.submitted(GROK_IDLE, GROK_ANSWERED, 'ZULU-9 reply with the word GAMMA'), 'delivered');
+  // Text still on the composer is pending, never delivered.
+  const stuck = KIMI_IDLE.replace('\u2502 >', '\u2502 > PING-ONE reply with the word ALPHA');
+  assert.equal(CLI_PROFILES.kimi.submitted(KIMI_IDLE, stuck, 'PING-ONE reply with the word ALPHA'), 'pending');
 });
 
 test('profileFor() falls back to the other profile', () => {

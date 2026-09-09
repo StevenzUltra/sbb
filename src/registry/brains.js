@@ -11,7 +11,7 @@ import { BRAIN_ID_RE, newUuid } from './brain-id.js';
 /** Names are aliases: unique among live brains, [a-z0-9][a-z0-9-]{0,39}. */
 export const BRAIN_NAME_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const BRAIN_ROLES = ['main', 'sub'];
-export const BRAIN_CLIS = ['claude', 'codex', 'agy', 'cursor', 'other'];
+export const BRAIN_CLIS = ['claude', 'codex', 'agy', 'cursor', 'kimi', 'grok', 'other'];
 export const BRAIN_ORIGINS = ['spawned', 'adopted'];
 
 /** Invalid brain record, id or name. `reason` is machine-readable. */

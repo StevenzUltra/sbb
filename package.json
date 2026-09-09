@@ -1,7 +1,7 @@
 {
   "name": "switch-brain-brain",
   "version": "0.1.0",
-  "description": "Switch Brain Brain: several AI subscriptions on separate accounts working as one team from one terminal. Drives Claude Code, Codex, Antigravity and Cursor through tmux with verified delivery and a web console.",
+  "description": "Switch Brain Brain: several AI subscriptions on separate accounts working as one team from one terminal. Drives Claude Code, Codex, Antigravity, Cursor, Kimi and Grok through tmux with verified delivery and a web console.",
   "type": "module",
   "bin": {
     "sbb": "./bin/sbb.js"

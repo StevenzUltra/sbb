@@ -159,14 +159,16 @@ test('catalog: a CLI is listed only under accounts that have its config dir', ()
     {
       name: 'default', baseDir: '', claudeDir: join(dir, '.claude'), codexDir: join(dir, '.codex'),
       agyDir: join(dir, '.gemini'), cursorDir: join(dir, '.cursor'),
+      kimiDir: join(dir, '.kimi-code'), grokDir: join(dir, '.grok'),
     },
     {
       name: 'b', baseDir: join(dir, '.ai-account-b'), claudeDir: join(dir, '.ai-account-b', 'claude'),
       codexDir: join(dir, '.ai-account-b', 'codex'), cursorDir: join(dir, '.ai-account-b', 'cursor-agent'),
+      kimiDir: join(dir, '.ai-account-b', 'kimi'), grokDir: join(dir, '.ai-account-b', 'grok'),
     },
   ];
   for (const account of accounts) {
-    for (const field of ['claudeDir', 'codexDir', 'agyDir', 'cursorDir']) {
+    for (const field of ['claudeDir', 'codexDir', 'agyDir', 'cursorDir', 'kimiDir', 'grokDir']) {
       if (account[field]) mkdirSync(account[field], { recursive: true });
     }
   }
@@ -180,7 +182,10 @@ test('catalog: a CLI is listed only under accounts that have its config dir', ()
   const key = (r) => `${r.account}/${r.cli}`;
   assert.deepEqual(
     all.map(key).sort(),
-    ['b/claude', 'b/codex', 'b/cursor', 'default/agy', 'default/claude', 'default/codex', 'default/cursor'],
+    [
+      'b/claude', 'b/codex', 'b/cursor', 'b/grok', 'b/kimi',
+      'default/agy', 'default/claude', 'default/codex', 'default/cursor', 'default/grok', 'default/kimi',
+    ],
   );
   assert.ok(all.find((r) => key(r) === 'default/claude').models.length === STATIC_MODELS.claude.length);
   assert.ok(all.find((r) => key(r) === 'b/claude').models.every((m) => m.source === 'static'));
@@ -188,6 +193,10 @@ test('catalog: a CLI is listed only under accounts that have its config dir', ()
   assert.equal(all.find((r) => key(r) === 'b/agy'), undefined);
   assert.match(all.find((r) => key(r) === 'default/agy').source, /\.gemini\)$/);
   assert.match(all.find((r) => key(r) === 'b/cursor').source, /\.ai-account-b\/cursor-agent\)$/);
+  // kimi and grok are account-scoped too: the row names the dir that produced it.
+  assert.match(all.find((r) => key(r) === 'default/kimi').source, /\.kimi-code\)$/);
+  assert.match(all.find((r) => key(r) === 'b/grok').source, /\.ai-account-b\/grok\)$/);
+  assert.ok(all.find((r) => key(r) === 'b/kimi').models.length === STATIC_MODELS.kimi.length);
 
   const none = catalog({ accounts, which: () => undefined, env: { PATH: '' } });
   assert.deepEqual(none, []);

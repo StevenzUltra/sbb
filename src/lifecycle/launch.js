@@ -3,7 +3,7 @@
 // APIs (tmux, the Claude session registry, the Codex thread registry).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { accountByName, discoverAccounts, sbbDir } from '../lib/paths.js';
+import { accountByName, CLI_CONFIG_ENV, cliConfigDir, discoverAccounts, sbbDir } from '../lib/paths.js';
 import * as tmuxLib from '../lib/tmux.js';
 import { listClaudeSessions } from '../registry/claude-sessions.js';
 import { listCodexThreads } from '../registry/codex-threads.js';
@@ -21,18 +21,24 @@ export const CLI_BINARIES = Object.freeze({
   codex: 'codex',
   agy: 'agy',
   cursor: 'cursor-agent',
+  kimi: 'kimi',
+  grok: 'grok',
 });
 
 /**
  * Each CLI's own exit command, typed into an idle composer by `sbb kill`.
  * Measured on scratch panes 2026-09-09 (docs/reports/m2-h1-2026-09-09.md): claude and
- * cursor accept `/exit`, codex and agy accept `/quit`. `other` has none.
+ * cursor accept `/exit`, codex and agy accept `/quit`. Measured again 2026-09-10
+ * (docs/spec/lifecycle.md per-CLI table): kimi 0.41.0 and grok 1.0.13 both accept
+ * `/exit` and exit on the first Enter. `other` has none.
  */
 export const EXIT_COMMANDS = Object.freeze({
   claude: '/exit',
   codex: '/quit',
   agy: '/quit',
   cursor: '/exit',
+  kimi: '/exit',
+  grok: '/exit',
 });
 
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -140,7 +146,8 @@ export function prepareBrief({ id, brief, dir } = {}) {
  *           extraArgs?: string|string[], account: string|import('../types.js').Account,
  *           name?: string, accounts?: import('../types.js').Account[],
  *           preamble?: string, command?: string, shell?: string }} input
- * @returns {{ env: Record<string,string>, argv: string[], shellLine: string, paneCommand: string[] }}
+ * @returns {{ env: Record<string,string>, argv: string[], shellLine: string,
+ *             paneCommand: string[], briefArgv: boolean }}
  */
 export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts, preamble, command, shell } = {}) {
   if (!CLI_BINARIES[cli]) throw new Error(`unknown cli "${cli}"`);
@@ -155,14 +162,19 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
     if (name) env.CLAUDE_CODE_SESSION_NAME = name;
   } else if (cli === 'codex' && acct.codexDir) {
     env.CODEX_HOME = acct.codexDir;
-  } else if (cli === 'grok' && acct.grokDir) {
-    env.GROK_HOME = acct.grokDir;
   } else if (cli === 'cursor' && acct.cursorDir) {
     // cursor-agent reads both; the user's ~/bin/ai-a points them at one dir (paths.js).
     env.CURSOR_CONFIG_DIR = acct.cursorDir;
     env.CURSOR_DATA_DIR = acct.cursorDir;
-  } else if (cli === 'kimi' && acct.kimiDir) {
-    env.KIMI_CODE_HOME = acct.kimiDir;
+  } else {
+    // kimi follows KIMI_CODE_HOME, grok follows GROK_HOME (src/lib/paths.js CLI_CONFIG_ENV).
+    // cliConfigDir reads the account field CLI_DIR_FIELD names, so the env block, the account
+    // model and the catalog cannot drift. No directory means no assignment, never a guessed
+    // path; a CLI with no measured variable (agy) gets none either.
+    const dir = cliConfigDir(acct, cli);
+    const key = CLI_CONFIG_ENV[cli];
+    if (dir && key) env[key] = dir;
+
   }
   // agy has no documented per-account config variable on this machine, so it gets no env
   // entry rather than a guessed one (docs/spec/policy.md "sbb account").
@@ -181,14 +193,23 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
   if (model) {
     if (cli === 'codex') { push('-m'); push(model); } else { push('--model'); push(model); }
   }
+  let briefArgv = true;
   if (cli === 'claude') {
     push('--append-system-prompt-file');
     push(briefFile);
   } else if (cli === 'agy') {
     push('--prompt-interactive');
     push(briefArg, `"$(cat ${shellQuote(briefFile)})"`);
+  } else if (cli === 'kimi') {
+    // Measured 2026-09-10 (docs/spec/lifecycle.md "Brief delivery"): kimi 0.41.0 has no
+    // interactive brief channel. --agent-file and KIMI_AGENTS_MD are ignored by the TUI,
+    // --add-dir is not read as an AGENTS.md source, and there is no positional prompt;
+    // only a cwd AGENTS.md is honoured, which SBB must not write into the user's repo.
+    // The brief file is still written by prepareBrief; briefArgv tells the caller it has
+    // to deliver the text itself (as the first message) instead of assuming it was passed.
+    briefArgv = false;
   } else {
-    // codex and cursor take the brief as their first prompt
+    // codex, cursor and grok take the brief as their first prompt
     push(briefArg, `"$(cat ${shellQuote(briefFile)})"`);
   }
   for (const arg of extra) push(arg);
@@ -199,7 +220,7 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
   const lead = typeof preamble === 'string' && preamble.trim() !== '' ? preamble.trim() : '';
   const shellLine = lead ? `${lead}\n${execLine}` : execLine;
   const runner = typeof shell === 'string' && shell.trim() !== '' ? shell.trim() : 'sh';
-  return { env, argv, shellLine, paneCommand: [runner, '-c', shellLine] };
+  return { env, argv, shellLine, paneCommand: [runner, '-c', shellLine], briefArgv };
 }
 
 /**
@@ -356,6 +377,17 @@ export async function awaitReady({ cli, paneId, account, name, cwd, brief } = {}
       } else {
         screen = await tmuxApi.capturePane(paneId, 60);
         if (profile.idle(screen)) return { ready: true, screen };
+        // A CLI waiting on its own dialog (kimi's "Trust this folder?" on a first visit)
+        // never reaches idle. Report it instead of burning the whole timeout, so spawn
+        // says what to do rather than "not ready".
+        if (profile.prompting(screen)) {
+          return {
+            ready: false,
+            reason: 'prompting',
+            detail: `${cli} is waiting on a dialog in the pane; answer it, then spawn again`,
+            screen,
+          };
+        }
       }
     } catch (err) {
       // A registry read failure is reported, never treated as "not ready yet" silently.

@@ -224,6 +224,8 @@ export const CHAIN_PREVIEW = Object.freeze({
   codex: ['codex-queue', 'send-keys'],
   agy: ['send-keys'],
   cursor: ['send-keys'],
+  kimi: ['send-keys'],
+  grok: ['send-keys'],
   other: ['send-keys'],
 });
 

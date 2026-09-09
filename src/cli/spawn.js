@@ -3,7 +3,7 @@ import { spawnBrain } from '../lifecycle/spawn.js';
 import { EXIT, main, parse, UsageError, writeJson } from './util.js';
 
 const USAGE = `usage: sbb spawn --name <name> --role main|sub [--parent <id|name>]
-          --account <acct> --cli claude|codex|agy|cursor
+          --account <acct> --cli claude|codex|agy|cursor|kimi|grok
           [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"]
           [--split] [--force] [--json]
 
@@ -103,6 +103,12 @@ export async function run(argv, deps = {}) {
       if (result.threadError) console.error(`sbb: warning: codex thread lookup failed: ${result.threadError}`);
       for (const extra of result.retiredDuplicates ?? []) {
         console.log(`retired   ${extra.id} ${extra.name} (same pane, superseded by ${brain.id})`);
+      }
+      if (result.firstMessage) {
+        const m = result.firstMessage;
+        const line = `brief-msg ${m.status} via=${m.via ?? '-'}${m.reason ? ` reason=${m.reason}` : ''}${m.detail ? ` ${m.detail}` : ''}`;
+        if (m.status === 'delivered' || m.status === 'queued') console.log(line);
+        else console.error(`sbb: warning: ${line}`);
       }
       if (result.notification) {
         const note = result.notification;

@@ -1,0 +1,49 @@
+
+   latest ~/developer/eagerstudy                                                                                                                                                           27K / 500K
+
+
+     ❯ Write a 120 word paragraph about the ocean.                                                                                                                                          12:35 AM
+
+
+  ┃  ◆ Thinking…
+  ┃
+  ┃  The user wants me to write a 120 word paragraph about the ocean. This is a straightforward writing request. I should count the words carefully to make it exactly 120 words.
+
+
+
+
+
+
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+                                                                                                                                                                                                       █
+
+    ⠋ Thinking… 1.6s                                                                                                                                                                4.0s ⇣27.0k [stop]
+
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+  │ ❯                                                                                                                                                                                                │
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Grok 4.6 (xhigh) · always-approve ─╯
+
+  Shift+Tab:mode  │  Esc:cancel  │  Ctrl+.:shortcuts
+

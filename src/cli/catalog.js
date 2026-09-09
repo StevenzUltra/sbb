@@ -6,7 +6,7 @@ const USAGE = `usage: sbb catalog [--json]
 
 CLIs are detected by binaries on PATH plus the account's own config dir; Codex models
 come from that account's config.toml.
-Model lists for claude, agy and cursor come from hand-maintained static tables;
+Model lists for claude, agy, cursor, kimi and grok come from hand-maintained static tables;
 no network is used.`;
 
 const HEADERS = ['ACCOUNT', 'CLI', 'MODELS', 'SOURCE'];

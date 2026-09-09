@@ -182,7 +182,9 @@ test('cli inference from pane_current_command', () => {
   assert.equal(inferCliFromCommand('agy'), 'agy');
   assert.equal(inferCliFromCommand('cursor-agent'), 'cursor');
   assert.equal(inferCliFromCommand('codex'), 'codex');
-  assert.equal(inferCliFromCommand('grok-1.0.13-mac'), 'other');
+  assert.equal(inferCliFromCommand('kimi'), 'kimi');
+  // grok sets pane_current_command to its versioned binary, e.g. 'grok-1.0.13-mac'
+  assert.equal(inferCliFromCommand('grok-1.0.13-mac'), 'grok');
   assert.equal(inferCliFromCommand('zsh'), undefined);
   assert.equal(inferCliFromCommand(''), undefined);
 });
@@ -199,6 +201,18 @@ test('cli inference walks the process tree: codex is a grandchild of the pane sh
     children: { 9003: ['9101'] },
   });
   assert.equal(await inferCliFromProcessTree({ pid: 9003 }, cursor), 'cursor');
+
+  const kimi = fakeExec({
+    commands: { 9003: 'zsh -l', 9101: 'node /Users/dev/.kimi-code/bin/kimi' },
+    children: { 9003: ['9101'] },
+  });
+  assert.equal(await inferCliFromProcessTree({ pid: 9003 }, kimi), 'kimi');
+
+  const grok = fakeExec({
+    commands: { 9003: 'zsh -l', 9101: '/Users/dev/.local/bin/grok' },
+    children: { 9003: ['9101'] },
+  });
+  assert.equal(await inferCliFromProcessTree({ pid: 9003 }, grok), 'grok');
 
   const plain = fakeExec({
     commands: { 9007: 'zsh -l', 9103: 'node /app/vite' },

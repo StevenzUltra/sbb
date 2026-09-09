@@ -15,6 +15,8 @@ import { findSpawnedThread } from '../registry/codex-threads.js';
 import { readQuota } from '../quota/usage-guard.js';
 import { deliver as defaultDeliver, openDeliveryInbox } from '../cli/util.js';
 import { CLI_BINARIES, awaitReady as defaultAwaitReady, buildCommand, prepareBrief, readCodexDefaultModel, readCodexTrust, splitArgs } from './launch.js';
+import { newMsgId } from '../lib/ids.js';
+import { toSingleLine, tmuxKeys as defaultTmuxKeys } from '../transports/tmux-keys.js';
 import { closeInboxes } from '../transports/claude-uds.js';
 import { renderBrief } from './briefing.js';
 
@@ -112,6 +114,19 @@ export function checkQuotaFloor({ account, floor, rows }) {
     };
   }
   return { ok: true, note: `${row.remaining}% left` };
+}
+
+/**
+ * The first message a CLI with no brief channel gets. kimi cannot take the brief on its
+ * command line (`briefArgv: false`), so spawn types it into the pane once the CLI is ready.
+ * The typed channel is one line by contract, so newlines collapse to spaces
+ * (docs/spec/protocols.md section 3). An empty brief returns undefined: nothing is typed.
+ * @param {string|undefined} brief
+ * @returns {string|undefined}
+ */
+export function firstMessageText(brief) {
+  const line = toSingleLine(String(brief ?? '')).trim();
+  return line === '' ? undefined : line;
 }
 
 /** @param {string} reason @param {string} detail */
@@ -332,6 +347,27 @@ export async function spawnBrain(input = {}, deps = {}) {
     retiredDuplicates.push({ id: other.id, name: other.name });
   }
 
+  // kimi has no interactive brief channel (docs/spec/lifecycle.md "Brief delivery per CLI"),
+  // so its brief is typed in as the first message once the composer is ready. A delivery the
+  // transport cannot verify is reported with its reason, never assumed.
+  let firstMessage;
+  if (command.briefArgv === false) {
+    const text = firstMessageText(prepared.brief);
+    if (!text) {
+      firstMessage = { status: 'blocked', reason: 'empty_brief', detail: 'the brief is empty; nothing typed' };
+    } else {
+      const target = { paneId, cli, account: accountName, coord: coord ?? undefined };
+      const sendFirst = deps.sendFirstMessage
+        ?? ((targetPane, message) => (deps.tmuxKeys ?? defaultTmuxKeys).send(targetPane, message));
+      try {
+        const receipt = await sendFirst(target, { msgId: newMsgId(), text });
+        firstMessage = { status: receipt.status, via: receipt.via, reason: receipt.reason, detail: receipt.detail };
+      } catch (err) {
+        firstMessage = { status: 'blocked', reason: 'transport_unavailable', detail: String(err?.message ?? err) };
+      }
+    }
+  }
+
   let notification;
   if (parentBrain) {
     const identity = {
@@ -376,7 +412,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     }
   }
 
-  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, model: model ?? null, modelSource, thread: thread ?? null, threadError, retiredDuplicates };
+  return { brain, notification, quota: quotaNote, briefFile: prepared.file, cliArgs, model: model ?? null, modelSource, thread: thread ?? null, threadError, retiredDuplicates, firstMessage };
 }
 
 /**
