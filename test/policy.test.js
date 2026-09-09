@@ -735,3 +735,22 @@ test('policy spawn-preamble / spawn-command / spawn-shell write the launcher set
     restore();
   }
 });
+
+test('policy terminal / subs-direct write the terminal preference and the team rule', async () => {
+  const home = tempDir();
+  const restore = withEnv(sbbEnv(home));
+  try {
+    assert.equal((await captureLog(() => policyRun(['terminal', 'iterm2']))).result, 0);
+    assert.equal(readConfig().terminal, 'iterm2');
+    assert.equal((await captureLog(() => policyRun(['terminal', '-']))).result, 0);
+    assert.equal('terminal' in readConfig(), false);
+    const bad = await captureLog(() => policyRun(['terminal', 'kitty']));
+    assert.notEqual(bad.result, 0);
+    assert.equal((await captureLog(() => policyRun(['subs-direct', 'off']))).result, 0);
+    assert.equal(readConfig().teams.subsDirect, false);
+    assert.equal((await captureLog(() => policyRun(['subs-direct', 'on']))).result, 0);
+    assert.equal(readConfig().teams.subsDirect, true);
+  } finally {
+    restore();
+  }
+});

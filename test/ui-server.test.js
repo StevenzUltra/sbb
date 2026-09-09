@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import WebSocket from 'ws';
 import { createFakeTmux } from './fixtures/lifecycle/fake-tmux.js';
 import { createControlFactory } from './fixtures/ui/fake-control.js';
+import { readConfig as readSbbConfig } from '../src/policy/config.js';
 
 const TMP = mkdtempSync(join(tmpdir(), 'sbb-h1-ui-'));
 const SBB = join(TMP, 'sbb');
@@ -474,4 +475,25 @@ test('extractJson: a human line before the JSON document does not hide it', () =
   assert.equal(extractJson(['no json here']), undefined);
   assert.equal(extractJson([]), undefined);
   assert.equal(extractJson(['note', '{oops']), undefined);
+});
+
+test('/api/policy accepts the settings-page keys and returns the new config', async () => {
+  const post = (body) => request('/api/policy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  for (const [body, check] of [
+    [{ spawnShell: '/bin/zsh' }, (c) => assert.equal(c.spawn.shell, '/bin/zsh')],
+    [{ spawnPreamble: { cli: 'claude', value: 'source /x/proxy.sh on' } }, (c) => assert.equal(c.spawn.preamble.claude, 'source /x/proxy.sh on')],
+    [{ spawnCommand: { cli: 'codex', value: '/x/bin/codex-launch' } }, (c) => assert.equal(c.spawn.command.codex, '/x/bin/codex-launch')],
+    [{ terminal: 'iterm2' }, (c) => assert.equal(c.terminal, 'iterm2')],
+    [{ terminal: null }, (c) => assert.equal('terminal' in c, false)],
+    [{ subsDirect: false }, (c) => assert.equal(c.teams.subsDirect, false)],
+    [{ spawnShell: '' }, (c) => assert.equal('shell' in c.spawn, false)],
+  ]) {
+    const res = await post(body);
+    assert.equal(res.status, 200, JSON.stringify(body));
+    await res.json();
+    // the route answers with the injected readConfig stub; the effect is on disk
+    check(readSbbConfig({ sbbDir: SBB }));
+  }
+  const bad = await post({ nothing: true });
+  assert.equal(bad.status, 400);
 });

@@ -682,8 +682,18 @@ export async function createUiServer(opts = {}) {
       if (body.quota.mainReserve !== undefined) argv.push('--main-reserve', String(body.quota.mainReserve));
     } else if (body.spawnArgs !== undefined) {
       argv = ['spawn-args', String(body.spawnArgs.cli ?? ''), String(body.spawnArgs.args ?? '')];
+    } else if (body.spawnPreamble !== undefined) {
+      argv = ['spawn-preamble', String(body.spawnPreamble.cli ?? ''), String(body.spawnPreamble.value ?? '')];
+    } else if (body.spawnCommand !== undefined) {
+      argv = ['spawn-command', String(body.spawnCommand.cli ?? ''), String(body.spawnCommand.value ?? '')];
+    } else if (body.spawnShell !== undefined) {
+      argv = ['spawn-shell', String(body.spawnShell ?? '')];
+    } else if (body.terminal !== undefined) {
+      argv = ['terminal', body.terminal ? String(body.terminal) : '-'];
+    } else if (body.subsDirect !== undefined) {
+      argv = ['subs-direct', body.subsDirect ? 'on' : 'off'];
     }
-    if (!argv) return sendError(res, 400, 'invalid_input', 'peers, set, allow, deny, quota or spawnArgs is required');
+    if (!argv) return sendError(res, 400, 'invalid_input', 'peers, set, allow, deny, quota, spawnArgs, spawnPreamble, spawnCommand, spawnShell, terminal or subsDirect is required');
     const out = await runCli('policy', [...argv, '--json']);
     if (out.code !== 0) return cliResult(res, out, 'policy');
     const config = (deps.readConfig ?? readConfig)({});
@@ -929,6 +939,14 @@ export async function createUiServer(opts = {}) {
     if (listening) return listening;
     const port = startOpts.port ?? opts.port ?? DEFAULT_PORT;
     writeToken(token, { dir: stateDir });
+    // No terminal window is required: if nothing has started tmux yet, start a detached
+    // server so spawn and the pane stream have somewhere to live (docs/spec/desktop.md).
+    try {
+      const boot = await api.ensureServer?.();
+      if (boot?.started) emitComment(`tmux server started (session ${boot.session})`);
+    } catch (err) {
+      emitComment(`tmux server unavailable: ${err?.message ?? err}`);
+    }
     await new Promise((resolve, reject) => {
       const onError = (err) => {
         server.off('listening', onListening);

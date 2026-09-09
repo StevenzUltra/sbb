@@ -1,6 +1,6 @@
 // sbb policy: inspect and edit ~/.sbb/config.json. docs/spec/policy.md "sbb policy".
 import { BRAIN_CLIS, getBrain } from '../registry/brains.js';
-import { PEER_MODES, readConfig, updateConfig } from '../policy/config.js';
+import { PEER_MODES, readConfig, updateConfig, TERMINALS } from '../policy/config.js';
 import { EXIT, UsageError, main, parse, renderTable, writeJson } from './util.js';
 import { heldStatus } from '../policy/held.js';
 
@@ -13,7 +13,9 @@ const USAGE = `usage: sbb policy show [--json]
        sbb policy spawn-args <cli> "<args>"
        sbb policy spawn-preamble <cli> "<shell line run before the CLI>"
        sbb policy spawn-command <cli> <launcher>
-       sbb policy spawn-shell <shell path>`;
+       sbb policy spawn-shell <shell path>
+       sbb policy terminal ghostty|iterm2|-
+       sbb policy subs-direct on|off`;
 
 const OPTIONS = {
   json: { type: 'boolean' },
@@ -52,6 +54,8 @@ export async function run(argv, deps = {}) {
     if (argv[0] === 'spawn-preamble') return spawnMapCommand('preamble', argv.slice(1), deps);
     if (argv[0] === 'spawn-command') return spawnMapCommand('command', argv.slice(1), deps);
     if (argv[0] === 'spawn-shell') return spawnShellCommand(argv.slice(1), deps);
+    if (argv[0] === 'terminal') return terminalCommand(argv.slice(1), deps);
+    if (argv[0] === 'subs-direct') return subsDirectCommand(argv.slice(1), deps);
     const { values, positionals } = parse(argv, OPTIONS);
     if (values.help) {
       console.log(USAGE);
@@ -170,7 +174,8 @@ function spawnArgsCommand(tail, deps) {
   const cli = tail[0];
   if (!cli) throw new UsageError('policy spawn-args needs <cli> "<args>"');
   if (!BRAIN_CLIS.includes(cli)) throw new UsageError(`policy spawn-args: unknown cli "${cli}" (${BRAIN_CLIS.join('|')})`);
-  const rest = tail.slice(1);
+  // The value is the verbatim tail, minus a trailing --json (the ui server always adds it).
+  const rest = tail.slice(1).filter((t) => t !== '--json');
   const text = (rest[0] === '--' ? rest.slice(1) : rest).join(' ').trim();
   const writeCfg = deps.updateConfig ?? updateConfig;
   const config = writeCfg((current) => {
@@ -198,7 +203,7 @@ function spawnMapCommand(field, tail, deps) {
   const cli = tail[0];
   if (!cli) throw new UsageError(`policy spawn-${field} needs <cli> "<value>"`);
   if (!BRAIN_CLIS.includes(cli)) throw new UsageError(`policy spawn-${field}: unknown cli "${cli}" (${BRAIN_CLIS.join('|')})`);
-  const rest = tail.slice(1);
+  const rest = tail.slice(1).filter((t) => t !== '--json');
   const text = (rest[0] === '--' ? rest.slice(1) : rest).join(' ').trim();
   const writeCfg = deps.updateConfig ?? updateConfig;
   const config = writeCfg((current) => {
@@ -222,7 +227,7 @@ function spawnShellCommand(tail, deps) {
     console.log('usage: sbb policy spawn-shell <shell path>   (an empty string removes it; default sh)');
     return EXIT.OK;
   }
-  const text = tail.join(' ').trim();
+  const text = tail.filter((t) => t !== '--json').join(' ').trim();
   const writeCfg = deps.updateConfig ?? updateConfig;
   const config = writeCfg((current) => {
     const spawn = { ...current.spawn };
@@ -231,6 +236,47 @@ function spawnShellCommand(tail, deps) {
     return { ...current, spawn };
   }, { sbbDir: deps.sbbDir, hostname: deps.hostname });
   console.log(config.spawn.shell === undefined ? 'spawn.shell removed (sh)' : `spawn.shell=${config.spawn.shell}`);
+  return EXIT.OK;
+}
+
+/**
+ * `sbb policy terminal ghostty|iterm2|-` writes `terminal` (which app 去终端 opens when no
+ * tmux client is attached; `-` removes it, meaning whichever is installed).
+ * @param {string[]} tail @param {{ updateConfig?: Function, sbbDir?: string, hostname?: string }} deps
+ */
+function terminalCommand(tail, deps) {
+  const value = String(tail.find((t) => t !== '--json') ?? '').trim().toLowerCase();
+  if (!value || value === '-h' || value === '--help') {
+    console.log('usage: sbb policy terminal ghostty|iterm2|-   (- removes the preference)');
+    return value ? EXIT.OK : EXIT.USAGE;
+  }
+  if (value !== '-' && !TERMINALS.includes(value)) throw new UsageError(`policy terminal: unknown terminal "${value}" (${TERMINALS.join('|')}|-)`);
+  const writeCfg = deps.updateConfig ?? updateConfig;
+  const config = writeCfg((current) => {
+    const next = { ...current };
+    if (value === '-') delete next.terminal;
+    else next.terminal = value;
+    return next;
+  }, { sbbDir: deps.sbbDir, hostname: deps.hostname });
+  console.log(config.terminal ? `terminal=${config.terminal}` : 'terminal removed (whichever is installed)');
+  return EXIT.OK;
+}
+
+/**
+ * `sbb policy subs-direct on|off` writes `teams.subsDirect` (docs/spec/teams.md): whether sub
+ * brains of one team may talk to each other without going through their main.
+ * @param {string[]} tail @param {{ updateConfig?: Function, sbbDir?: string, hostname?: string }} deps
+ */
+function subsDirectCommand(tail, deps) {
+  const value = String(tail.find((t) => t !== '--json') ?? '').trim().toLowerCase();
+  if (!value || value === '-h' || value === '--help') {
+    console.log('usage: sbb policy subs-direct on|off');
+    return value ? EXIT.OK : EXIT.USAGE;
+  }
+  const on = onOff(value, 'subs-direct');
+  const writeCfg = deps.updateConfig ?? updateConfig;
+  const config = writeCfg((current) => ({ ...current, teams: { ...current.teams, subsDirect: on } }), { sbbDir: deps.sbbDir, hostname: deps.hostname });
+  console.log(`teams.subsDirect=${config.teams.subsDirect ? 'on' : 'off'}`);
   return EXIT.OK;
 }
 

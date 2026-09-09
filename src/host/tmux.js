@@ -189,6 +189,25 @@ export async function switchClient(tty, session) {
 }
 
 /**
+ * Make sure a tmux server is running for this process's tmux arguments. SBB does not need a
+ * terminal window: brains live in tmux, and the desktop app or `sbb ui` may be the first
+ * thing that touches tmux after login. With no server, start one with a detached session
+ * named `sbb` (a terminal can attach to it later with `tmux attach -t sbb`).
+ * @param {{ session?: string, cwd?: string, width?: number, height?: number }} [opts]
+ * @returns {Promise<{ started: boolean, session?: string }>}
+ */
+export async function ensureServer({ session = 'sbb', cwd = process.env.HOME, width = 220, height = 50 } = {}) {
+  try {
+    await tmux(['list-sessions']);
+    return { started: false };
+  } catch {
+    // no server (or no sessions): start one
+  }
+  await tmux(['new-session', '-d', '-s', session, '-x', String(width), '-y', String(height), ...(cwd ? ['-c', cwd] : [])]);
+  return { started: true, session };
+}
+
+/**
  * Create a window and return its pane id.
  * @param {{ name?: string, cwd?: string, command?: string[] }} [opts]
  * @returns {Promise<string>}
