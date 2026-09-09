@@ -56,7 +56,7 @@ export function createHttpClient() {
       return () => source.close();
     },
 
-    openPane(paneId, { onData, onClosed }) {
+    openPane(paneId, { onData, onClosed, onGeometry }) {
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const socket = new WebSocket(
         `${proto}://${window.location.host}/ws/pane/${encodeURIComponent(paneId)}?t=${encodeURIComponent(token)}`,
@@ -68,6 +68,9 @@ export function createHttpClient() {
             const frame = JSON.parse(msg.data);
             if (frame.type === 'closed') onClosed?.();
             if (frame.type === 'refused') onClosed?.(frame.reason);
+            // Optional: adopt the pane's geometry if the server ever reports it. The console
+            // otherwise infers a lower bound from the output and asks for the panel width.
+            if (frame.type === 'geometry') onGeometry?.(frame);
           } catch {
             /* ignore malformed control frames */
           }
