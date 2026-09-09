@@ -24,7 +24,8 @@
       "claude": {
         "pid": 4242
       },
-      "lastMessage": "等你批准一条发给 ops 的消息"
+      "lastMessage": "等你批准一条发给 ops 的消息",
+      "effort": "high"
     },
     {
       "id": "SSL-0046",

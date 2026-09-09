@@ -2,6 +2,7 @@
 // It holds the /api/state snapshot, applies SSE events, and exposes the actions the UI calls.
 import { defineStore } from 'pinia';
 import { toQuotaChips } from '../lib/quota.js';
+import { errorText } from '../lib/spawn.js';
 import { peersBody, uiPeerMode } from '../lib/policy.js';
 import {
   THEMES, applyAppearance, applyTheme as paintTheme, readAppearance, readTheme, resolveDark, writeTheme,
@@ -342,6 +343,9 @@ export const useSbb = defineStore('sbb', {
     },
 
     toast(text, tone = 'ok') {
+      // The same complaint must never stack (a server that answers twice, a double click):
+      // drop the visible copy and show one fresh entry instead.
+      this.toasts = this.toasts.filter((item) => !(item.text === text && item.tone === tone));
       const id = `${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
       this.toasts.push({ id, text, tone });
       setTimeout(() => {
@@ -354,7 +358,7 @@ export const useSbb = defineStore('sbb', {
       try {
         return await this.client.post(path, body);
       } catch (err) {
-        this.toast(err.message, 'error');
+        this.toast(errorText(err.message), 'error');
         return null;
       } finally {
         if (busy) delete this.pending[busy];

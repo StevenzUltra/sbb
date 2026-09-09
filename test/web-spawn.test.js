@@ -2,8 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  clampOffset, cliOptions, cwdPicks, modelOptions, quotaChipFor, quotaLabel,
-  readDialogPosition, resetDialogPosition, writeDialogPosition,
+  clampOffset, cliOptions, cwdPicks, effortOptions, errorText, footerText, modelOptions,
+  modelSuggestions, NAME_RE, quotaChipFor, quotaLabel, readCustomModels, readDialogPosition,
+  resetDialogPosition, sanitizeName, writeCustomModel, writeDialogPosition,
 } from '../web/src/lib/spawn.js';
 
 const chip = (key, pct) => ({ key, label: key, pct, note: '' });
@@ -86,4 +87,108 @@ test('the dragged position lives in the module, so a reopened dialog lands there
   assert.deepEqual(readDialogPosition(), { x: 0, y: 0 }, 'junk becomes the centre');
   resetDialogPosition();
   assert.equal(readDialogPosition(), null);
+});
+
+const fakeStorage = (initial = {}) => {
+  const map = new Map(Object.entries(initial));
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => map.set(k, v),
+    read: (k) => map.get(k) ?? null,
+  };
+};
+
+test('the model combo suggests the remembered custom id first, then the catalog', () => {
+  const catalog = [
+    { account: 'default', cli: 'claude', model: 'claude-opus-5', label: 'Opus 5' },
+    { account: 'default', cli: 'claude', model: 'claude-sonnet-5', label: 'Sonnet 5' },
+    { account: 'a', cli: 'claude', model: 'claude-opus-5', label: 'Opus 5' },
+  ];
+  assert.deepEqual(modelSuggestions(catalog, { account: 'default', cli: 'claude' }), [
+    { id: 'claude-opus-5', label: 'Opus 5' },
+    { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+  ]);
+  assert.deepEqual(modelSuggestions(catalog, { account: 'default', cli: 'claude', custom: ' my-local-model ' }), [
+    { id: 'my-local-model', label: 'my-local-model · 上次手输' },
+    { id: 'claude-opus-5', label: 'Opus 5' },
+    { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+  ]);
+  assert.deepEqual(
+    modelSuggestions(catalog, { account: 'default', cli: 'claude', custom: 'claude-opus-5' }).map((p) => p.id),
+    ['claude-opus-5', 'claude-sonnet-5'],
+    'a remembered id that is already in the catalog is not repeated',
+  );
+  assert.deepEqual(modelSuggestions(catalog, { account: 'a', cli: 'cursor', custom: '' }), []);
+  assert.deepEqual(modelSuggestions(undefined, { account: 'a', cli: 'claude' }), []);
+});
+
+test('the last custom model id is remembered per CLI', () => {
+  const storage = fakeStorage();
+  assert.deepEqual(readCustomModels(storage), {});
+  writeCustomModel(storage, 'claude', ' my-local-model ');
+  writeCustomModel(storage, 'codex', 'local-gpt');
+  assert.deepEqual(readCustomModels(storage), { claude: 'my-local-model', codex: 'local-gpt' });
+  assert.deepEqual(writeCustomModel(storage, 'claude', 'another'), { claude: 'another', codex: 'local-gpt' });
+  assert.deepEqual(writeCustomModel(storage, 'claude', '  '), { codex: 'local-gpt' }, 'blank forgets it');
+  assert.deepEqual(readCustomModels(fakeStorage({ 'sbb-spawn-models': '{bad' })), {});
+  assert.deepEqual(readCustomModels(fakeStorage({ 'sbb-spawn-models': '[1,2]' })), {});
+  assert.deepEqual(readCustomModels(fakeStorage({ 'sbb-spawn-models': '{"claude":"","codex":7}' })), {});
+  assert.doesNotThrow(() => writeCustomModel({ getItem: () => null, setItem: () => { throw new Error('quota'); } }, 'claude', 'x'));
+  assert.deepEqual(readCustomModels(undefined), {});
+});
+
+test('the footer shows the pair and the model that will be passed', () => {
+  const chip = { key: 'default/claude', label: 'default · Claude', pct: 62 };
+  assert.equal(footerText({ chip, account: 'default', cli: 'claude', model: 'my-local-model' }),
+    'default · Claude · my-local-model · 剩余 62%');
+  assert.equal(footerText({ chip, account: 'default', cli: 'claude', model: '  ' }),
+    'default · Claude · 默认 · 剩余 62%');
+  assert.equal(footerText({ chip: { ...chip, pct: null }, account: 'c', cli: 'codex', model: 'x' }),
+    'default · Claude · x · 按量');
+  assert.equal(footerText({ account: 'c', cli: 'cursor', model: 'my-local-model' }),
+    'c · cursor · my-local-model · 额度未知');
+});
+
+test('effort is offered only for the CLIs whose launch command takes it', () => {
+  assert.deepEqual(effortOptions('claude'), ['low', 'medium', 'high', 'xhigh']);
+  assert.deepEqual(effortOptions('codex'), ['low', 'medium', 'high', 'xhigh']);
+  assert.deepEqual(effortOptions('agy'), [], 'no switch: the field is hidden');
+  assert.deepEqual(effortOptions('cursor'), []);
+  assert.deepEqual(effortOptions('kimi'), []);
+  assert.deepEqual(effortOptions('grok'), []);
+  assert.deepEqual(effortOptions(''), []);
+  assert.deepEqual(effortOptions(undefined), []);
+});
+
+test('the footer adds the effort level only when one is chosen', () => {
+  const chip = { key: 'a/claude', label: 'a · Claude', pct: 89 };
+  assert.equal(footerText({ chip, account: 'a', cli: 'claude', model: 'my-local-model', effort: 'high' }),
+    'a · Claude · my-local-model · high · 剩余 89%');
+  assert.equal(footerText({ chip, account: 'a', cli: 'claude', model: '', effort: 'xhigh' }),
+    'a · Claude · 默认 · xhigh · 剩余 89%');
+  assert.equal(footerText({ chip, account: 'a', cli: 'claude', model: '', effort: '  ' }),
+    'a · Claude · 默认 · 剩余 89%');
+});
+
+test('spaces in the name become - while typing; the server rule is mirrored', () => {
+  assert.equal(sanitizeName('my brain'), 'my-brain');
+  assert.equal(sanitizeName('  spaced   out  '), '-spaced-out-');
+  assert.equal(sanitizeName('Main'), 'Main', 'case is kept');
+  assert.equal(sanitizeName('审核'), '审核');
+  assert.equal(sanitizeName(undefined), '');
+  assert.equal(NAME_RE.test('Main'), true);
+  assert.equal(NAME_RE.test('审核'), true);
+  assert.equal(NAME_RE.test('review.v2_x-1'), true);
+  assert.equal(NAME_RE.test('has space'), false);
+  assert.equal(NAME_RE.test('-leading'), false);
+  assert.equal(NAME_RE.test('a'.repeat(41)), false);
+  assert.equal(NAME_RE.test('a'.repeat(40)), true);
+});
+
+test('an invalid_name error becomes one plain Chinese rule, other errors pass through', () => {
+  assert.equal(errorText('invalid_name: invalid brain name "has space": letters, digits, - _ . only, no spaces, up to 40 characters'),
+    '名字只能用字母、数字、中文、-、_、.，不能有空格（最长 40 个字符）');
+  assert.equal(errorText('name_invalid: something'), 'name_invalid: something', 'lookalikes are left alone');
+  assert.equal(errorText('duplicate_name: 名字已被占用'), 'duplicate_name: 名字已被占用');
+  assert.equal(errorText(undefined), '');
 });

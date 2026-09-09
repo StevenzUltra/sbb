@@ -103,3 +103,89 @@ export function resetDialogPosition() {
   session.y = 0;
   session.set = false;
 }
+
+// Model combo (follow-up 2026-09-10): the catalog suggests, anything typed is accepted
+// verbatim (people run their own or local models through someone else's harness), and the
+// last custom id per CLI is remembered as the first suggestion.
+export const MODELS_KEY = 'sbb-spawn-models';
+
+/** @param {{ getItem: (k: string) => string|null }|null|undefined} storage */
+export function readCustomModels(storage) {
+  try {
+    const raw = storage?.getItem(MODELS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([cli, id]) => typeof cli === 'string' && cli !== '' && typeof id === 'string' && id.trim() !== '',
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+/** @returns {Record<string, string>} the whole map, so callers can replace their copy */
+export function writeCustomModel(storage, cli, id) {
+  const next = { ...readCustomModels(storage) };
+  const value = typeof id === 'string' ? id.trim() : '';
+  if (cli && value) next[cli] = value;
+  else if (cli) delete next[cli];
+  try {
+    storage?.setItem(MODELS_KEY, JSON.stringify(next));
+  } catch {
+    // a private-mode storage that refuses writes must not break 新建
+  }
+  return next;
+}
+
+/** Catalog models for the pair, with the remembered custom id first. */
+export function modelSuggestions(catalog, { account, cli, custom = null } = {}) {
+  const out = [];
+  const seen = new Set();
+  const add = (id, label) => {
+    if (typeof id !== 'string' || id === '' || seen.has(id)) return;
+    seen.add(id);
+    out.push({ id, label: label ?? id });
+  };
+  const remembered = typeof custom === 'string' ? custom.trim() : '';
+  add(remembered, `${remembered} · 上次手输`);
+  for (const row of modelOptions(catalog, { account, cli })) add(row.model, row.label);
+  return out;
+}
+
+/** Footer line: the pair, the model and effort that will actually be passed to the CLI. */
+export function footerText({ chip = null, account = '', cli = '', model = '', effort = '' } = {}) {
+  const base = chip?.label ?? `${account} · ${cli}`;
+  const id = typeof model === 'string' && model.trim() !== '' ? model.trim() : '默认';
+  const level = typeof effort === 'string' ? effort.trim() : '';
+  const quota = chip ? (typeof chip.pct === 'number' ? `剩余 ${chip.pct}%` : '按量') : '额度未知';
+  return [base, id, level, quota].filter((part) => part !== '').join(' · ');
+}
+
+// Effort (follow-up 2, 2026-09-10): only the CLIs whose launch command has a thinking-effort
+// switch take it (src/lifecycle/launch.js: claude --effort, codex -c model_reasoning_effort=).
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'];
+const EFFORT_CLIS = ['claude', 'codex'];
+
+/** @param {string} cli @returns {string[]} empty means "this CLI has no effort switch: hide it" */
+export function effortOptions(cli) {
+  return EFFORT_CLIS.includes(String(cli ?? '')) ? [...EFFORT_LEVELS] : [];
+}
+
+// Names are addresses too, so the server takes any script, digits, - _ . and keeps case, but
+// never a space (src/registry/brains.js). The field rewrites spaces as the user types.
+export const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N}_.-]{0,39}$/u;
+export const NAME_RULE_HINT = '名字只能用字母、数字、中文、-、_、.，不能有空格（最长 40 个字符）';
+
+/** @param {unknown} value @returns {string} */
+export function sanitizeName(value) {
+  return String(value ?? '').replace(/\s+/g, '-');
+}
+
+/** Replace the server's regex complaint with the plain rule; leave every other error alone. */
+export function errorText(message) {
+  const text = String(message ?? '');
+  return /(^|[^a-z_])invalid_name([^a-z_]|$)/.test(text) ? NAME_RULE_HINT : text;
+}
