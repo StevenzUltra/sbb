@@ -75,6 +75,14 @@ test('controlClient attaches in control mode with the base args and writes whole
   client.write('refresh-client -A "%1:on"\n');
   client.write('\n');
   assert.deepEqual(written, ['refresh-client -A "%1:on"\n']);
+  const seen = [];
+  client.on('data', (chunk) => seen.push(String(chunk)));
+  child.stdout.write('%output %1 hi\n');
+  assert.deepEqual(seen, ['%output %1 hi\n'], 'data comes from stdout, not from the child object');
+  const errs = [];
+  client.on('stderr', (chunk) => errs.push(String(chunk)));
+  child.stderr.write('boom\n');
+  assert.deepEqual(errs, ['boom\n']);
   client.kill('SIGKILL');
   assert.deepEqual(calls.at(-1), ['kill', 'SIGKILL']);
   assert.throws(() => host.controlClient({ session: '' }), /session is required/);

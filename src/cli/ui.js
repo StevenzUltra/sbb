@@ -44,7 +44,7 @@ export async function run(argv, deps = {}) {
       open: { type: 'boolean', default: true },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
-    });
+    }, { allowNegative: true });
     if (values.help) {
       console.log(USAGE);
       return EXIT.OK;

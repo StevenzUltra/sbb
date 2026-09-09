@@ -270,7 +270,11 @@ export function controlClient({ session, env = process.env, spawn: spawnFn = def
       if (text) child.stdin.write(`${text}\n`);
     },
     on(event, fn) {
-      child.on(event, fn);
+      // 'data' is a stdout event, not a child-process event: listening on `child` here
+      // silently drops every %output line (measured 2026-09-09 against tmux 3.7c).
+      if (event === 'data') child.stdout.on('data', fn);
+      else if (event === 'stderr') child.stderr.on('data', fn);
+      else child.on(event, fn);
       return api;
     },
     kill(signal = 'SIGTERM') {
