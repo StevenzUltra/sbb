@@ -55,7 +55,7 @@ store.focusSearch = () => box.value?.focus();
 </script>
 
 <template>
-  <header class="bar top-bar flex h-11 shrink-0 items-center gap-2 border-b px-3.5">
+  <header class="bar top-bar relative z-30 flex h-11 shrink-0 items-center gap-2 border-b px-3.5">
     <div class="relative" data-menu>
       <button
         class="flex items-center gap-[8px] rounded-[8px] px-[8px] py-[5px] text-[13px]"
