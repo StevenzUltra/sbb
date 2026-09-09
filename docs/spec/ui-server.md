@@ -18,7 +18,7 @@ console can do is a thin call into the same modules the CLI uses; no logic lives
 
 | method | path | body | returns |
 | --- | --- | --- | --- |
-| GET | `/api/state` | | `{ brains, tree, accounts, quota, policy, held, plans, claims, tps, teams, version }` — one snapshot the page can render from cold |
+| GET | `/api/state` | | `{ brains, tree, accounts, quota, policy, held, plans, claims, tps, teams, receipts, version }` (`receipts` = newest 500 receipt-log lines, newest first) — one snapshot the page can render from cold |
 | GET | `/api/events` | | SSE stream: `brain`, `receipt`, `message`, `held`, `plan`, `claim`, `quota`, `tps`, `policy` events, each carrying the full updated object; `heartbeat` every 15 s |
 | GET | `/api/brains/:id/transcript?limit=200` | | recent turns mirrored from the brain's own session log (Claude JSONL, Codex rollout); read-only |
 | GET | `/api/messages?with=<id>&limit=200` | | private thread between the user and a brain, from the receipt log + inbox mirrors |
