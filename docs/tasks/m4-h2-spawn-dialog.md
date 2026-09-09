@@ -25,3 +25,13 @@ The user's screenshot of the desktop app showed these defects; fix all of them.
 
 Acceptance: fixture and real mode screenshots (light/dark, desktop) in
 `docs/reports/m4-h2-spawn-dialog/`, `npm test` green, report + `sbb reply` to the lead.
+
+## Follow-up (2026-09-10): custom model name
+
+The user: 「我们还需要支持能够自定义这个模型的名字，因为有的人喜欢把自己的模型或本地模型放到
+别人的 harness 中」。The 模型 field becomes a combobox: the catalog's models for the account + CLI
+are the suggestions, and any typed id is accepted verbatim (an input with a datalist, or the
+same pattern as the cwd combo). The typed value goes to `/api/spawn` as `model`; the server
+already passes any string to the CLI (`--model` / `-m`). Show the typed id in the footer line
+(`default · Claude · my-local-model`) and keep the last custom id per CLI in localStorage as
+the first suggestion. Same branch or a new one from main; report + `sbb reply`.
