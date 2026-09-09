@@ -22,6 +22,7 @@ const COMMANDS = {
   approve: 'Release or deny a held message',
   claim: 'Register resources a brain is working on; detect conflicts',
   plan: 'Propose, review, approve or reject a staffing plan',
+  ui: 'Serve the local web console (view brains, panes, quota, TPS)',
   account: 'List isolated accounts or create a new one',
   help: 'Show the command overview, or the protocol rules (sbb help protocol)',
 };

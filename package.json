@@ -15,5 +15,8 @@
   },
   "repository": "github:StevenzUltra/sbb",
   "license": "MIT",
-  "private": false
+  "private": false,
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
 }
