@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { brainsDir } from '../src/lib/paths.js';
@@ -311,6 +311,66 @@ test('roster: two live Codex panes in one cwd mark the thread match uncertain', 
     assert.equal(rows.length, 2);
     assert.ok(rows.every((r) => r.threadUncertain), 'both matches are uncertain');
     assert.ok(rows.every((r) => r.name === 'shared'));
+  } finally {
+    restore();
+  }
+});
+
+test('roster: a spawned codex brain without threadId is attributed only a thread created after the spawn, then remembered', async () => {
+  const home = tempDir();
+  const restore = withEnv({ SBB_HOME_OVERRIDE: home, SBB_DIR: join(home, '.sbb') });
+  try {
+    const accounts = fakeAccounts(home, ['b']);
+    const rolloutDir = join(accounts[0].codexDir, 'sessions', '2026', '09', '09');
+    mkdirSync(rolloutDir, { recursive: true });
+    const rollout = join(rolloutDir, 'rollout-x.jsonl');
+    writeFileSync(rollout, '');
+    const rebuild = (threads) => {
+      rmSync(join(accounts[0].codexDir, 'state_5.sqlite'), { force: true });
+      buildCodexDb(accounts[0].codexDir, threads);
+    };
+    // The user's own thread in the same cwd: older, but touched most recently. The old guess
+    // ("most recently updated") would hand deliveries to it.
+    rebuild([
+      { id: 'user-thread', name: 'users own work', cwd: '/Users/dev/proj', rolloutPath: rollout, createdAt: 1000, updatedAt: 5000 },
+      { id: 'spawned-thread', name: 'ios', cwd: '/Users/dev/proj', rolloutPath: rollout, createdAt: 3001, updatedAt: 3500 },
+    ]);
+    const brain = writeBrain({ id: 'TST-0101', name: 'ios', role: 'main', account: 'b', cli: 'codex', paneId: '%14', coord: '24:1.1', origin: 'spawned', createdAt: 3000 * 1000 });
+    const saved = [];
+    const panes = [
+      { paneId: '%14', windowId: '@14', session: '24', windowIndex: 1, paneIndex: 1, coord: '24:1.1', command: 'node', title: 'a', path: '/Users/dev/proj', inMode: false, pid: 9003, account: 'B' },
+    ];
+    const exec = fakeExec({ commands: { 9003: 'zsh -l', 9101: 'node /opt/homebrew/bin/codex' }, children: { 9003: ['9101'] } });
+    const rows = await roster({ accounts, listPanes: async () => panes, exec, withStatus: false, onWarn: () => {}, saveBrain: (b) => saved.push(b) });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].threadId, 'spawned-thread', 'never the older, recently updated thread');
+    assert.equal(rows[0].name, 'ios');
+    assert.equal(rows[0].threadUncertain, false);
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].id, brain.id);
+    assert.equal(saved[0].threadId, 'spawned-thread');
+    assert.equal(saved[0].threadName, 'ios');
+
+    // Two threads created after the spawn: uncertain, nothing attached, nothing remembered.
+    rebuild([
+      { id: 'user-thread', name: 'users own work', cwd: '/Users/dev/proj', rolloutPath: rollout, createdAt: 1000, updatedAt: 5000 },
+      { id: 'spawned-thread', name: 'ios', cwd: '/Users/dev/proj', rolloutPath: rollout, createdAt: 3001, updatedAt: 3500 },
+      { id: 'later-thread', name: 'later', cwd: '/Users/dev/proj', rolloutPath: rollout, createdAt: 3200, updatedAt: 3600 },
+    ]);
+    const again = await roster({ accounts, listPanes: async () => panes, exec, withStatus: false, onWarn: () => {}, saveBrain: (b) => saved.push(b) });
+    assert.equal(again[0].threadId, null);
+    assert.equal(again[0].codex, undefined, 'codex-queue gets no thread to inject into');
+    assert.equal(again[0].threadUncertain, true);
+    assert.equal(again[0].name, 'ios', 'the display keeps the best guess');
+    assert.equal(saved.length, 1, 'an uncertain match is not remembered');
+
+    // No thread created after the spawn at all: nothing attached, no fallback to the old one.
+    rebuild([
+      { id: 'user-thread', name: 'users own work', cwd: '/Users/dev/proj', rolloutPath: rollout, createdAt: 1000, updatedAt: 5000 },
+    ]);
+    const none = await roster({ accounts, listPanes: async () => panes, exec, withStatus: false, onWarn: () => {}, saveBrain: (b) => saved.push(b) });
+    assert.equal(none[0].threadId, null);
+    assert.equal(none[0].name, null);
   } finally {
     restore();
   }

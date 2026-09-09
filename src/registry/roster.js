@@ -3,7 +3,7 @@
 import { capturePane as defaultCapturePane, listPanes as defaultListPanes } from '../lib/tmux.js';
 import { run as defaultRun } from '../lib/exec.js';
 import { accountFromPaneTag, discoverAccounts } from '../lib/paths.js';
-import { listBrains } from './brains.js';
+import { listBrains, saveBrain as defaultSaveBrain } from './brains.js';
 import { listClaudeSessions, paneTmuxKey } from './claude-sessions.js';
 import { listCodexThreads } from './codex-threads.js';
 
@@ -216,20 +216,46 @@ export async function roster(opts = {}) {
     const brain = brains.find((b) => b.paneId === pane.paneId)
       ?? (cli === 'claude' && session ? brains.find((b) => b.pid === session?.pid) : undefined);
 
+    /** A guessed thread is shown by name but never handed to codex-queue unless it is certain. */
+    let guessedName = null;
     if (cli === 'codex') {
       // A brain record that names its thread wins: guessing by cwd once matched an
       // unrelated older thread in the same account (rehearsal 2026-09-09). When the record
       // names a thread, do not fall back to guessing even if that thread is gone.
+      const key = normCwd(pane.path);
       if (typeof brain?.threadId === 'string' && brain.threadId !== '') {
         thread = threads.find((t) => t.id === brain.threadId);
+      } else if (brain?.origin === 'spawned') {
+        // The thread was not known at spawn time (Codex writes the row after the first turn).
+        // Attribute only a thread this account created in this cwd at or after the spawn,
+        // oldest such first, and remember it in the record. Never "most recently updated":
+        // in a CODEX_HOME shared with the user's own sessions that guess pointed a delivery
+        // at the user's thread (2026-09-09).
+        const fresh = threads
+          .filter((t) => t.account === account && normCwd(t.cwd) === key && t.createdAtMs >= (brain.createdAt ?? 0))
+          .sort((a, b) => a.createdAtMs - b.createdAtMs);
+        threadUncertain = fresh.length > 1;
+        if (fresh.length === 1) {
+          thread = fresh[0];
+          try {
+            (opts.saveBrain ?? defaultSaveBrain)({ ...brain, threadId: thread.id, ...(thread.name ? { threadName: thread.name } : {}) });
+          } catch (err) {
+            onWarn(`could not remember thread for ${brain.id}: ${err?.message ?? err}`);
+          }
+        } else if (fresh.length > 1) {
+          guessedName = fresh[0].name ?? null;
+        }
       } else {
-        const key = normCwd(pane.path);
+        // An unregistered pane: the newest thread in this cwd is a display guess. With more
+        // than one live Codex pane in the cwd it stays a guess and no thread is attached.
         const candidates = threads.filter((t) => t.account === account && normCwd(t.cwd) === key);
-        thread = candidates.reduce(
+        const newest = candidates.reduce(
           (best, t) => (best === undefined || t.updatedAtMs > best.updatedAtMs ? t : best),
           /** @type {import('../types.js').CodexThread|undefined} */ (undefined),
         );
         threadUncertain = (codexPanesByCwd.get(key)?.length ?? 0) > 1;
+        if (threadUncertain) guessedName = newest?.name ?? null;
+        else thread = newest;
       }
       if (withStatus) status = screenStatus('codex', await capturePane(pane.paneId), profiles);
     }
@@ -244,7 +270,7 @@ export async function roster(opts = {}) {
       model: brain?.model ?? null,
       status,
       where: pane.coord,
-      name: session?.name ?? thread?.name ?? null,
+      name: session?.name ?? thread?.name ?? guessedName ?? null,
       cwd: pane.path,
       paneId: pane.paneId,
       coord: pane.coord,
