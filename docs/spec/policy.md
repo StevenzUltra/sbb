@@ -142,9 +142,15 @@ sbb account ls
 sbb account add <name>
 ```
 
-`add` creates `~/.ai-account-<name>/{claude,codex}`, writes `~/bin/ai-<name>` (generated from
-`src/account/wrapper-template.sh`, same behaviour as the existing `ai-c`: exports
-`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PATH`, sets the pane tags, subcommands `claude | codex | shell | env`),
-`chmod 700`, and prints the next step: log in once with `ai-<name> claude` / `ai-<name> codex`.
-It never touches `.zshrc`, keychain, or credentials. `ls` prints each account, whether Claude
-and Codex credential files exist (existence only), and live brain counts.
+`add` creates one config dir per CLI under `~/.ai-account-<name>/` — `claude`, `codex`,
+`gemini` (agy), `cursor-agent` (cursor), `kimi`, `grok`, the layout the user's own `~/bin/ai-a`
+already uses (`src/lib/paths.js` `ACCOUNT_CLI_DIRS`) — and writes `~/bin/ai-<name>` (generated
+from `src/account/wrapper-template.sh`: exports `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`,
+`CURSOR_CONFIG_DIR`/`CURSOR_DATA_DIR`, `KIMI_CODE_HOME`, `PATH`, sets the pane tags, subcommands
+`claude | codex | grok | cursor | kimi | shell | env`), `chmod 700`, and prints the next step:
+log in once with `ai-<name> <cli>`. `agy` gets no variable: this machine has no documented
+per-account config variable for it, so the dir is created and left unexported rather than
+guessed. It never touches `.zshrc`, keychain, or credentials. `ls` prints one column per CLI
+with that CLI's login state — a credential file, or a keychain login whose session/config
+exists (existence only, never contents) — plus live brain counts. `sbb catalog` lists a CLI
+only under accounts that have its config dir.

@@ -6,6 +6,10 @@ set -euo pipefail
 BASE="$HOME/.ai-account-__NAME__"
 CODEX_DIR="$BASE/codex"
 CLAUDE_DIR="$BASE/claude"
+AGY_DIR="$BASE/gemini"
+CURSOR_DIR="$BASE/cursor-agent"
+KIMI_DIR="$BASE/kimi"
+GROK_DIR="$BASE/grok"
 PREFERRED_SHELL="${__ENV___SHELL:-/bin/zsh}"
 WORK_DIR="${__ENV___WORKDIR:-$HOME}"
 
@@ -13,12 +17,18 @@ if [ ! -x "$PREFERRED_SHELL" ]; then
   PREFERRED_SHELL="${SHELL:-/bin/bash}"
 fi
 
-mkdir -p "$CODEX_DIR" "$CLAUDE_DIR"
+mkdir -p "$CODEX_DIR" "$CLAUDE_DIR" "$AGY_DIR" "$CURSOR_DIR" "$KIMI_DIR" "$GROK_DIR"
 
 export CODEX_HOME="$CODEX_DIR"
 export CLAUDE_CONFIG_DIR="$CLAUDE_DIR"
+export CURSOR_CONFIG_DIR="$CURSOR_DIR"
+export CURSOR_DATA_DIR="$CURSOR_DIR"
+export KIMI_CODE_HOME="$KIMI_DIR"
+export GROK_HOME="$GROK_DIR"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$PATH"
 export CLAUDE_CODE_MAX_OUTPUT_TOKENS="64000"
+# agy has no documented per-account config variable on this machine; AGY_DIR is created
+# for a future release and left unexported rather than guessed.
 
 # Tag only the pane tmux handed us in $TMUX_PANE. Never fall back to the server's
 # current pane: a script that inherited $TMUX (tests, hooks, background jobs) would
@@ -51,9 +61,25 @@ case "${1:-}" in
     shift
     exec claude "$@"
     ;;
+  grok)
+    shift
+    exec grok "$@"
+    ;;
+  cursor|cursor-agent)
+    shift
+    exec cursor-agent "$@"
+    ;;
+  kimi)
+    shift
+    exec kimi "$@"
+    ;;
   env)
     printf 'export CODEX_HOME="%s"\nexport CLAUDE_CONFIG_DIR="%s"\n' \
       "$CODEX_HOME" "$CLAUDE_CONFIG_DIR"
+    printf 'export CURSOR_CONFIG_DIR="%s"\nexport CURSOR_DATA_DIR="%s"\n' \
+      "$CURSOR_CONFIG_DIR" "$CURSOR_DATA_DIR"
+    printf 'export KIMI_CODE_HOME="%s"\nexport GROK_HOME="%s"\n' \
+      "$KIMI_CODE_HOME" "$GROK_HOME"
     printf 'export CLAUDE_CODE_MAX_OUTPUT_TOKENS="%s"\n' \
       "$CLAUDE_CODE_MAX_OUTPUT_TOKENS"
     ;;
@@ -63,7 +89,7 @@ case "${1:-}" in
     exec "$PREFERRED_SHELL" -l
     ;;
   *)
-    echo "usage: ai-__NAME__ {codex|claude|shell|env}"
+    echo "usage: ai-__NAME__ {codex|claude|grok|cursor|kimi|shell|env}"
     exit 2
     ;;
 esac

@@ -153,16 +153,23 @@ test('catalog: codex models come from config.toml and the model catalog json', (
   assert.equal(rows[0].source, 'config.toml + model_catalog_json');
 });
 
-test('catalog: static tables cover claude, agy and cursor and agy/cursor are listed once', () => {
+test('catalog: a CLI is listed only under accounts that have its config dir', () => {
   const dir = tempDir();
   const accounts = [
-    { name: 'default', baseDir: '', claudeDir: join(dir, '.claude'), codexDir: join(dir, '.codex') },
-    { name: 'b', baseDir: join(dir, '.ai-account-b'), claudeDir: join(dir, '.ai-account-b', 'claude'), codexDir: join(dir, '.ai-account-b', 'codex') },
+    {
+      name: 'default', baseDir: '', claudeDir: join(dir, '.claude'), codexDir: join(dir, '.codex'),
+      agyDir: join(dir, '.gemini'), cursorDir: join(dir, '.cursor'),
+    },
+    {
+      name: 'b', baseDir: join(dir, '.ai-account-b'), claudeDir: join(dir, '.ai-account-b', 'claude'),
+      codexDir: join(dir, '.ai-account-b', 'codex'), cursorDir: join(dir, '.ai-account-b', 'cursor-agent'),
+    },
   ];
-  mkdirSync(accounts[0].claudeDir, { recursive: true });
-  mkdirSync(accounts[0].codexDir, { recursive: true });
-  mkdirSync(accounts[1].claudeDir, { recursive: true });
-  mkdirSync(accounts[1].codexDir, { recursive: true });
+  for (const account of accounts) {
+    for (const field of ['claudeDir', 'codexDir', 'agyDir', 'cursorDir']) {
+      if (account[field]) mkdirSync(account[field], { recursive: true });
+    }
+  }
   writeFileSync(join(accounts[1].codexDir, 'config.toml'), 'model = "gpt-6-astra"\n');
 
   const all = catalog({
@@ -171,9 +178,16 @@ test('catalog: static tables cover claude, agy and cursor and agy/cursor are lis
     env: { PATH: '' },
   });
   const key = (r) => `${r.account}/${r.cli}`;
-  assert.deepEqual(all.map(key).sort(), ['b/claude', 'b/codex', 'default/agy', 'default/claude', 'default/codex', 'default/cursor']);
+  assert.deepEqual(
+    all.map(key).sort(),
+    ['b/claude', 'b/codex', 'b/cursor', 'default/agy', 'default/claude', 'default/codex', 'default/cursor'],
+  );
   assert.ok(all.find((r) => key(r) === 'default/claude').models.length === STATIC_MODELS.claude.length);
   assert.ok(all.find((r) => key(r) === 'b/claude').models.every((m) => m.source === 'static'));
+  // No agy dir under b, so b gets no agy row; the source names the dir that produced it.
+  assert.equal(all.find((r) => key(r) === 'b/agy'), undefined);
+  assert.match(all.find((r) => key(r) === 'default/agy').source, /\.gemini\)$/);
+  assert.match(all.find((r) => key(r) === 'b/cursor').source, /\.ai-account-b\/cursor-agent\)$/);
 
   const none = catalog({ accounts, which: () => undefined, env: { PATH: '' } });
   assert.deepEqual(none, []);

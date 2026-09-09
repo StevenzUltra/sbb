@@ -85,8 +85,16 @@ test('accountAdd creates dirs and a wrapper under the given HOME only', () => {
     const base = join(home, `.ai-account-${UNIQUE}`);
     assert.equal(result.baseDir, base);
     assert.equal(statSync(base).mode & 0o777, 0o700);
-    assert.equal(statSync(join(base, 'claude')).mode & 0o777, 0o700);
-    assert.equal(statSync(join(base, 'codex')).mode & 0o777, 0o700);
+    // One config dir per CLI, all 0700, mirroring ~/bin/ai-a's layout.
+    for (const name of ['claude', 'codex', 'gemini', 'cursor-agent', 'kimi', 'grok']) {
+      assert.equal(statSync(join(base, name)).mode & 0o777, 0o700, `${name} is 0700`);
+    }
+    assert.equal(result.claudeDir, join(base, 'claude'));
+    assert.equal(result.codexDir, join(base, 'codex'));
+    assert.equal(result.agyDir, join(base, 'gemini'));
+    assert.equal(result.cursorDir, join(base, 'cursor-agent'));
+    assert.equal(result.kimiDir, join(base, 'kimi'));
+    assert.equal(result.grokDir, join(base, 'grok'));
     assert.equal(result.wrapper, join(home, 'bin', `ai-${UNIQUE}`));
     assert.equal(statSync(result.wrapper).mode & 0o777, 0o700);
 
@@ -94,9 +102,13 @@ test('accountAdd creates dirs and a wrapper under the given HOME only', () => {
     assert.match(wrapper, new RegExp(`BASE="\\$HOME/\\.ai-account-${UNIQUE}"`));
     assert.match(wrapper, /export CODEX_HOME="\$CODEX_DIR"/);
     assert.match(wrapper, /export CLAUDE_CONFIG_DIR="\$CLAUDE_DIR"/);
+    assert.match(wrapper, /export GROK_HOME="\$GROK_DIR"/);
+    assert.match(wrapper, /export CURSOR_CONFIG_DIR="\$CURSOR_DIR"/);
+    assert.match(wrapper, /export CURSOR_DATA_DIR="\$CURSOR_DIR"/);
+    assert.match(wrapper, /export KIMI_CODE_HOME="\$KIMI_DIR"/);
     assert.match(wrapper, new RegExp(`@ai_account "${UNIQUE.toUpperCase()}"`));
     assert.match(wrapper, /cli_auth_credentials_store = "file"/);
-    assert.match(wrapper, new RegExp(`usage: ai-${UNIQUE} \\{codex\\|claude\\|shell\\|env\\}`));
+    assert.match(wrapper, new RegExp(`usage: ai-${UNIQUE} \\{codex\\|claude\\|grok\\|cursor\\|kimi\\|shell\\|env\\}`));
     assert.ok(!wrapper.includes('__NAME__') && !wrapper.includes('__TAG__'), 'placeholders are substituted');
 
     // Run the generated wrapper for real: `env` prints the two config dirs it exports.
@@ -105,6 +117,10 @@ test('accountAdd creates dirs and a wrapper under the given HOME only', () => {
     const printed = execFileSync('bash', [result.wrapper, 'env'], { env: wrapperEnv(home), encoding: 'utf8' });
     assert.match(printed, new RegExp(`export CODEX_HOME="${base}/codex"`));
     assert.match(printed, new RegExp(`export CLAUDE_CONFIG_DIR="${base}/claude"`));
+    assert.match(printed, new RegExp(`export GROK_HOME="${base}/grok"`));
+    assert.match(printed, new RegExp(`export CURSOR_CONFIG_DIR="${base}/cursor-agent"`));
+    assert.match(printed, new RegExp(`export CURSOR_DATA_DIR="${base}/cursor-agent"`));
+    assert.match(printed, new RegExp(`export KIMI_CODE_HOME="${base}/kimi"`));
     assert.ok(existsSync(join(base, 'codex', 'config.toml')), 'the wrapper writes the codex config');
 
     // Nothing was created outside the injected HOME.
@@ -130,14 +146,26 @@ test('accountAdd refuses an existing account unless forced, and rejects bad name
   }
 });
 
-test('accountList reports credential files and live brain counts', () => {
+test('accountList reports per-CLI login state (keychain included) and live brain counts', () => {
   const home = tempDir();
   const restore = withEnv(sbbEnv(home));
   try {
-    mkdirSync(join(home, '.ai-account-alpha', 'claude'), { recursive: true });
-    mkdirSync(join(home, '.ai-account-alpha', 'codex'), { recursive: true });
-    writeFileSync(join(home, '.ai-account-alpha', 'claude', '.credentials.json'), '{}');
+    const alphaBase = join(home, '.ai-account-alpha');
+    mkdirSync(join(alphaBase, 'claude'), { recursive: true });
+    mkdirSync(join(alphaBase, 'codex'), { recursive: true });
+    mkdirSync(join(alphaBase, 'gemini', 'antigravity-cli'), { recursive: true });
+    mkdirSync(join(alphaBase, 'cursor-agent'), { recursive: true });
+    mkdirSync(join(alphaBase, 'kimi', 'credentials'), { recursive: true });
+    mkdirSync(join(alphaBase, 'grok'), { recursive: true });
+    writeFileSync(join(alphaBase, 'claude', '.credentials.json'), '{}');
+    writeFileSync(join(alphaBase, 'codex', 'config.toml'), 'cli_auth_credentials_store = "file"\n');
+    writeFileSync(join(alphaBase, 'gemini', 'antigravity-cli', 'antigravity-oauth-token'), '{}');
+    writeFileSync(join(alphaBase, 'cursor-agent', 'auth.json'), '{}');
+    writeFileSync(join(alphaBase, 'kimi', 'credentials', 'kimi-code.json'), '{}');
+    writeFileSync(join(alphaBase, 'grok', 'auth.json'), '{}');
     mkdirSync(join(home, '.ai-account-beta', 'claude'), { recursive: true });
+    // beta's claude login lives in the keychain: no .credentials.json, but a config exists.
+    writeFileSync(join(home, '.ai-account-beta', 'claude', '.claude.json'), '{}');
 
     writeBrain({ id: 'TST-0001', name: 'lead-a', role: 'main', parent: null, account: 'alpha' });
     writeBrain({ id: 'TST-0002', name: 'sub-a', role: 'sub', parent: 'TST-0001', account: 'alpha' });
@@ -146,11 +174,21 @@ test('accountList reports credential files and live brain counts', () => {
     const rows = accountList({ home });
     const alpha = rows.find((r) => r.name === 'alpha');
     assert.equal(alpha.hasClaudeCreds, true);
+    assert.equal(alpha.hasAgyCreds, true);
+    assert.equal(alpha.hasCursorCreds, true);
+    assert.equal(alpha.hasKimiCreds, true);
+    assert.equal(alpha.hasGrokCreds, true);
+    // config.toml is written by the generated wrapper, so it is not login evidence.
     assert.equal(alpha.hasCodexCreds, false);
+    assert.equal(alpha.agyDir, join(alphaBase, 'gemini'));
+    assert.equal(alpha.cursorDir, join(alphaBase, 'cursor-agent'));
+    assert.equal(alpha.kimiDir, join(alphaBase, 'kimi'));
+    assert.equal(alpha.grokDir, join(alphaBase, 'grok'));
     assert.deepEqual(alpha.brains, ['lead-a', 'sub-a']);
     assert.equal(alpha.wrapper, join(home, 'bin', 'ai-alpha'));
     const beta = rows.find((r) => r.name === 'beta');
-    assert.equal(beta.hasClaudeCreds, false);
+    assert.equal(beta.hasClaudeCreds, true, 'keychain login counts once a config exists');
+    assert.equal(beta.agyDir, undefined, 'dirs that do not exist are not invented');
     assert.deepEqual(beta.brains, ['lead-b']);
   } finally {
     restore();
@@ -165,13 +203,17 @@ test('sbb account add/ls through the CLI', async () => {
     assert.equal(added.result, 0);
     const text = added.lines.join('\n');
     assert.match(text, new RegExp(`account ${UNIQUE} ready`));
-    assert.match(text, new RegExp(`next: log in once with \`ai-${UNIQUE} claude\``));
+    assert.match(text, new RegExp(`next: log in once with \`ai-${UNIQUE} <cli>\``));
+    for (const dir of ['claude', 'codex', 'gemini', 'cursor-agent', 'kimi', 'grok']) {
+      assert.match(text, new RegExp(`${UNIQUE}/${dir}`), `add prints the ${dir} dir`);
+    }
     assert.ok(existsSync(join(home, `.ai-account-${UNIQUE}`)));
 
     writeBrain({ id: 'TST-0001', name: 'lead-a', role: 'main', parent: null, account: UNIQUE });
     const listed = await captureLog(() => accountRun(['ls'], { home }));
     assert.equal(listed.result, 0);
-    assert.match(listed.lines.join('\n'), new RegExp(`${UNIQUE}\\s+no\\s+no\\s+1\\s+.*ai-${UNIQUE}`));
+    // One column per CLI, then BRAINS and WRAPPER (src/cli/account.js).
+    assert.match(listed.lines.join('\n'), new RegExp(`${UNIQUE}\\s+no\\s+no\\s+no\\s+no\\s+no\\s+no\\s+1\\s+.*ai-${UNIQUE}`));
 
     const bad = await captureLog(() => accountRun(['add', 'Bad Name'], { home }));
     assert.equal(bad.result, 2);

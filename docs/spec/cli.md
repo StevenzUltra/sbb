@@ -55,9 +55,11 @@ Missing data prints `unknown`.
 
 ## sbb catalog [--json]
 
-Accounts x CLIs x models. CLIs detected by binaries on PATH (`claude`, `codex`, `agy`,
-`cursor-agent`) and per-account config (Codex `config.toml` `model` / `model_catalog_json`).
-Model lists come from `src/quota/catalog.js` static tables plus config overrides; no network.
+Accounts x CLIs x models. CLIs are detected by binaries on PATH (`claude`, `codex`, `agy`,
+`cursor-agent`) and each is listed only under the accounts that have its config dir
+(`src/lib/paths.js` `CLI_DIR_FIELD`); Codex models come from that account's `config.toml`
+`model` / `model_catalog_json`. Model lists come from `src/quota/catalog.js` static tables plus
+config overrides; no network.
 
 ## sbb doctor
 

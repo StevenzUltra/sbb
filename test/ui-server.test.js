@@ -80,7 +80,10 @@ const deps = {
   roster: async () => [
     { brainId: brainA.id, status: 'busy', where: 'work:0.0', paneId: '%1', name: 's1', threadId: 'th-1' },
   ],
-  catalog: () => [{ account: 'a', cli: 'claude', models: [{ id: 'claude-opus-5', label: 'Opus 5' }] }],
+  catalog: () => [
+    { account: 'a', cli: 'claude', models: [{ id: 'claude-opus-5', label: 'Opus 5' }] },
+    { account: 'a', cli: 'agy', models: [{ id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }] },
+  ],
   accountList: () => [{ name: 'a', clis: ['claude', 'codex'], label: 'a' }],
   readQuota: async () => [{ account: 'a', window: 'session', usedPercent: 11 }],
   readConfig: () => ({ policy: { peers: 'all' }, terminal: 'ghostty' }),
@@ -186,8 +189,13 @@ test('/api/state serves the injected snapshot and enriches brains from the roste
   assert.deepEqual(body.held, [{ msgId: 'm-held' }]);
   assert.deepEqual(body.plans, [{ planId: 'p-1' }]);
   assert.deepEqual(body.claims, [{ brainId: brainA.id, resource: 'branch:h1' }]);
-  assert.deepEqual(body.accounts, [{ name: 'a', clis: ['claude', 'codex'], label: 'a' }], 'data.js accountList');
-  assert.deepEqual(body.catalog, [{ account: 'a', cli: 'claude', model: 'claude-opus-5', label: 'Opus 5' }]);
+  // withClis() adds the CLIs the injected catalog lists for the account (data.js), so the
+  // chips and the flattened catalog below always agree.
+  assert.deepEqual(body.accounts, [{ name: 'a', clis: ['claude', 'codex', 'agy'], label: 'a' }], 'data.js accountList');
+  assert.deepEqual(body.catalog, [
+    { account: 'a', cli: 'claude', model: 'claude-opus-5', label: 'Opus 5' },
+    { account: 'a', cli: 'agy', model: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+  ]);
   assert.deepEqual(body.receipts, [], 'no receipt log yet');
   assert.ok(Array.isArray(body.tps.list), 'TpsBar reads { list, total }');
   assert.equal(typeof body.tps.total, 'number');
@@ -251,8 +259,17 @@ test('/api/events streams named events with the raw object as payload', async ()
   const first = decoder.decode((await reader.read()).value);
   assert.match(first, /: sbb ui events/);
   server.emitEvent('receipt', { msgId: 'm-probe', status: 'delivered' });
-  const next = decoder.decode((await reader.read()).value);
-  assert.equal(next, 'event: receipt\ndata: {"msgId":"m-probe","status":"delivered"}\n\n');
+  // data.js watch() tails the receipts log from the *global* sbbDir, not the injected one, so a
+  // live machine can push its own receipt frames onto this stream. Drain until our frame; the
+  // payload assertion below is still exact.
+  let next = '';
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && !next.includes('m-probe')) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    next += decoder.decode(chunk.value, { stream: true });
+  }
+  assert.match(next, /event: receipt\ndata: \{"msgId":"m-probe","status":"delivered"\}\n\n/);
   await reader.cancel();
 });
 

@@ -1,8 +1,7 @@
 // Accounts x CLIs x models available on this machine. No network, no writes.
 import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { discoverAccounts } from '../lib/paths.js';
+import { CLI_DIR_FIELD, discoverAccounts } from '../lib/paths.js';
 
 /** @typedef {import('../types.js').Account} Account */
 
@@ -35,7 +34,11 @@ export const STATIC_MODELS = Object.freeze({
   ],
 });
 
-/** CLIs SBB knows how to describe. agy and cursor have one global config, not per account. */
+/**
+ * CLIs SBB knows how to describe. Each is listed under the accounts that really have that
+ * CLI's config dir (paths.js CLI_DIR_FIELD); 'default' uses the global dirs, so a
+ * global-only CLI still appears there.
+ */
 export const CATALOG_CLIS = ['claude', 'codex', 'agy', 'cursor'];
 
 const BINARY_FOR_CLI = { claude: 'claude', codex: 'codex', agy: 'agy', cursor: 'cursor-agent' };
@@ -135,7 +138,6 @@ export function catalog(opts = {}) {
   const accounts = opts.accounts ?? discoverAccounts();
   const env = opts.env ?? process.env;
   const whichCmd = opts.which ?? which;
-  const home = opts.home ?? homedir();
   /** @type {Record<string, string|undefined>} */
   const binaries = {};
   for (const cli of CATALOG_CLIS) binaries[cli] = whichCmd(BINARY_FOR_CLI[cli], env);
@@ -168,17 +170,16 @@ export function catalog(opts = {}) {
         source: config.modelCatalogJson ? 'config.toml + model_catalog_json' : 'config.toml',
       });
     }
-  }
-
-  // agy and cursor keep one global config on this machine; they are not account-scoped.
-  for (const cli of ['agy', 'cursor']) {
-    if (!binaries[cli]) continue;
-    rows.push({
-      account: 'default',
-      cli,
-      models: STATIC_MODELS[cli].map((m) => ({ ...m, source: 'static' })),
-      source: `static table (hand-maintained; global config under ${join(home, cli === 'agy' ? '.gemini' : '.cursor')})`,
-    });
+    for (const cli of ['agy', 'cursor']) {
+      const dir = /** @type {Record<string, string|undefined>} */ (account)[CLI_DIR_FIELD[cli]];
+      if (!binaries[cli] || !dir) continue;
+      rows.push({
+        account: account.name,
+        cli,
+        models: STATIC_MODELS[cli].map((m) => ({ ...m, source: 'static' })),
+        source: `static table (hand-maintained; config ${dir})`,
+      });
+    }
   }
   return rows;
 }

@@ -9,6 +9,10 @@
  * @property {string} baseDir         '' for default, else '/Users/x/.ai-account-<name>'
  * @property {string|undefined} claudeDir   CLAUDE_CONFIG_DIR for this account, if the dir exists
  * @property {string|undefined} codexDir    CODEX_HOME for this account, if the dir exists
+ * @property {string|undefined} agyDir      per-account agy dir (`<base>/gemini`); no env var yet
+ * @property {string|undefined} cursorDir   CURSOR_CONFIG_DIR/CURSOR_DATA_DIR (`<base>/cursor-agent`)
+ * @property {string|undefined} kimiDir     KIMI_CODE_HOME (`<base>/kimi`)
+ * @property {string|undefined} grokDir     GROK_HOME (`<base>/grok`)
  */
 
 /**
