@@ -359,6 +359,9 @@ export async function createUiServer(opts = {}) {
       return;
     }
     for (const result of await tps.sampleAll(brains, {})) tpsValues.set(result.brainId, result);
+    // A retired brain leaves the bar: keep only rows for brains still on the roster.
+    const live = new Set(brains.map((b) => b.id));
+    for (const id of [...tpsValues.keys()]) if (!live.has(id)) tpsValues.delete(id);
     emitEvent('tps', tpsPayload());
   }
 

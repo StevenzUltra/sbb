@@ -43,7 +43,8 @@ function receiptText(receipt) {
   if (receipt.via) parts.push(receipt.via);
   if (receipt.elapsedMs) parts.push(`${(receipt.elapsedMs / 1000).toFixed(1)}s`);
   if (receipt.reason) parts.push(`reason=${receipt.reason}`);
-  if (receipt.msgId) parts.push(receipt.msgId);
+  if (receipt.count > 1) parts.push(`${receipt.count} 位成员`);
+  if (receipt.msgId) parts.push(String(receipt.msgId).slice(0, 8));
   return parts.join(' · ');
 }
 

@@ -1,7 +1,7 @@
 {
-  "name": "sbb",
+  "name": "switch-brain-brain",
   "version": "0.1.0",
-  "description": "Switch Brain Brain: a tmux-only switchboard that lets AI CLI sessions (Claude Code, Codex, Antigravity, Cursor) across isolated accounts talk to each other with verified delivery.",
+  "description": "Switch Brain Brain: several AI subscriptions on separate accounts working as one team from one terminal. Drives Claude Code, Codex, Antigravity and Cursor through tmux with verified delivery and a web console.",
   "type": "module",
   "bin": {
     "sbb": "./bin/sbb.js"
@@ -18,5 +18,15 @@
   "private": false,
   "dependencies": {
     "ws": "^8.21.3"
-  }
+  },
+  "keywords": [
+    "ai-agents",
+    "tmux",
+    "claude-code",
+    "codex",
+    "multi-agent",
+    "orchestration",
+    "cli"
+  ],
+  "homepage": "https://github.com/StevenzUltra/sbb#readme"
 }
