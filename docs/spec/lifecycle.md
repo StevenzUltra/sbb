@@ -50,7 +50,12 @@ sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --
    then (its name carries the thread uuid). Record it as `threadId`, plus `threadName` from
    `threads.name`. No match means no field; an older thread is never attributed.
 7. `saveBrain({ id, uuid, name, role, parent, account, cli, model, cwd, paneId, coord, pid, threadId, threadName, origin:'spawned' })`.
-8. Print `spawned <id> <name> <coord>` (or JSON). Notify the parent brain (if any) with one
+8. A CLI with no brief channel (`buildCommand` returns `briefArgv:false`, today only kimi) gets
+   the brief typed into the pane as its first message through the typed transport, after the
+   record exists. The receipt is reported as `firstMessage`; `sbb spawn` prints a delivered one
+   as `brief-msg` and warns on stderr for any other status. The spawn still succeeds: the brain
+   is up, and the operator can re-deliver with `sbb tell`.
+9. Print `spawned <id> <name> <coord>` (or JSON). Notify the parent brain (if any) with one
    line via the normal delivery path: `[<name>#<id> …][子脑] 已上线，上级 <parent>`. Like
    `sbb tell`, the send opens an inbox so the envelope carries `fromSock`.
 
@@ -65,7 +70,7 @@ Measured 2026-09-10 on scratch panes (fingerprints in docs/spec/protocols.md sec
 | agy    | `--prompt-interactive "$(cat <file>)"`                                              |
 | cursor | positional `"$(cat <file>)"`                                                        |
 | grok   | positional `"$(cat <file>)"`; needs no proxy                                        |
-| kimi   | none. `--agent-file`, `KIMI_AGENTS_MD` and `--add-dir` are ignored by the TUI and there is no positional prompt; only a cwd `AGENTS.md` is honoured, which SBB must not write into the user's repo. `buildCommand` returns `briefArgv:false` so the caller delivers the brief as the first message instead of assuming it was passed. |
+| kimi   | none on the command line: `--agent-file`, `KIMI_AGENTS_MD` and `--add-dir` are ignored by the TUI and there is no positional prompt; only a cwd `AGENTS.md` is honoured, which SBB must not write into the user's repo. `buildCommand` returns `briefArgv:false`, and `spawn` types the brief into the pane as the first message once the composer is ready (newlines collapse to spaces, protocols.md section 3). A delivery the transport cannot verify is reported as `firstMessage` with its reason, never assumed. |
 
 ## sbb kill
 

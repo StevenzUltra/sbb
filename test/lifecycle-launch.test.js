@@ -294,9 +294,7 @@ test('readCodexTrust: reads a real config.toml from disk', () => {
 
 test('buildCommand: kimi has no brief argv, grok takes the brief as its first prompt', () => {
   const base = mkdtempSync(join(tmpdir(), 'sbb-clihome-'));
-  mkdirSync(join(base, 'kimi'), { recursive: true });
-  mkdirSync(join(base, 'grok'), { recursive: true });
-  const accounts = [{ name: 'k', baseDir: base }];
+  const accounts = [{ name: 'k', baseDir: base, kimiDir: join(base, 'kimi'), grokDir: join(base, 'grok') }];
 
   assert.equal(CLI_BINARIES.kimi, 'kimi');
   assert.equal(CLI_BINARIES.grok, 'grok');
@@ -312,16 +310,17 @@ test('buildCommand: kimi has no brief argv, grok takes the brief as its first pr
   assert.equal(grok.briefArgv, true);
 
   // No config dir on the account: no assignment, never a guessed path.
-  const none = buildCommand({ cli: 'kimi', briefFile: '/tmp/briefs/b.md', account: 'a', accounts: ACCOUNTS });
+  const plain = [{ name: 'plain', baseDir: '/tmp/home/.ai-account-plain' }];
+  const none = buildCommand({ cli: 'kimi', briefFile: '/tmp/briefs/b.md', account: 'plain', accounts: plain });
   assert.deepEqual(none.env, {});
 });
 
-test('cliConfigDir: the measured config home per CLI, undefined when it does not exist', () => {
-  const base = mkdtempSync(join(tmpdir(), 'sbb-clidir-'));
-  mkdirSync(join(base, 'grok'), { recursive: true });
-  assert.equal(cliConfigDir({ name: 'k', baseDir: base }, 'grok'), join(base, 'grok'));
-  assert.equal(cliConfigDir({ name: 'k', baseDir: base }, 'kimi'), undefined);
-  assert.equal(cliConfigDir({ name: 'k', baseDir: base }, 'nope'), undefined);
+test('cliConfigDir: reads the Account field CLI_DIR_FIELD names', () => {
+  const account = { name: 'k', baseDir: '/tmp/home/.ai-account-k', kimiDir: '/tmp/home/.ai-account-k/kimi' };
+  assert.equal(cliConfigDir(account, 'kimi'), '/tmp/home/.ai-account-k/kimi');
+  assert.equal(cliConfigDir(account, 'grok'), undefined, 'a dir the account does not carry stays undefined');
+  assert.equal(cliConfigDir(account, 'nope'), undefined);
+  assert.equal(cliConfigDir(undefined, 'kimi'), undefined);
   assert.deepEqual(CLI_CONFIG_ENV, {
     claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME', kimi: 'KIMI_CODE_HOME', grok: 'GROK_HOME',
   });

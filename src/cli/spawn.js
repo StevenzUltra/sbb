@@ -104,6 +104,12 @@ export async function run(argv, deps = {}) {
       for (const extra of result.retiredDuplicates ?? []) {
         console.log(`retired   ${extra.id} ${extra.name} (same pane, superseded by ${brain.id})`);
       }
+      if (result.firstMessage) {
+        const m = result.firstMessage;
+        const line = `brief-msg ${m.status} via=${m.via ?? '-'}${m.reason ? ` reason=${m.reason}` : ''}${m.detail ? ` ${m.detail}` : ''}`;
+        if (m.status === 'delivered' || m.status === 'queued') console.log(line);
+        else console.error(`sbb: warning: ${line}`);
+      }
       if (result.notification) {
         const note = result.notification;
         console.log(`notify    ${note.status} via=${note.via ?? '-'}${note.reason ? ` reason=${note.reason}` : ''}${note.detail ? ` ${note.detail}` : ''}`);

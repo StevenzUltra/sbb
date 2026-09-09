@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { listBrains } from '../src/registry/brains.js';
-import { spawnBrain, checkQuotaFloor, quotaFloor } from '../src/lifecycle/spawn.js';
-import { createFakeTmux, tmuxCommands } from './fixtures/lifecycle/fake-tmux.js';
+import { firstMessageText, spawnBrain, checkQuotaFloor, quotaFloor } from '../src/lifecycle/spawn.js';
+import { createTmuxKeys } from '../src/transports/tmux-keys.js';
+import { probeOf } from '../src/transports/cli-profiles.js';
+import { createFakeTmux, screen, tmuxCommands, typedLiterals } from './fixtures/lifecycle/fake-tmux.js';
 import { tempDir, withEnv, writeBrain } from './fixtures/registry/helpers.js';
 
 const ACCOUNTS = [{
@@ -13,6 +15,7 @@ const ACCOUNTS = [{
   baseDir: '/tmp/home/.ai-account-a',
   claudeDir: '/tmp/home/.ai-account-a/claude',
   codexDir: '/tmp/home/.ai-account-a/codex',
+  kimiDir: '/tmp/home/.ai-account-a/kimi',
 }];
 const PARENT = { id: 'SMS-0007', name: 'lead', role: 'main', parent: null, account: 'a', cli: 'claude' };
 
@@ -290,4 +293,71 @@ test('quotaFloor: config default is 10, a configured value wins', () => {
   assert.equal(quotaFloor({}), 10);
   assert.equal(quotaFloor({ quota: { floorWeekly: 25 } }), 25);
   assert.equal(quotaFloor({ quota: { floorWeekly: 'nonsense' } }), 10);
+});
+
+test('firstMessageText: the brief collapses to the one line the typed channel carries', () => {
+  assert.equal(firstMessageText('a\nb'), 'a b');
+  assert.equal(firstMessageText('  '), undefined);
+  assert.equal(firstMessageText(undefined), undefined);
+});
+
+test('spawnBrain: a CLI without a brief channel gets the brief as its first message', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    const sent = [];
+    const deps = baseDeps({
+      sendFirstMessage: async (target, message) => {
+        sent.push({ target, message });
+        return { status: 'delivered', via: 'send-keys', msgId: message.msgId };
+      },
+    });
+    const result = await spawnBrain(spawnInput({ cli: 'kimi', role: 'main', parent: undefined }), deps);
+    assert.ok(result.brain, JSON.stringify(result));
+    assert.equal(result.firstMessage.status, 'delivered');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].target.paneId, result.brain.paneId);
+    assert.equal(sent[0].target.cli, 'kimi');
+    assert.match(sent[0].message.text, /^你是 /);
+    assert.equal(/\n/.test(sent[0].message.text), false, 'the typed channel carries one line');
+  } finally { restore(); }
+});
+
+test('spawnBrain: a CLI that takes the brief on its argv is never typed into', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    seedParent();
+    const deps = baseDeps({
+      sendFirstMessage: async () => { throw new Error('must not be called for claude'); },
+    });
+    const result = await spawnBrain(spawnInput({ cli: 'claude' }), deps);
+    assert.ok(result.brain, JSON.stringify(result));
+    assert.equal(result.firstMessage, undefined);
+  } finally { restore(); }
+});
+
+test('spawnBrain: the kimi first message goes through the typed transport and is verified', async () => {
+  const dir = tempDir();
+  const restore = withEnv({ SBB_DIR: dir });
+  try {
+    const brief = 'FIRST-LINE-OF-BRIEF reply with OK';
+    const idle = screen('kimi-idle');
+    const tmuxApi = createFakeTmux({
+      panes: [{ paneId: '%30', session: '24', windowId: '@16', coord: '24:3.4', command: 'kimi' }],
+      screens: [idle, `${probeOf(brief)}\n${idle}`],
+    });
+    const deps = baseDeps({
+      tmuxApi,
+      tmuxKeys: createTmuxKeys({ tmuxApi, sleep: async () => {}, settleMs: 50 }),
+    });
+    const result = await spawnBrain(
+      spawnInput({ cli: 'kimi', role: 'main', parent: undefined, brief }),
+      deps,
+    );
+    assert.ok(result.brain, JSON.stringify(result));
+    assert.equal(result.firstMessage.status, 'delivered');
+    assert.equal(result.firstMessage.via, 'send-keys');
+    assert.deepEqual(typedLiterals(tmuxApi), [brief]);
+  } finally { restore(); }
 });

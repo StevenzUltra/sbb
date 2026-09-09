@@ -75,7 +75,7 @@ you  <->  main brain(s)  <->  sub brains
 ## Install
 
 Requirements: macOS or Linux, tmux 3.3 or newer, Node.js 22.13 or newer, and the CLIs you
-already own (Claude Code, Codex; Antigravity and Cursor are typed-channel only).
+already own (Claude Code, Codex, Kimi and Grok; Antigravity and Cursor are typed-channel only).
 
 ```
 npm install -g github:StevenzUltra/sbb    # npm package name: switch-brain-brain (the command is sbb)
