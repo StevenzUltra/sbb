@@ -1,6 +1,6 @@
 {
   "name": "switch-brain-brain-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SBB desktop: the Switch Brain Brain console as a macOS app (Electron shell around sbb ui).",
   "private": true,
   "type": "module",
