@@ -9,6 +9,11 @@ const PROVIDER_LABEL = Object.freeze({ claude: 'Claude', codex: 'Codex', antigra
 const WINDOW_LABEL = Object.freeze({ session: '5h', weekly: '7d', fable: 'Fable' });
 const STATUS_LABEL = Object.freeze({ authenticationRequired: '未登录', unavailable: '不可用', stale: '已过期' });
 
+/** Display name for a CLI kind, shared with the 新建 dialog's effort hint. */
+export function cliLabel(cli) {
+  return PROVIDER_LABEL[cli] ?? (typeof cli === 'string' && cli !== '' ? cli : 'CLI');
+}
+
 /** Default floors when the policy has none (docs/spec/policy.md). */
 const DEFAULT_QUOTA = Object.freeze({ floorWeekly: 10, mainReserve: 20 });
 

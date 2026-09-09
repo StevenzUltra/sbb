@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  clampOffset, cliOptions, cwdPicks, effortOptions, errorText, footerText, modelOptions,
+  clampOffset, cliOptions, cwdPicks, effortApplied, effortNote, effortOptions, errorText, footerText, modelOptions,
   modelSuggestions, NAME_RE, quotaChipFor, quotaLabel, readCustomModels, readDialogPosition,
   resetDialogPosition, sanitizeName, writeCustomModel, writeDialogPosition,
 } from '../web/src/lib/spawn.js';
@@ -150,8 +150,8 @@ test('the footer shows the pair and the model that will be passed', () => {
 });
 
 test('effort is offered only for the CLIs whose launch command takes it', () => {
-  assert.deepEqual(effortOptions('claude'), ['low', 'medium', 'high', 'xhigh']);
-  assert.deepEqual(effortOptions('codex'), ['low', 'medium', 'high', 'xhigh']);
+  assert.deepEqual(effortOptions('claude'), ['low', 'medium', 'high', 'xhigh', 'max']);
+  assert.deepEqual(effortOptions('codex'), ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.deepEqual(effortOptions('agy'), [], 'no switch: the field is hidden');
   assert.deepEqual(effortOptions('cursor'), []);
   assert.deepEqual(effortOptions('kimi'), []);
@@ -191,4 +191,35 @@ test('an invalid_name error becomes one plain Chinese rule, other errors pass th
   assert.equal(errorText('name_invalid: something'), 'name_invalid: something', 'lookalikes are left alone');
   assert.equal(errorText('duplicate_name: 名字已被占用'), 'duplicate_name: 名字已被占用');
   assert.equal(errorText(undefined), '');
+});
+
+test('a level above the CLI ceiling is applied lower, and the footer says so', () => {
+  assert.equal(effortApplied('claude', 'max'), 'max', 'claude takes max');
+  assert.equal(effortApplied('codex', 'max'), 'xhigh', 'codex tops out at xhigh');
+  assert.equal(effortApplied('codex', 'xhigh'), 'xhigh');
+  assert.equal(effortApplied('codex', 'low'), 'low');
+  assert.equal(effortApplied('codex', 'ultra'), 'ultra', 'an unknown level is passed through');
+  assert.equal(effortApplied('agy', 'max'), '', 'no switch, nothing to apply');
+  assert.equal(effortApplied('codex', '  '), '');
+  assert.equal(effortApplied(undefined, 'max'), '');
+
+  assert.equal(effortNote('codex', 'max'), 'Codex 最高 xhigh，将按 xhigh 运行');
+  assert.equal(effortNote('codex', 'high'), '', 'no note when the level runs as chosen');
+  assert.equal(effortNote('claude', 'max'), '', 'claude reaches max');
+  assert.equal(effortNote('agy', 'max'), '', 'no effort switch, no note');
+  assert.equal(effortNote('codex', 'ultra'), '', 'unknown levels are left to the server');
+  assert.equal(effortNote('codex', ''), '');
+});
+
+test('the footer appends the downgrade hint after the quota', () => {
+  const chip = { key: 'a/codex', label: 'a · Codex', pct: 94 };
+  assert.equal(
+    footerText({ chip, account: 'a', cli: 'codex', model: '', effort: 'max', note: effortNote('codex', 'max') }),
+    'a · Codex · 默认 · max · 剩余 94% · Codex 最高 xhigh，将按 xhigh 运行',
+  );
+  assert.equal(
+    footerText({ chip, account: 'a', cli: 'codex', model: 'gpt-6-astra', effort: 'high', note: effortNote('codex', 'high') }),
+    'a · Codex · gpt-6-astra · high · 剩余 94%',
+  );
+  assert.equal(footerText({ chip, account: 'a', cli: 'codex', model: '', note: '  ' }), 'a · Codex · 默认 · 剩余 94%');
 });
