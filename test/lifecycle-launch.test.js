@@ -375,3 +375,18 @@ test('buildCommand: --effort maps to each CLI\'s own switch and is ignored elsew
   const none = buildCommand({ cli: 'claude', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, effort: '  ' });
   assert.ok(!none.argv.includes('--effort'));
 });
+
+test('effectiveEffort: max lowers to the CLI\'s highest, unknown levels and CLIs give nothing', async () => {
+  const { effectiveEffort } = await import('../src/lifecycle/launch.js');
+  assert.equal(effectiveEffort('claude', 'max'), 'max');
+  assert.equal(effectiveEffort('codex', 'max'), 'xhigh');
+  assert.equal(effectiveEffort('codex', 'XHigh'), 'xhigh');
+  assert.equal(effectiveEffort('claude', 'minimal'), 'low', 'below the range: the lowest');
+  assert.equal(effectiveEffort('codex', 'medium'), 'medium');
+  assert.equal(effectiveEffort('claude', 'ultra'), undefined);
+  assert.equal(effectiveEffort('kimi', 'max'), undefined);
+  assert.equal(effectiveEffort('codex', ''), undefined);
+  const codex = buildCommand({ cli: 'codex', briefFile: '/tmp/b.md', account: 'a', accounts: ACCOUNTS, effort: 'max' });
+  assert.ok(codex.argv.join(' ').includes('model_reasoning_effort=xhigh'));
+  assert.equal(codex.effort, 'xhigh');
+});

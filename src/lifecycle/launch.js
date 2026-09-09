@@ -149,6 +149,31 @@ export function prepareBrief({ id, brief, dir } = {}) {
  * @returns {{ env: Record<string,string>, argv: string[], shellLine: string,
  *             paneCommand: string[], briefArgv: boolean }}
  */
+/** Effort levels from lowest to highest, as the CLIs name them. */
+export const EFFORT_SCALE = Object.freeze(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+/** What each CLI accepts (measured 2026-09-10: claude --help, codex config.toml). */
+export const EFFORT_SUPPORT = Object.freeze({
+  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  codex: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+});
+
+/**
+ * The level a CLI actually gets for a requested one: the same when supported, otherwise the
+ * highest supported level below it (`max` on codex becomes `xhigh`), or its lowest when the
+ * request is below its range. Unknown levels and CLIs without a switch give undefined.
+ * @param {string} cli @param {string|undefined} requested
+ * @returns {string|undefined}
+ */
+export function effectiveEffort(cli, requested) {
+  const level = typeof requested === 'string' ? requested.trim().toLowerCase() : '';
+  const supported = EFFORT_SUPPORT[cli];
+  if (!level || !supported) return undefined;
+  const rank = EFFORT_SCALE.indexOf(level);
+  if (rank < 0) return undefined;
+  const below = supported.filter((l) => EFFORT_SCALE.indexOf(l) <= rank);
+  return below.length ? below[below.length - 1] : supported[0];
+}
+
 export function buildCommand({ cli, model, briefFile, extraArgs, account, name, accounts, preamble, command, shell, effort } = {}) {
   if (!CLI_BINARIES[cli]) throw new Error(`unknown cli "${cli}"`);
   const binary = typeof command === 'string' && command.trim() !== '' ? command.trim() : CLI_BINARIES[cli];
@@ -214,7 +239,7 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
   }
   // Thinking effort, where the CLI has a switch for it (docs/spec/lifecycle.md): claude
   // --effort <level>, codex -c model_reasoning_effort=<level>; other CLIs have none yet.
-  const level = typeof effort === 'string' ? effort.trim() : '';
+  const level = effectiveEffort(cli, effort);
   if (level && cli === 'claude') { push('--effort'); push(level); }
   else if (level && cli === 'codex') { push('-c'); push(`model_reasoning_effort=${level}`); }
   for (const arg of extra) push(arg);
@@ -225,7 +250,7 @@ export function buildCommand({ cli, model, briefFile, extraArgs, account, name, 
   const lead = typeof preamble === 'string' && preamble.trim() !== '' ? preamble.trim() : '';
   const shellLine = lead ? `${lead}\n${execLine}` : execLine;
   const runner = typeof shell === 'string' && shell.trim() !== '' ? shell.trim() : 'sh';
-  return { env, argv, shellLine, paneCommand: [runner, '-c', shellLine], briefArgv };
+  return { env, argv, shellLine, paneCommand: [runner, '-c', shellLine], briefArgv, effort: level };
 }
 
 /**

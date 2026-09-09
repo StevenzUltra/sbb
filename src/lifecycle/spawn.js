@@ -335,7 +335,7 @@ export async function spawnBrain(input = {}, deps = {}) {
     threadName: thread?.name,
     createdAt: Date.now(),
     origin: 'spawned',
-    ...(typeof input.effort === 'string' && input.effort.trim() ? { effort: input.effort.trim() } : {}),
+    ...(typeof input.effort === 'string' && input.effort.trim() ? { effort: input.effort.trim(), ...(command.effort ? { effortApplied: command.effort } : {}) } : {}),
   };
   (deps.saveBrain ?? saveBrain)(brain);
 

@@ -161,5 +161,7 @@ sbb policy spawn-args claude "--dangerously-skip-permissions"
 
 `sbb spawn --effort <level>` (and `effort` in `POST /api/spawn`) sets the thinking effort where
 the CLI has a switch: Claude Code `--effort <level>`, Codex `-c model_reasoning_effort=<level>`.
-Levels are passed through as typed (`low`, `medium`, `high`, `xhigh`, ...); other CLIs ignore
-it. The brain record keeps `effort` so the console can show it.
+Levels, lowest to highest: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Claude Code takes
+`low`..`max`; Codex takes `minimal`..`xhigh`. A level the CLI does not have is lowered to its
+highest supported one (`max` on Codex runs as `xhigh`); a request below its range becomes its
+lowest; other CLIs ignore it. The record keeps `effort` (requested) and `effortApplied`.
