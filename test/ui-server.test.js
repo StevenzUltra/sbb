@@ -68,6 +68,8 @@ const osascript = {
     return { code: 0, stdout: '', stderr: '' };
   },
 };
+/** @type {any[]} */
+const channelCalls = [];
 const fakeInbox = { sockPath: join(TMP, 'socks', '1.sock'), on: () => {}, off: () => {}, close: async () => {} };
 const deps = {
   sbbDir: SBB,
@@ -84,6 +86,19 @@ const deps = {
   listPlans: () => [{ planId: 'p-1' }],
   listAllClaims: () => [{ brainId: brainA.id, resource: 'branch:h1' }],
   resolve: async (ref) => ({ brain: ref, address: `a/claude:${ref}`, cli: 'claude', account: 'a' }),
+  isChannelAddress: (to) => to.startsWith('#'),
+  resolveChannel: (address) => ({
+    id: 'team:SSL-0001', name: address.slice(1), main: { id: 'SSL-0001' },
+    members: [{ id: 'SSL-0002', name: 'ios', role: 'sub' }, { id: 'SSL-0003', name: 'review', role: 'sub' }],
+  }),
+  sendToChannel: async (input) => {
+    channelCalls.push(input);
+    return {
+      msgId: 'abc123', text: '[you][user -> #lead] hello team', logFile: '/tmp/team.log',
+      entry: { receipts: input.channel.members.map((m) => ({ member: m.id, status: 'delivered', via: 'uds' })) },
+      results: input.channel.members.map((m) => ({ member: m, receipt: { status: 'delivered', via: 'uds' } })),
+    };
+  },
   startInbox: async () => fakeInbox,
   switch: {
     listClients: async () => [],
@@ -296,6 +311,16 @@ test('/api read routes answer for unknown and known brains', async () => {
 
 test('POST routes validate their body and reject unknown paths', async () => {
   const post = (path, body) => request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const channelRes = await post('/api/tell', { to: '#lead', text: 'hello team' });
+  assert.equal(channelRes.status, 200);
+  const channelTell = await channelRes.json();
+  assert.equal(channelTell.via, 'channel');
+  assert.equal(channelTell.status, 'delivered');
+  assert.equal(channelTell.name, '#lead');
+  assert.deepEqual(channelTell.receipts.map((r) => r.member), ['SSL-0002', 'SSL-0003']);
+  assert.equal(channelCalls.length, 1);
+  assert.equal(channelCalls[0].identity.id ?? channelCalls[0].identity.brain ?? 'user', 'user');
+
   const tell = await post('/api/tell', { to: 'x' });
   assert.equal(tell.status, 400);
   assert.equal((await tell.json()).error.reason, 'invalid_input');
@@ -369,7 +394,8 @@ test('static files come from web/dist, and a missing build explains itself', asy
 
 /** @param {string} pane @param {string} [token] */
 function openPane(pane, token = TOKEN) {
-  const ws = new WebSocket(`ws://127.0.0.1:${info.port}/ws/pane/${pane}?t=${token}`);
+  // browsers URL-encode the pane id ('%1' travels as '%251'); the server decodes that escape
+  const ws = new WebSocket(`ws://127.0.0.1:${info.port}/ws/pane/${encodeURIComponent(pane)}?t=${token}`);
   /** @type {{ data: any, isBinary: boolean }[]} */
   const messages = [];
   ws.on('message', (data, isBinary) => messages.push({ data, isBinary }));

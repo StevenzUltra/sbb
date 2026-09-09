@@ -203,7 +203,7 @@ const command = computed(() => {
               </div>
               <div class="truncate text-[11px] text-es-dim dark:text-es-dark-muted">
                 {{ store.brainById(data.brainId ?? id)?.role === 'main' ? '主脑' : '子脑' }} · {{ store.brainById(data.brainId ?? id)?.account }} /
-                {{ store.brainById(data.brainId ?? id)?.cli }} · {{ store.brainById(data.brainId ?? id)?.modelLabel }}
+                {{ store.brainById(data.brainId ?? id)?.cli }} · {{ store.brainById(data.brainId ?? id)?.modelLabel ?? store.brainById(data.brainId ?? id)?.model }}
               </div>
 
               <div v-if="store.brainById(data.brainId ?? id)?.role === 'main'" class="flex items-center gap-[6px] text-[11px] text-es-muted">

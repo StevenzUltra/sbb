@@ -20,12 +20,12 @@ console can do is a thin call into the same modules the CLI uses; no logic lives
 
 | method | path | body | returns |
 | --- | --- | --- | --- |
-| GET | `/api/state` | | `{ brains, tree, accounts, quota, policy, held, plans, claims, tps, teams, receipts, version }` (`receipts` = newest 500 receipt-log lines, newest first) — one snapshot the page can render from cold |
-| GET | `/api/events` | | SSE stream: `brain`, `receipt`, `message`, `held`, `plan`, `claim`, `quota`, `tps`, `policy` events, each carrying the full updated object; `heartbeat` every 15 s |
+| GET | `/api/state` | | `{ brains, tree, accounts, quota, policy, held, plans, claims, tps, teams, threads, receipts, version }` (`receipts` = newest 500 receipt-log lines, newest first; `teams[].messages` = the channel log, `threads[]` = one private thread per brain `{ id, with, title, messages }`, both as console messages, newest 300) — one snapshot the page can render from cold |
+| GET | `/api/events` | | SSE stream: `brain`, `receipt`, `message`, `held`, `plan`, `claim`, `quota`, `tps`, `policy` events, each carrying the full updated object; `heartbeat` every 15 s. A `message` is a console message `{ msgId, t, at, from, fromName, to, text, replyTo, receipt, thread?, team? }` (`from` = sender brain id or `user`, `text` = envelope body); `thread` names the private thread (brain id), `team` the channel (main id) |
 | GET | `/api/brains/:id/transcript?limit=200` | | recent turns mirrored from the brain's own session log (Claude JSONL, Codex rollout); read-only |
 | GET | `/api/messages?with=<id>&limit=200` | | private thread between the user and a brain, from the receipt log + inbox mirrors |
 | GET | `/api/teams/:id?limit=300` | | team channel log (teams.md) |
-| POST | `/api/tell` | `{ to, text, role?, priority? }` | `Receipt` |
+| POST | `/api/tell` | `{ to, text, role?, priority? }` | `Receipt`; a channel `to` (`#<main>`, `#all`) fans out like `sbb tell #<main>` and returns `{ status, via: "channel", msgId, channel, name, receipts[], log }` |
 | POST | `/api/ask` | `{ to, text, wait? }` | `{ msgId }` immediately; the reply arrives as a `message` event with `replyTo` |
 | POST | `/api/reply` | `{ msgId, text }` | `Receipt` |
 | POST | `/api/approve` | `{ msgId, deny?, reason? }` | `Receipt` or `{ denied: true }` |
@@ -42,7 +42,8 @@ Errors: `{ error: { reason, detail } }` with 4xx; the `reason` vocabulary is rec
 ## Live pane stream (WebSocket)
 
 `GET /ws/pane/:paneId?t=<token>` upgrades to a WebSocket that streams the pane's output and
-accepts input:
+accepts input. `:paneId` is the tmux pane id URL-encoded the way a browser must send it
+(`%152` travels as `%25152`); the server decodes that leading `%25` and nothing else:
 
 - Server side: ONE tmux control-mode client per `sbb ui` process (`tmux -C attach-session -t <session>`
   spawned with the server's own env; `SBB_TMUX_ARGS` respected). It parses `%output %<pane> <escaped bytes>`

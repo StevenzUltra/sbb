@@ -56,7 +56,7 @@ export function createHttpClient() {
       return () => source.close();
     },
 
-    openPane(paneId, { onData, onClosed, onGeometry }) {
+    openPane(paneId, { onData, onClosed, onGeometry, onRefused }) {
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const socket = new WebSocket(
         `${proto}://${window.location.host}/ws/pane/${encodeURIComponent(paneId)}?t=${encodeURIComponent(token)}`,
@@ -66,8 +66,10 @@ export function createHttpClient() {
         if (typeof msg.data === 'string') {
           try {
             const frame = JSON.parse(msg.data);
-            if (frame.type === 'closed') onClosed?.();
-            if (frame.type === 'refused') onClosed?.(frame.reason);
+            // 'closed' ends the stream; 'refused' answers one request (resize while a person
+            // has the pane open in a terminal, input before 在此输入) and the stream goes on.
+            if (frame.type === 'closed') onClosed?.(frame.reason);
+            if (frame.type === 'refused') onRefused?.(frame.reason);
             // Optional: adopt the pane's geometry if the server ever reports it. The console
             // otherwise infers a lower bound from the output and asks for the panel width.
             if (frame.type === 'geometry') onGeometry?.(frame);
