@@ -14,7 +14,10 @@ open them in a browser). Match them: brand green `#2d6b4f` / `#1e3a32`, light gr
 
 - `web/` is its own npm package: Vue 3, Vite, Tailwind CSS v4 (`@theme` tokens copied from
   `docs/design/tokens.css`, which mirrors the EagerStudy brand tokens), Pinia, `@vue-flow/core` for
-  the org chart, `@xterm/xterm` + `@xterm/addon-fit` for panes. Nothing else without asking.
+  the org chart, `ghostty-web` for panes (Ghostty's terminal emulator compiled to WebAssembly,
+  MIT, xterm.js-compatible API: its VT parser, grapheme handling and canvas renderer; the
+  console sizes the terminal from the renderer's own cell size, never from a fit addon that
+  reads the host, because the host follows the canvas). Nothing else without asking.
 - Dev: `npm run dev` in `web/` proxies `/api` and `/ws` to a running `sbb ui --port 4789`.
   Build: `npm run build` → `web/dist`.
 - One store (`useSbb`) holds the `/api/state` snapshot and applies SSE events; components never
@@ -28,7 +31,7 @@ open them in a browser). Match them: brand green `#2d6b4f` / `#1e3a32`, light gr
    name, id, account/cli/model, selected row highlighted, team chips at the bottom); center
    `ConversationStream` (tabs: team channel / private threads; each message: avatar initial, name#id,
    role chip, time, body, receipt line; composer at the bottom); right `BrainPane` (selected brain
-   header with 在此输入 / 转移 / 结束 / 去终端, xterm terminal fed by the pane WebSocket, footer with
+   header with 在此输入 / 转移 / 结束 / 去终端, ghostty-web terminal fed by the pane WebSocket, footer with
    claims and receipt counts); bottom `TpsBar` (per-brain tok/s over 60 s with bars, total, source
    note). Selecting a row switches the right pane and the private tab.
 2. **组织图** (`Transfer`): Vue Flow canvas, root node = the user, main brains under it, subtrees below;

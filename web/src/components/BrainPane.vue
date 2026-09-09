@@ -1,7 +1,8 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
+// The terminal is Ghostty's emulator compiled to WebAssembly (ghostty-web, MIT: xterm.js-compatible
+// API, Ghostty's VT parser, grapheme handling and renderer); see docs/spec/web-console.md.
+import { FitAddon, init as initGhostty, Terminal } from 'ghostty-web';
 import { useSbb } from '../store/sbb.js';
 import { ScreenWidth } from '../lib/screen.js';
 import Icon from './Icon.vue';
@@ -111,14 +112,28 @@ function onKey(event) {
   return true;
 }
 
-/** What the terminal could be if the pane were resized to this panel. */
+/**
+ * What the terminal could be if the pane were resized to this panel: the panel's inner size
+ * divided by the cell size the renderer is actually using (canvas size / current cols and
+ * rows). Measured against the scroller, never the host: the host follows the canvas, so a
+ * fit addon reading it would propose ever more columns.
+ */
 function proposed() {
-  if (!fitAddon) return null;
-  try {
-    return fitAddon.proposeDimensions() ?? null;
-  } catch {
-    return null;
+  if (!terminal || !scroller.value || !host.value) return null;
+  const canvas = host.value.querySelector('canvas');
+  const box = canvas?.getBoundingClientRect();
+  if (!box || !box.width || !box.height || !terminal.cols || !terminal.rows) {
+    try {
+      return fitAddon?.proposeDimensions() ?? null;
+    } catch {
+      return null;
+    }
   }
+  const cellW = box.width / terminal.cols;
+  const cellH = box.height / terminal.rows;
+  const cols = Math.floor(scroller.value.clientWidth / cellW);
+  const rows = Math.floor(scroller.value.clientHeight / cellH);
+  return cols > 0 && rows > 0 ? { cols, rows } : null;
 }
 
 /**
@@ -135,6 +150,8 @@ function syncSize({ request = true } = {}) {
   const cols = Math.max(paneCols, want?.cols ?? 0, width.cols, 2);
   const rows = Math.max(paneRows, want?.rows ?? 0, 1);
   if (cols !== terminal.cols || rows !== terminal.rows) terminal.resize(cols, rows);
+  // Observable size for tests and support: what the terminal is, and why.
+  if (host.value) Object.assign(host.value.dataset, { cols: String(terminal.cols), rows: String(terminal.rows), pane: String(paneCols), seen: String(width.cols), panel: String(want?.cols ?? '') });
   if (!request) return;
   clearTimeout(requestTimer);
   requestTimer = setTimeout(() => {
@@ -143,11 +160,12 @@ function syncSize({ request = true } = {}) {
   }, 120);
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await initGhostty();
+  if (!host.value) return; // unmounted while the emulator loaded
   terminal = new Terminal({
     convertEol: true,
     fontSize: 12,
-    lineHeight: 1.7,
     fontFamily: '"SF Mono", Menlo, Consolas, monospace',
     scrollback: 2000,
     allowTransparency: desktopShell,
