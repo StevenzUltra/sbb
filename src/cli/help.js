@@ -26,7 +26,7 @@ export const COMMANDS = Object.freeze([
   ['quota', 'sbb quota [--json] [--refresh]', 'Show remaining quota per account (read-only)'],
   ['catalog', 'sbb catalog [--json]', 'Show accounts x CLIs x models available on this machine'],
   ['doctor', 'sbb doctor [--json]', 'Check tmux, accounts, sockets and Usage Guard availability'],
-  ['spawn', 'sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --cli claude|codex|agy|cursor [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"] [--split] [--force] [--json]',
+  ['spawn', 'sbb spawn --name <name> --role main|sub [--parent <id|name>] --account <acct> --cli claude|codex|agy|cursor|kimi|grok [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"] [--split] [--force] [--json]',
     'Launch a new brain (account, CLI, model, role) with its briefing'],
   ['kill', 'sbb kill <id|name> [--keep-children] [--yes] [--force] [--json]',
     'Retire a brain and its subtree (graceful exit, then kill-pane)'],

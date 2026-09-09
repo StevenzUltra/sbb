@@ -3,10 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  CLI_BINARIES,
   EXIT_COMMANDS,
   awaitReady,
   buildCommand,
@@ -15,6 +16,7 @@ import {
   shellQuote,
   splitArgs,
 } from '../src/lifecycle/launch.js';
+import { CLI_CONFIG_ENV, cliConfigDir } from '../src/lib/paths.js';
 import { createFakeTmux, screen, tmuxCommands, typedLiterals } from './fixtures/lifecycle/fake-tmux.js';
 
 const execFileP = promisify(execFile);
@@ -290,8 +292,59 @@ test('readCodexTrust: reads a real config.toml from disk', () => {
   assert.equal(readCodexTrust({ dir, cwd: '/tmp/other' }).trusted, false);
 });
 
+test('buildCommand: kimi has no brief argv, grok takes the brief as its first prompt', () => {
+  const base = mkdtempSync(join(tmpdir(), 'sbb-clihome-'));
+  mkdirSync(join(base, 'kimi'), { recursive: true });
+  mkdirSync(join(base, 'grok'), { recursive: true });
+  const accounts = [{ name: 'k', baseDir: base }];
+
+  assert.equal(CLI_BINARIES.kimi, 'kimi');
+  assert.equal(CLI_BINARIES.grok, 'grok');
+
+  const kimi = buildCommand({ cli: 'kimi', briefFile: '/tmp/briefs/b.md', account: 'k', accounts });
+  assert.deepEqual(kimi.argv, ['kimi'], 'kimi 0.41.0 has no interactive brief channel');
+  assert.deepEqual(kimi.env, { KIMI_CODE_HOME: join(base, 'kimi') });
+  assert.equal(kimi.briefArgv, false);
+
+  const grok = buildCommand({ cli: 'grok', model: 'grok-4.6', briefFile: '/tmp/briefs/b.md', account: 'k', accounts });
+  assert.deepEqual(grok.argv, ['grok', '--model', 'grok-4.6', '$(cat /tmp/briefs/b.md)']);
+  assert.deepEqual(grok.env, { GROK_HOME: join(base, 'grok') });
+  assert.equal(grok.briefArgv, true);
+
+  // No config dir on the account: no assignment, never a guessed path.
+  const none = buildCommand({ cli: 'kimi', briefFile: '/tmp/briefs/b.md', account: 'a', accounts: ACCOUNTS });
+  assert.deepEqual(none.env, {});
+});
+
+test('cliConfigDir: the measured config home per CLI, undefined when it does not exist', () => {
+  const base = mkdtempSync(join(tmpdir(), 'sbb-clidir-'));
+  mkdirSync(join(base, 'grok'), { recursive: true });
+  assert.equal(cliConfigDir({ name: 'k', baseDir: base }, 'grok'), join(base, 'grok'));
+  assert.equal(cliConfigDir({ name: 'k', baseDir: base }, 'kimi'), undefined);
+  assert.equal(cliConfigDir({ name: 'k', baseDir: base }, 'nope'), undefined);
+  assert.deepEqual(CLI_CONFIG_ENV, {
+    claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME', kimi: 'KIMI_CODE_HOME', grok: 'GROK_HOME',
+  });
+});
+
+test('awaitReady: kimi and grok are ready on their idle composer', async () => {
+  for (const [cli, file] of [['kimi', 'kimi-idle'], ['grok', 'grok-idle']]) {
+    const tmuxApi = createFakeTmux({ screens: [screen(file)] });
+    const result = await awaitReady({ cli, paneId: '%30' }, { tmuxApi, timeoutMs: 50, pollMs: 5, sleep: async () => {} });
+    assert.equal(result.ready, true, `${cli} idle screen must be ready`);
+  }
+});
+
+test('awaitReady: a CLI stuck on its own dialog is reported instead of waited out', async () => {
+  const tmuxApi = createFakeTmux({ screens: [screen('kimi-trust')] });
+  const result = await awaitReady({ cli: 'kimi', paneId: '%30' }, { tmuxApi, timeoutMs: 50, pollMs: 5, sleep: async () => {} });
+  assert.equal(result.ready, false);
+  assert.equal(result.reason, 'prompting');
+  assert.match(result.detail, /answer it, then spawn again/);
+});
+
 test('EXIT_COMMANDS: every CLI with a known exit command is listed', () => {
-  assert.deepEqual(EXIT_COMMANDS, { claude: '/exit', codex: '/quit', agy: '/quit', cursor: '/exit' });
+  assert.deepEqual(EXIT_COMMANDS, { claude: '/exit', codex: '/quit', agy: '/quit', cursor: '/exit', kimi: '/exit', grok: '/exit' });
   assert.equal(existsSync('/nonexistent'), false);
 });
 

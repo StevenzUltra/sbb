@@ -32,6 +32,19 @@ export const STATIC_MODELS = Object.freeze({
     { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
     { id: 'kimi-k3', label: 'Kimi K3' },
   ],
+  // kimi 0.41.0 `kimi provider list` + ~/.kimi-code/config.toml [models."<id>"] entries
+  // (default_model = kimi-code/k3). `-m` takes these aliases.
+  kimi: [
+    { id: 'kimi-code/k3', label: 'K3' },
+    { id: 'kimi-code/k3-256k', label: 'K3-256k' },
+    { id: 'kimi-code/kimi-for-coding', label: 'K2.7 Coding' },
+    { id: 'kimi-code/kimi-for-coding-highspeed', label: 'K2.7 Coding Highspeed' },
+  ],
+  // grok 1.0.13 `grok models` (default grok-4.6).
+  grok: [
+    { id: 'grok-4.6', label: 'Grok 4.6' },
+    { id: 'grok-4.5', label: 'Grok 4.5' },
+  ],
 });
 
 /**
@@ -39,9 +52,11 @@ export const STATIC_MODELS = Object.freeze({
  * CLI's config dir (paths.js CLI_DIR_FIELD); 'default' uses the global dirs, so a
  * global-only CLI still appears there.
  */
-export const CATALOG_CLIS = ['claude', 'codex', 'agy', 'cursor'];
+export const CATALOG_CLIS = ['claude', 'codex', 'agy', 'cursor', 'kimi', 'grok'];
 
-const BINARY_FOR_CLI = { claude: 'claude', codex: 'codex', agy: 'agy', cursor: 'cursor-agent' };
+const BINARY_FOR_CLI = {
+  claude: 'claude', codex: 'codex', agy: 'agy', cursor: 'cursor-agent', kimi: 'kimi', grok: 'grok',
+};
 
 /**
  * `which` without a dependency: first executable of that name on PATH.
@@ -170,7 +185,10 @@ export function catalog(opts = {}) {
         source: config.modelCatalogJson ? 'config.toml + model_catalog_json' : 'config.toml',
       });
     }
-    for (const cli of ['agy', 'cursor']) {
+    // agy, cursor, kimi and grok are account-scoped: discoverAccounts sets their Dir field
+    // from the account's own layout (kimi and grok also honour KIMI_CODE_HOME/GROK_HOME when
+    // launched, see src/lib/paths.js CLI_CONFIG_ENV). No directory, no row.
+    for (const cli of ['agy', 'cursor', 'kimi', 'grok']) {
       const dir = /** @type {Record<string, string|undefined>} */ (account)[CLI_DIR_FIELD[cli]];
       if (!binaries[cli] || !dir) continue;
       rows.push({

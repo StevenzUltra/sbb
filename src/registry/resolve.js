@@ -8,7 +8,7 @@ import { roster as defaultRoster } from './roster.js';
 /** @typedef {import('../types.js').Target} Target */
 /** @typedef {import('./roster.js').RosterRow} RosterRow */
 
-export const CLI_KINDS = ['claude', 'codex', 'agy', 'cursor', 'other'];
+export const CLI_KINDS = ['claude', 'codex', 'agy', 'cursor', 'kimi', 'grok', 'other'];
 
 const PANE_ID_RE = /^%\d+$/;
 const COORD_RE = /^[^:]+:\d+\.\d+$/;

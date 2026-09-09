@@ -201,6 +201,43 @@ const cursor = defineProfile({
   followUpQueue: true,
 });
 
+const kimi = defineProfile({
+  id: 'kimi',
+  promptRe: /^\s*\u2502\s*>/,
+  // live pane 2026-09-10 (m4k, kimi 0.41.0): the composer is a bordered box, so the
+  // collapsed empty line is '\u2502 > \u2502' (the right border shares the row).
+  emptyComposer: /^\u2502\s*>\s*\u2502?$/,
+  // 'working...' / 'thinking...' are the turn markers; the footer's rotating tip
+  // ('ctrl-s to add guidance...') and 'K3 thinking: max' are not, so anchor on the glyph.
+  busyRe: [/(?:^|\n)\s*[\u2800-\u28ff]?\s*(?:working|thinking)\u2026/],
+  promptingRe: [
+    // live pane 2026-09-10 (m4k8): first visit to a folder that is not trusted yet.
+    /Trust this folder\?/,
+    /Enable project MCP servers/,
+    /Do you want to (?:proceed|allow|run)\b/i,
+    /(?:^|\n)\s*[\u276f\u203a>]?\s*1\.\s+Yes\b/,
+  ],
+  enters: 1,
+});
+
+const grok = defineProfile({
+  id: 'grok',
+  promptRe: /^\s*\u2502\s*\u276f/,
+  // live pane 2026-09-10 (m4g, grok 1.0.13): boxed composer '\u2502 \u276f'. The user's own
+  // turn is echoed above as an indented '\u276f <text>' with no border, so only the boxed
+  // line is the composer and lastPromptIndex never picks an echo.
+  emptyComposer: /^\u2502\s*\u276f\s*\u2502?$/,
+  busyRe: [
+    /(?:^|\n)\s*[\u2800-\u28ff]?\s*(?:Waiting for response|Thinking|Responding|Retrying \(attempt \d+\))\u2026/,
+    /Esc:cancel/,
+  ],
+  promptingRe: [
+    /Do you want to (?:proceed|allow|run)\b/i,
+    /(?:^|\n)\s*[\u276f\u203a>]?\s*1\.\s+Yes\b/,
+  ],
+  enters: 1,
+});
+
 // Fallback for cli === 'other': no measured fingerprint exists, so only generic markers
 // are used and the transport still refuses anything that is not a plain prompt.
 const other = defineProfile({
@@ -220,7 +257,7 @@ const other = defineProfile({
 });
 
 /** @type {Record<CliKind, CliProfile>} */
-export const CLI_PROFILES = { claude, codex, agy, cursor, other };
+export const CLI_PROFILES = { claude, codex, agy, cursor, kimi, grok, other };
 
 /**
  * Alias the dynamic importer in src/registry/roster.js resolves (`mod.profiles ?? …`).

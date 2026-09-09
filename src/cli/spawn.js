@@ -3,7 +3,7 @@ import { spawnBrain } from '../lifecycle/spawn.js';
 import { EXIT, main, parse, UsageError, writeJson } from './util.js';
 
 const USAGE = `usage: sbb spawn --name <name> --role main|sub [--parent <id|name>]
-          --account <acct> --cli claude|codex|agy|cursor
+          --account <acct> --cli claude|codex|agy|cursor|kimi|grok
           [--model <id>] [--cwd <dir>] [--brief-file <path>] [--cli-args="<extra>"]
           [--split] [--force] [--json]
 

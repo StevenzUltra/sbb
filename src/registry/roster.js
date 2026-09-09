@@ -63,6 +63,9 @@ export function inferCliFromCommand(command) {
   if (cmd === 'agy' || cmd.startsWith('agy-')) return 'agy';
   if (cmd === 'cursor-agent' || cmd.startsWith('cursor-agent-')) return 'cursor';
   if (cmd === 'codex' || cmd.startsWith('codex-')) return 'codex';
+  if (cmd === 'kimi' || cmd.startsWith('kimi-')) return 'kimi';
+  // grok sets pane_current_command to its versioned binary, e.g. 'grok-1.0.13-mac'
+  if (cmd === 'grok' || cmd.startsWith('grok-')) return 'grok';
   if (SHELL_COMMANDS.has(cmd)) return undefined;
   return 'other';
 }
@@ -84,6 +87,8 @@ export async function inferCliFromProcessTree(pane, exec = defaultRun) {
     const command = ps.stdout.trim();
     if (/\bcodex\b/.test(command)) return 'codex';
     if (/\bcursor-agent\b/.test(command)) return 'cursor';
+    if (/\bkimi\b/.test(command)) return 'kimi';
+    if (/\bgrok\b/.test(command)) return 'grok';
     if (depth >= TREE_MAX_DEPTH) continue;
     const children = await exec('pgrep', ['-P', pid], { timeoutMs: 5000 });
     if (children.code !== 0) continue;

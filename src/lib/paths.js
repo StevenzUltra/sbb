@@ -121,6 +121,35 @@ export function accountFromPaneTag(tag) {
   return t === '' ? 'default' : t;
 }
 
+/**
+ * Config-directory environment variable each CLI honours. Measured on scratch panes
+ * 2026-09-10 (docs/spec/protocols.md section 3): kimi 0.41.0 follows KIMI_CODE_HOME and
+ * grok 1.0.13 follows GROK_HOME (the user's ~/bin/ai-a wrapper exports the latter as
+ * <base>/grok). A CLI whose variable SBB has not measured gets no entry, never a guess.
+ */
+export const CLI_CONFIG_ENV = Object.freeze({
+  claude: 'CLAUDE_CONFIG_DIR',
+  codex: 'CODEX_HOME',
+  kimi: 'KIMI_CODE_HOME',
+  grok: 'GROK_HOME',
+});
+
+/**
+ * The config directory an account has for one CLI, or undefined when none exists. Reads the
+ * field `CLI_DIR_FIELD` names, so this helper, `discoverAccounts` and the catalog cannot
+ * drift apart. An account carries only dirs that really exist; a missing one stays
+ * undefined and SBB never invents a path.
+ * @param {Account} account
+ * @param {string} cli
+ * @returns {string|undefined}
+ */
+export function cliConfigDir(account, cli) {
+  const field = CLI_DIR_FIELD[cli];
+  if (!field || !account) return undefined;
+  const dir = account[field];
+  return typeof dir === 'string' && dir !== '' ? dir : undefined;
+}
+
 /** @param {Account} account */
 export function claudeSessionsDir(account) {
   return account.claudeDir ? join(account.claudeDir, 'sessions') : undefined;
