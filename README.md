@@ -2,8 +2,6 @@
 
 <h1 align="center">SBB - Switch Brain Brain</h1>
 
-<p align="center"><a href="#english">English</a> &nbsp;·&nbsp; <a href="#中文">中文</a></p>
-
 <p align="center"><b>Several AI subscriptions, on separate accounts, working as one team, from one terminal.</b><br>
 <b>多个 AI 订阅账户，一起协作，一个终端指挥。</b></p>
 
@@ -19,9 +17,8 @@
 
 ---
 
-<a id="english"></a>
-
-<p align="center"><b>English</b> &nbsp;·&nbsp; <a href="#中文">中文</a></p>
+<details open>
+<summary><b>English</b></summary>
 
 SBB turns the AI CLIs you already pay for (Claude Code, Codex, Antigravity, Cursor) into a
 team of *brains*: you talk to a main brain, main brains run sub brains, and every brain is a
@@ -179,11 +176,10 @@ cd web && npm install && npm run dev   # the console in fixture mode, no brains 
 
 MIT
 
----
+</details>
 
-<a id="中文"></a>
-
-<p align="center"><a href="#english">English</a> &nbsp;·&nbsp; <b>中文</b></p>
+<details>
+<summary><b>中文</b></summary>
 
 SBB 把你已经在付费的 AI 命令行（Claude Code、Codex、Antigravity、Cursor）编成一支由「脑」组成的队伍：
 你和主脑对话，主脑指挥子脑，每一个脑都是一个真实的 CLI 会话，跑在你为它选定的账户、CLI 和模型上。
@@ -317,3 +313,5 @@ cd web && npm install && npm run dev   # 罐头数据模式的控制台，不需
 ## 许可证
 
 MIT
+
+</details>
