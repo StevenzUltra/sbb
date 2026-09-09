@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { Handle, Position, VueFlow, useVueFlow } from '@vue-flow/core';
-import { useSbb } from '../store/sbb.js';
+import { useSbb, STATUS_LABEL } from '../store/sbb.js';
 import MoveConfirm from './MoveConfirm.vue';
 
 const store = useSbb();
@@ -125,6 +125,14 @@ function onDragStop({ node, event }) {
 
 const nameOf = (brainId) => (brainId === 'user' ? '你' : store.brainById(brainId)?.name ?? brainId);
 
+/** Real brains carry no lastMessage; fall back to where the brain is and what it is doing. */
+function recentLine(brain) {
+  if (!brain) return '';
+  if (brain.lastMessage) return `最近：${brain.lastMessage}`;
+  const status = STATUS_LABEL[brain.status] ?? brain.status ?? '';
+  return [status, brain.where ?? brain.coord].filter(Boolean).join(' · ');
+}
+
 /** Ghost keeps the old slot, pending marks the new one; everything else is a plain card. */
 function cardStyle(data) {
   if (data.node.kind === 'user') {
@@ -221,7 +229,7 @@ const command = computed(() => {
                     ? `已收到 ${nameOf(store.moveDraft?.to)} 名下，等待确认`
                     : data.ghost
                       ? '原位置'
-                      : `最近：${store.brainById(data.brainId ?? id)?.lastMessage ?? ''}`
+                      : recentLine(store.brainById(data.brainId ?? id))
                 }}
               </div>
             </template>
