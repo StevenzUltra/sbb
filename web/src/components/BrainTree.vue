@@ -9,7 +9,12 @@ const indent = (brain) => (brain.role === 'sub' && brain.parent ? 'pl-[30px]' : 
 
 function detail(brain) {
   if (brain.status === 'blocked') return `${brain.account} / ${brain.cli} · ${brain.lastMessage ?? ''}`;
-  const parts = [`${brain.account} / ${brain.cli}`, brain.modelLabel ?? brain.model, STATUS_LABEL[brain.status] ?? brain.status];
+  const parts = [
+    `${brain.account} / ${brain.cli}`,
+    brain.modelLabel ?? brain.model,
+    brain.effort ? `effort ${brain.effort}` : null,
+    STATUS_LABEL[brain.status] ?? brain.status,
+  ];
   return parts.filter(Boolean).join(' · ');
 }
 

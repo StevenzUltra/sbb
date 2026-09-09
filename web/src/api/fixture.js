@@ -2,6 +2,7 @@
 // `VITE_SBB_FIXTURE=1 npm run dev` (or `npm run build`) renders every screen with no server.
 // ?scene=held|transfer applies an overlay from fixtures/scenes.json; ?events=0 stops the
 // scripted stream (it already waits fixtures/events.json startDelayMs before the first tick).
+import { NAME_RE } from '../lib/spawn.js';
 import snapshot from '../../fixtures/state.json';
 import events from '../../fixtures/events.json';
 import panes from '../../fixtures/panes.json';
@@ -232,6 +233,10 @@ export function createFixtureClient() {
     },
 
     '/api/spawn': (body) => {
+      // Mirror src/registry/brains.js so fixture mode fails the same way the server does.
+      if (!NAME_RE.test(String(body.name ?? ''))) {
+        throw new Error(`invalid_name: invalid brain name "${body.name}": letters, digits, - _ . only, no spaces, up to 40 characters`);
+      }
       const parent = state.brains.find((b) => b.id === body.parent);
       const brain = {
         id: body.id ?? `SSL-00${50 + state.brains.length}`,
@@ -240,6 +245,7 @@ export function createFixtureClient() {
         cli: body.cli ?? 'claude',
         model: body.model ?? 'claude-haiku-4-5',
         modelLabel: body.modelLabel ?? body.model ?? 'claude-haiku-4-5',
+        ...(body.effort ? { effort: body.effort } : {}),
         role: body.role ?? 'sub',
         status: 'busy',
         parent: parent?.id ?? null,

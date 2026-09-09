@@ -2,8 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useSbb } from '../store/sbb.js';
 import {
-  clampOffset, cliOptions, cwdPicks, modelOptions, quotaChipFor, quotaLabel,
-  readDialogPosition, writeDialogPosition,
+  clampOffset, cliOptions, cwdPicks, effortOptions, footerText, modelOptions,
+  modelSuggestions, quotaChipFor, quotaLabel, readCustomModels, readDialogPosition,
+  sanitizeName, writeCustomModel, writeDialogPosition,
 } from '../lib/spawn.js';
 
 const store = useSbb();
@@ -13,14 +14,19 @@ const form = reactive({
   account: store.accounts[0]?.name ?? 'a',
   cli: '',
   model: '',
+  effort: '',
   role: 'sub',
   parent: store.brains.find((brain) => brain.role === 'main')?.id ?? null,
   cwd: '',
 });
 
+const storage = typeof localStorage === 'undefined' ? null : localStorage;
+
 const panel = ref(null);
 const nameInput = ref(null);
 const cwdOpen = ref(false);
+const modelOpen = ref(false);
+const customModels = ref(readCustomModels(storage));
 const pos = reactive({ x: 0, y: 0 });
 
 const account = computed(() => store.accounts.find((item) => item.name === form.account) ?? null);
@@ -30,19 +36,37 @@ const clis = computed(() => {
 });
 const cli = computed(() => form.cli || clis.value[0] || '');
 const models = computed(() => modelOptions(store.catalog, { account: form.account, cli: cli.value }));
+const efforts = computed(() => effortOptions(cli.value));
 const parent = computed(() => store.brainById(form.parent));
 const picks = computed(() => cwdPicks({ recent: store.recentCwds, parent: parent.value?.cwd ?? null }));
 const selectedQuota = computed(() => quotaChipFor(store.quota, form.account, cli.value));
+// The model is a combo: catalog suggestions plus anything typed, remembered per CLI.
+const modelPicks = computed(() =>
+  modelSuggestions(store.catalog, { account: form.account, cli: cli.value, custom: customModels.value[cli.value] ?? null }));
+const footer = computed(() =>
+  footerText({
+    chip: selectedQuota.value, account: form.account, cli: cli.value,
+    model: form.model, effort: form.effort,
+  }));
 const hasBridge = computed(() => typeof window !== 'undefined' && Boolean(window.sbbDesktop?.pickFolder));
 
-// The account changed: fall back to its first CLI. The pair changed: fall back to its first
-// model. A pair with no catalog rows keeps an empty model, which means the CLI's own default.
+// The account changed: fall back to its first CLI. The model is free text now, so switching
+// CLI clears it back to the CLI's own default instead of forcing a catalog entry.
 watch(clis, (list) => {
   if (!list.includes(form.cli)) form.cli = list[0] ?? '';
 }, { immediate: true });
-watch(models, (list) => {
-  if (!list.some((item) => item.model === form.model)) form.model = list[0]?.model ?? '';
-}, { immediate: true });
+watch(cli, () => {
+  form.model = '';
+  form.effort = '';
+  modelOpen.value = false;
+});
+
+// A name is an address: spaces can never survive the server, so turn them into '-' while typing.
+function onNameInput(event) {
+  const next = sanitizeName(event.target.value);
+  if (next !== event.target.value) event.target.value = next;
+  form.name = next;
+}
 
 function accountQuota(item) {
   const pair = item.name === form.account ? cli.value : (cliOptions(item)[0] ?? '');
@@ -52,6 +76,11 @@ function accountQuota(item) {
 function chooseCwd(path) {
   form.cwd = path;
   cwdOpen.value = false;
+}
+
+function chooseModel(id) {
+  form.model = id;
+  modelOpen.value = false;
 }
 
 async function pickFolder() {
@@ -64,11 +93,15 @@ const ready = computed(() => Boolean(form.name && form.account && cli.value));
 
 async function submit() {
   if (!ready.value) return;
+  const model = form.model.trim();
+  const catalogIds = models.value.map((row) => row.model);
+  if (model && !catalogIds.includes(model)) customModels.value = writeCustomModel(storage, cli.value, model);
   await store.spawn({
     name: form.name,
     account: form.account,
     cli: cli.value,
-    model: form.model || undefined,
+    model: model || undefined,
+    effort: form.effort || undefined,
     role: form.role,
     parent: form.role === 'main' ? null : form.parent,
     cwd: form.cwd.trim() || parent.value?.cwd || picks.value[0] || undefined,
@@ -130,6 +163,7 @@ function onKeydown(event) {
   if (event.key !== 'Escape') return;
   event.stopPropagation();
   if (cwdOpen.value) cwdOpen.value = false;
+  else if (modelOpen.value) modelOpen.value = false;
   else store.dialog = null;
 }
 
@@ -168,7 +202,13 @@ onBeforeUnmount(() => {
 
         <label class="flex flex-col gap-[6px] text-[12px]">
           <span class="text-es-dim dark:text-es-dark-muted">名字</span>
-          <input ref="nameInput" v-model="form.name" class="field px-3 py-2 outline-none" placeholder="例如 review" />
+          <input
+            ref="nameInput"
+            v-model="form.name"
+            class="field px-3 py-2 outline-none"
+            placeholder="例如 review"
+            @input="onNameInput"
+          />
         </label>
 
         <div class="flex flex-col gap-[6px] text-[12px]">
@@ -194,12 +234,38 @@ onBeforeUnmount(() => {
               <option v-for="item in clis" :key="item" :value="item">{{ item }}</option>
             </select>
           </label>
-          <label class="flex flex-1 flex-col gap-[6px] text-[12px]">
-            <span class="text-es-dim dark:text-es-dark-muted">模型</span>
-            <select v-model="form.model" class="field px-3 py-2 outline-none">
-              <option value="">{{ models.length ? '默认' : '该 CLI 默认' }}</option>
-              <option v-for="item in models" :key="item.model" :value="item.model">{{ item.label ?? item.model }}</option>
+          <label v-if="efforts.length" class="flex w-[110px] shrink-0 flex-col gap-[6px] text-[12px]">
+            <span class="text-es-dim dark:text-es-dark-muted">思考强度</span>
+            <select v-model="form.effort" class="field px-2 py-2 outline-none">
+              <option value="">无</option>
+              <option v-for="level in efforts" :key="level" :value="level">{{ level }}</option>
             </select>
+          </label>
+          <label class="flex flex-1 flex-col gap-[6px] text-[12px]">
+            <span class="text-es-dim dark:text-es-dark-muted">模型（可手输）</span>
+            <div class="relative">
+              <input
+                v-model="form.model"
+                class="field mono w-full px-3 py-2 text-[12px] outline-none"
+                :placeholder="modelPicks.length ? 'CLI 默认' : '该 CLI 默认'"
+                @focus="modelOpen = true"
+                @click="modelOpen = true"
+                @blur="modelOpen = false"
+              />
+              <div
+                v-if="modelOpen && modelPicks.length"
+                class="glass absolute top-[calc(100%+4px)] left-0 z-50 flex w-full flex-col rounded-[10px] p-[4px]"
+              >
+                <button
+                  v-for="pick in modelPicks"
+                  :key="pick.id"
+                  class="rounded-[7px] px-[8px] py-[5px] text-left text-[11px] hover:bg-black/5 dark:hover:bg-white/10"
+                  @mousedown.prevent="chooseModel(pick.id)"
+                >
+                  {{ pick.label }}
+                </button>
+              </div>
+            </div>
           </label>
         </div>
 
@@ -251,9 +317,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="flex items-center justify-between">
-          <span class="text-[11px] text-es-muted">
-            {{ selectedQuota ? `${selectedQuota.label} 剩余 ${selectedQuota.pct !== null ? `${selectedQuota.pct}%` : '按量'}` : '这个账号还没有额度数据' }}
-          </span>
+          <span class="mono text-[11px] text-es-muted">{{ footer }}</span>
           <span class="flex gap-[6px]">
             <button class="px-3 py-[7px] text-[12px] text-es-dim dark:text-es-dark-muted" @click="store.dialog = null">取消</button>
             <button class="btn-primary px-[14px] py-[7px] text-[12px] disabled:opacity-60" :disabled="!ready" @click="submit">新建</button>
