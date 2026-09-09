@@ -115,7 +115,7 @@ test('spawnBrain: config defaults precede --cli-args and plan-node cliArgs', asy
       '--verbose',
       '--add-dir', '/tmp/plan',
     ]);
-    const shellLine = tmuxCommands(deps.tmuxApiRef)[0][10];
+    const shellLine = tmuxCommands(deps.tmuxApiRef)[0][12];
     const positions = result.cliArgs.map((arg) => shellLine.indexOf(` ${arg}`));
     assert.ok(positions.every((index) => index > 0), shellLine);
     assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'args keep their order');
@@ -133,7 +133,7 @@ test('spawnBrain: no config and no explicit args sends no extra args', async () 
     const result = await spawnBrain(spawnInput(), deps);
 
     assert.deepEqual(result.cliArgs, []);
-    const shellLine = tmuxCommands(deps.tmuxApiRef)[0][10];
+    const shellLine = tmuxCommands(deps.tmuxApiRef)[0][12];
     assert.match(shellLine, /--append-system-prompt-file \S+$/);
     assert.doesNotMatch(shellLine, /  /, 'no empty argument left behind');
   } finally {
@@ -155,7 +155,7 @@ test('spawnBrain: a codex default lands after the model flag', async () => {
     const result = await spawnBrain(spawnInput({ cli: 'codex', model: 'gpt-5' }), deps);
 
     assert.deepEqual(result.cliArgs, ['--sandbox', 'danger-full-access', '-a', 'never']);
-    const shellLine = tmuxCommands(deps.tmuxApiRef)[0][10];
+    const shellLine = tmuxCommands(deps.tmuxApiRef)[0][12];
     assert.match(shellLine, /codex -m gpt-5 "\$\(cat .*\)" --sandbox danger-full-access -a never$/);
   } finally {
     restore();

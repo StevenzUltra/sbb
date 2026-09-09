@@ -89,7 +89,7 @@ function codexInput(over = {}) {
 
 /** @param {Record<string, any>} deps @returns {string} the shell line tmux would run */
 function shellLineOf(deps) {
-  return tmuxCommands(deps.tmuxApiRef)[0][10];
+  return tmuxCommands(deps.tmuxApiRef)[0][12]; // after new-window -t =sbb: -n .. -c .. -P -F #{pane_id} sh -c
 }
 
 test('spawnBrain: a codex spawn without --model uses the account model and records it', async () => {
