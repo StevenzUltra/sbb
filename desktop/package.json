@@ -9,8 +9,9 @@
     "start": "electron .",
     "smoke": "SBB_DESKTOP_SMOKE=./smoke.png electron .",
     "dist": "electron-builder --mac --arm64 --publish never -c electron-builder.config.cjs",
-    "release": "electron-builder --mac --arm64 --publish always -c electron-builder.config.cjs",
-    "dist:unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64 --publish never -c electron-builder.config.cjs"
+    "release": "node scripts/release.mjs",
+    "dist:unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64 --publish never -c electron-builder.config.cjs",
+    "release:dry": "node scripts/release.mjs --dry-run"
   },
   "devDependencies": {
     "electron": "^43.2.0",

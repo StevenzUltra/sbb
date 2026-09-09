@@ -7,7 +7,10 @@ const pkg = require('./package.json');
 
 const { execFileSync } = require('node:child_process');
 
-const notarize = Boolean(process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID);
+// Notarize when credentials exist: a notarytool keychain profile (APPLE_KEYCHAIN_PROFILE, made
+// with `xcrun notarytool store-credentials <name>`) or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD +
+// APPLE_TEAM_ID in the environment. @electron/notarize reads both forms.
+const notarize = Boolean(process.env.APPLE_KEYCHAIN_PROFILE || (process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID));
 // Sign only with a Developer ID Application certificate (the one macOS accepts for apps
 // distributed outside the App Store and for auto-updates). An Apple Development or
 // Distribution certificate is never used: electron-builder would pick it up and produce an

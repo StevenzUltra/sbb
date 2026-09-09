@@ -55,9 +55,14 @@ environment, notarized. Nothing of that is in the repo: certificates live in the
 credentials in the environment, the GitHub token in `GH_TOKEN`.
 
 ```
-cd desktop && npm run release      # build, sign, notarize, upload dmg + zip + latest-mac.yml
+cd desktop && npm run release      # build, sign, notarize, write latest-mac.yml, publish with gh
+npm run release:dry                # everything but the publish
 npm run dist                       # local build only (ad-hoc signed without Developer ID)
 ```
+
+`scripts/release.mjs` refuses to publish an app that is not Developer ID signed. Notarization
+turns on when `APPLE_KEYCHAIN_PROFILE` names a `notarytool` keychain profile (or the three
+`APPLE_*` variables are set).
 
 An ad-hoc signed local build runs, but will not auto-update; a release built without the
 certificate would leave every installed copy on that version.
