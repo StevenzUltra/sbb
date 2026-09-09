@@ -30,6 +30,9 @@
 
 ## Who may talk to whom
 
+> Superseded by `docs/spec/teams.md` (M3): same-team sub<->sub is allowed by default and team
+> channels exist. The table below is the M2 behaviour kept for history.
+
 Evaluated in `src/policy/rules.js` `check(senderBrain|null, targetBrain|null, config) -> { ok, reason?, detail?, moderated? }`.
 An unregistered sender (a human at a pane, a script) counts as the user and may talk to anyone.
 An unregistered target is always allowed (SBB cannot know its team).

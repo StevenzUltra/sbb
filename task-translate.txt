@@ -1,10 +1,12 @@
+请将以下内容翻译为中文，保留代码块、链接、目录结构和格式。输出完整的中文版本到 /Users/steven/developer/sbb/docs/README.zh.md
+
+源文件：/Users/steven/developer/sbb/README.md
+
+---
+
 # SBB
 
 **Switch Brain Brain.** A tmux-only switchboard for AI CLI sessions.
-
-If you hold several AI subscriptions (Claude, Codex, Gemini, Cursor, on separate accounts) and want
-them to work as one team, SBB is the way to run them: every brain is a real CLI session on its own
-account, they talk to each other with verified delivery, and you steer the whole tree from one place.
 
 You talk to a *main brain*. Main brains run *sub brains*. Every brain is a real
 CLI session (Claude Code, Codex, Antigravity, Cursor) picked by three choices:
@@ -24,9 +26,8 @@ Design draft v0.6 (2026-09-09). M1 kernel in progress.
   four-state receipts, `quota` and `catalog` readers.
 - M2 lifecycle: `spawn`, `switch`, `move`, `policy`, `claim`, `plan propose`,
   `account add`.
-- M3 console: `sbb ui` local server + Vue 3 web console (org chart, team channels, live panes,
-  tokens-per-second bar), team channels, host interface. Design reference in `docs/design/console/`.
-- M4: Electron shell (reusing the EagerStudy desktop pipeline), terminal adapters.
+- M3 brain map TUI (Ink + React): tree, modals, drag-to-transfer, quota bar.
+- M4 optional: web org chart, terminal adapters.
 
 ## Delivery states
 
@@ -35,7 +36,7 @@ Design draft v0.6 (2026-09-09). M1 kernel in progress.
 | `delivered`  | Protocol receipt says delivered, or the screen shows the line was submitted |
 | `queued`     | Target is busy; the message sits in its own queue                           |
 | `unverified` | Typed, but the screen could not confirm submission. One Enter retry, never a resend |
-| `blocked`    | Not sent: copy-mode, permission prompt, `held`/`denied`, policy, unknown target. Reason attached |
+| `blocked`    | Not sent: copy-mode, permission prompt, `held`/`denied``, policy, unknown target. Reason attached |
 
 ## Layout
 

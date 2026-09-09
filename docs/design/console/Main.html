@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+</head>
+<body>
+
+<!-- design reference, exported from the design canvas -->
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif; color: #1a1a1a; -webkit-font-smoothing: antialiased; }
+    a { color: #2d6b4f; } a:hover { color: #1e3a32; }
+    .mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  </style>
+
+<div style="width: 1440px; height: 900px; background: #f2f4f1; background-image: radial-gradient(1200px 600px at 20% -10%, rgba(45,107,79,0.08), transparent 60%), radial-gradient(900px 500px at 100% 100%, rgba(229,168,53,0.08), transparent 60%); display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 20px; border-bottom: 1px solid rgba(26,26,26,0.06); background: rgba(255,255,255,0.55); backdrop-filter: blur(12px);">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 8px; background: #2d6b4f; display: flex; align-items: center; justify-content: center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h4a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8"></path><path d="M17 7h-2"></path></svg>
+      </div>
+      <div style="font-size: 15px; font-weight: 600; letter-spacing: 0.02em;">SBB</div>
+      <div style="font-size: 12px; color: #8a938e;">Switch Brain Brain</div>
+    </div>
+    <div style="width: 1px; height: 20px; background: rgba(26,26,26,0.08);"></div>
+    <div style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: rgba(26,26,26,0.04);">
+      <span style="font-size: 12px; padding: 4px 10px; border-radius: 6px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">控制台</span>
+      <span style="font-size: 12px; padding: 4px 10px; border-radius: 6px; color: #5f6a64;">组织图</span>
+      <span style="font-size: 12px; padding: 4px 10px; border-radius: 6px; color: #5f6a64;">回执日志</span>
+    </div>
+    <div style="width: 1px; height: 20px; background: rgba(26,26,26,0.08);"></div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.7); border: 1px solid rgba(26,26,26,0.06); font-size: 12px; white-space: nowrap;"><span style="color: #5f6a64;">a · Claude</span><span style="width: 56px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 89%; border-radius: 2px; background: #2d6b4f;"></span></span><span class="mono" style="color: #1a1a1a;">89%</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.7); border: 1px solid rgba(26,26,26,0.06); font-size: 12px; white-space: nowrap;"><span style="color: #5f6a64;">a · Codex</span><span style="width: 56px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 94%; border-radius: 2px; background: #2d6b4f;"></span></span><span class="mono">94%</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.7); border: 1px solid rgba(26,26,26,0.06); font-size: 12px; white-space: nowrap;"><span style="color: #5f6a64;">default · Codex</span><span style="width: 56px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 75%; border-radius: 2px; background: #e5a835;"></span></span><span class="mono">75%</span></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.7); border: 1px solid rgba(26,26,26,0.06); font-size: 12px; white-space: nowrap;"><span style="color: #5f6a64;">c · DeepSeek</span><span class="mono" style="color: #8a938e;">按量</span></div>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: #e0eae8; color: #1e3a32; font-size: 12px; font-weight: 500;"><span style="width: 6px; height: 6px; border-radius: 3px; background: #2d6b4f;"></span>主脑互通 开</div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,0.7); border: 1px solid rgba(26,26,26,0.06); color: #5f6a64; font-size: 12px;">待批准 0</div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: #2d6b4f; color: #ffffff; font-size: 13px; font-weight: 500;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>开脑
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr) 460px; gap: 12px; padding: 12px; min-height: 0;">
+
+    <div style="display: flex; flex-direction: column; border-radius: 16px; background: rgba(255,255,255,0.72); border: 1px solid rgba(26,26,26,0.06); box-shadow: 0 8px 32px rgba(0,0,0,0.06); backdrop-filter: blur(12px); overflow: hidden;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(26,26,26,0.06);">
+        <div style="font-size: 14px; font-weight: 600;">脑图</div>
+        <div style="font-size: 12px; color: #8a938e;">4 个脑 · 2 个组</div>
+      </div>
+      <div style="margin: 10px 12px; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; background: rgba(26,26,26,0.04); color: #8a938e; font-size: 12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a938e" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>按名字或编号找脑
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px;">
+          <span style="width: 8px; height: 8px; border-radius: 4px; background: #e5a835;"></span>
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 6px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">lead</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0045</span><span style="font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #e0eae8; color: #1e3a32;">主脑</span></div>
+            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: #8a938e;">a / claude · haiku 4.5 · 忙</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 30px; border-radius: 8px;">
+          <span style="width: 8px; height: 8px; border-radius: 4px; background: #2d6b4f;"></span>
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 6px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">ios</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0047</span></div>
+            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: #8a938e;">default / codex · gpt-6-astra · 空闲</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 30px; border-radius: 8px; background: #e0eae8;">
+          <span style="width: 8px; height: 8px; border-radius: 4px; background: #e5a835;"></span>
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 6px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600; color: #1e3a32;">review</span><span class="mono" style="font-size: 11px; color: #5f6a64;">SSL-0048</span></div>
+            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: #5f6a64;">c / codex · deepseek-v4-flash-vision-exp</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e3a32" stroke-width="2" stroke-linecap="round"><path d="M4 17V7l6 5-6 5z"></path><path d="M12 6h8M12 12h8M12 18h8"></path></svg>
+        </div>
+        <div style="height: 8px;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px;">
+          <span style="width: 8px; height: 8px; border-radius: 4px; background: #2d6b4f;"></span>
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 6px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">ops</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0046</span><span style="font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #e0eae8; color: #1e3a32;">主脑</span></div>
+            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: #8a938e;">a / codex · gpt-6-astra · 空闲</div>
+          </div>
+        </div>
+      </div>
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-top: 1px solid rgba(26,26,26,0.06);">
+        <div style="font-size: 11px; color: #8a938e; letter-spacing: 0.06em;">组频道</div>
+        <div style="display: flex; gap: 6px;">
+          <span class="mono" style="font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #1e3a32; color: #ffffff;">#lead</span>
+          <span class="mono" style="font-size: 12px; padding: 3px 8px; border-radius: 999px; background: rgba(26,26,26,0.05); color: #5f6a64;">#ops</span>
+          <span class="mono" style="font-size: 12px; padding: 3px 8px; border-radius: 999px; background: rgba(26,26,26,0.05); color: #5f6a64;">#all</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; border-radius: 16px; background: rgba(255,255,255,0.72); border: 1px solid rgba(26,26,26,0.06); box-shadow: 0 8px 32px rgba(0,0,0,0.06); backdrop-filter: blur(12px); overflow: hidden; min-width: 0;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(26,26,26,0.06);">
+        <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;"><span class="mono" style="font-size: 14px; font-weight: 600;">#lead</span><span style="font-size: 12px; color: #8a938e;">组频道 · lead、ios、review、你</span></div>
+        <div style="flex-grow: 1;"></div>
+        <div style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: rgba(26,26,26,0.04);">
+          <span style="font-size: 12px; padding: 4px 10px; border-radius: 6px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">组频道</span>
+          <span style="font-size: 12px; padding: 4px 10px; border-radius: 6px; color: #5f6a64;">私聊 lead</span>
+          <span style="font-size: 12px; padding: 4px 10px; border-radius: 6px; color: #5f6a64;">私聊 review</span>
+        </div>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; padding: 18px 20px; overflow: hidden;">
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 30px; height: 30px; border-radius: 15px; background: #1e3a32; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">你</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">你</span><span style="font-size: 11px; color: #8a938e;">05:27</span></div>
+            <div style="font-size: 14px; line-height: 1.6; max-width: 640px;">把翻译派给 ios（写到 docs/README.zh.md），校对派给 review，都用 sbb ask 等回复；两项都完成后回我一行。</div>
+            <div class="mono" style="display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: #2d6b4f;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2d6b4f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>delivered · uds+screen · 4.0s · eb46b602</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 30px; height: 30px; border-radius: 15px; background: #2d6b4f; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">L</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">lead</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0045</span><span style="font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #e0eae8; color: #1e3a32;">主脑</span><span style="font-size: 11px; color: #8a938e;">05:27 · 发给 ios</span></div>
+            <div style="font-size: 14px; line-height: 1.6; max-width: 640px;">翻译 /Users/steven/developer/sbb/README.md 为中文，保留代码块与结构，写到 docs/README.zh.md，完成后 sbb reply。</div>
+            <div class="mono" style="display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: #2d6b4f;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2d6b4f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>delivered · codex-queue+screen · 5.3s</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 30px; height: 30px; border-radius: 15px; background: rgba(26,26,26,0.08); color: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">I</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">ios</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0047</span><span style="font-size: 11px; color: #8a938e;">05:31 · 回复 lead</span></div>
+            <div style="font-size: 14px; line-height: 1.6; max-width: 640px;">翻译完成：docs/README.zh.md（56 行，代码块原样保留）。报告 docs/reports/readme-zh-ssl-0047-2026-09-09.md。</div>
+            <div class="mono" style="display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: #2d6b4f;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2d6b4f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>reply · uds-inbox · 1.2s</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 30px; height: 30px; border-radius: 15px; background: rgba(26,26,26,0.08); color: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">R</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">review</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0048</span><span style="font-size: 11px; color: #8a938e;">05:33 · 回复 lead</span></div>
+            <div style="font-size: 14px; line-height: 1.6; max-width: 640px;">校对完成，直接改了 3 处：依托改为依赖、简介换行重排、M1 列表重排；结构与语义未动。</div>
+            <div class="mono" style="display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: #2d6b4f;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2d6b4f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>reply · uds-inbox · 0.9s</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 30px; height: 30px; border-radius: 15px; background: #2d6b4f; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;">L</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+            <div style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap;"><span style="font-size: 13px; font-weight: 600;">lead</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0045</span><span style="font-size: 11px; color: #8a938e;">05:33 · 回复你</span></div>
+            <div style="font-size: 14px; line-height: 1.6; max-width: 640px; padding: 10px 12px; border-radius: 12px; background: #e0eae8; color: #1e3a32;">翻译与校对均已完成。中文版本：/Users/steven/developer/sbb/docs/README.zh.md（格式正确、无误改）。</div>
+            <div class="mono" style="display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: #2d6b4f;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2d6b4f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"></path></svg>reply · uds-inbox · 0.8s · 5aa9e4e9</div>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid rgba(26,26,26,0.06);">
+        <div style="flex-grow: 1; display: flex; align-items: center; padding: 9px 12px; border-radius: 8px; background: rgba(26,26,26,0.04); color: #8a938e; font-size: 13px;">给 #lead 说一句，回车发送</div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; background: rgba(26,26,26,0.05); color: #5f6a64; font-size: 12px;">附文件</div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; background: #2d6b4f; color: #ffffff; font-size: 13px; font-weight: 500;">发送</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; border-radius: 16px; background: rgba(255,255,255,0.72); border: 1px solid rgba(26,26,26,0.06); box-shadow: 0 8px 32px rgba(0,0,0,0.06); backdrop-filter: blur(12px); overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid rgba(26,26,26,0.06);">
+        <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+          <div style="display: flex; align-items: baseline; gap: 6px; white-space: nowrap;"><span style="font-size: 14px; font-weight: 600;">review</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0048</span><span style="width: 6px; height: 6px; border-radius: 3px; background: #e5a835;"></span><span style="font-size: 11px; color: #8a938e;">实时</span></div>
+          <div class="mono" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: #8a938e;">c / codex · deepseek-v4-flash-vision-exp · sbb-rehearsal:6.1</div>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <span style="font-size: 12px; padding: 5px 10px; border-radius: 8px; background: #2d6b4f; color: #ffffff; white-space: nowrap;">在此输入</span>
+          <span style="font-size: 12px; padding: 5px 10px; border-radius: 8px; background: rgba(26,26,26,0.05); color: #1a1a1a; white-space: nowrap;">去终端</span>
+          <span style="font-size: 12px; padding: 5px 10px; border-radius: 8px; background: rgba(26,26,26,0.05); color: #1a1a1a;">转移</span>
+          <span style="font-size: 12px; padding: 5px 10px; border-radius: 8px; background: rgba(217,75,75,0.1); color: #d94b4b;">结束</span>
+        </div>
+      </div>
+      <div class="mono" style="flex-grow: 1; margin: 12px; border-radius: 12px; background: #111513; color: #d5dbd7; font-size: 12px; line-height: 1.7; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #8a938e;">╭─ OpenAI Codex (v0.154.0-alpha.6) ─ permissions: YOLO mode</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #7fbf9f;">› [lead#SSL-0045@a/claude:sbb-rehearsal:3.1][主脑] 校对 /Users/steven/developer/sbb/docs/README.zh.md：确保准确性、术语一致、自然流畅。直接修改该文件。完成后回报。   (sbb:628cdaff)</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d5dbd7;">• 已登记 path:/Users/steven/developer/sbb/docs/README.zh.md</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d5dbd7;">• Ran sbb claim add path:/Users/steven/developer/sbb/docs/README.zh.md --note 校对</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d5dbd7;">• 逐段对照原文：依托 → 依赖；简介两段换行重排；M1 列表重排</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d5dbd7;">• Ran sbb reply 628cdaff '校对完成，直接改了 3 处：依托改为依赖、简介换行重排、M1 列表重排；结构与语义未动。'</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #8a938e;">  └ inbox lead msg=8e9469c2 replyTo=628cdaff</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #e5a835;">• Working (12s · esc to interrupt)</div>
+        <div style="height: 8px;"></div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #7fbf9f;">› Ask Codex to do anything</div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #8a938e;">  latest · deepseek-v4-flash-vision-exp xhigh · Context 91% left</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 14px; font-size: 11px; color: #8a938e;">
+        <span>画面来自 tmux 控制模式 · 点「在此输入」直接键入，或 ⌘` 跳到终端</span>
+        <div style="flex-grow: 1;"></div>
+        <span class="mono">claims 2 · 回执 delivered 6 / queued 1</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="height: 36px; display: flex; align-items: center; gap: 22px; padding: 0 20px; border-top: 1px solid rgba(26,26,26,0.06); background: rgba(255,255,255,0.55); backdrop-filter: blur(12px);">
+    <span style="font-size: 11px; letter-spacing: 0.06em; color: #8a938e; white-space: nowrap;">吐字速度 · 近 60 秒</span>
+    <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;"><span style="font-size: 12px; font-weight: 600; color: #1a1a1a;">lead</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0045</span><span style="font-size: 11px; color: #5f6a64;">haiku 4.5</span><span style="width: 64px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 21%; border-radius: 2px; background: #2d6b4f;"></span></span><span class="mono" style="font-size: 12px; color: #1a1a1a;">62</span><span style="font-size: 11px; color: #8a938e;">tok/s</span></div>
+    <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;"><span style="font-size: 12px; font-weight: 600; color: #1a1a1a;">ios</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0047</span><span style="font-size: 11px; color: #5f6a64;">gpt-6-astra</span><span style="width: 64px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 39%; border-radius: 2px; background: #2d6b4f;"></span></span><span class="mono" style="font-size: 12px; color: #1a1a1a;">118</span><span style="font-size: 11px; color: #8a938e;">tok/s</span></div>
+    <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;"><span style="font-size: 12px; font-weight: 600; color: #1a1a1a;">review</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0048</span><span style="font-size: 11px; color: #5f6a64;">deepseek-v4-flash</span><span style="width: 64px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 99%; border-radius: 2px; background: #2d6b4f;"></span></span><span class="mono" style="font-size: 12px; color: #1a1a1a;">297</span><span style="font-size: 11px; color: #8a938e;">tok/s</span></div>
+    <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;"><span style="font-size: 12px; font-weight: 600; color: #1a1a1a;">ops</span><span class="mono" style="font-size: 11px; color: #8a938e;">SSL-0046</span><span style="font-size: 11px; color: #5f6a64;">gpt-6-astra</span><span style="width: 64px; height: 4px; border-radius: 2px; background: rgba(26,26,26,0.08); position: relative;"><span style="position: absolute; left: 0; top: 0; height: 4px; width: 0%; border-radius: 2px; background: rgba(0,0,0,0);"></span></span><span class="mono" style="font-size: 12px; color: #1a1a1a;">0</span><span style="font-size: 11px; color: #8a938e;">tok/s</span></div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;"><span style="font-size: 11px; color: #8a938e;">总吞吐</span><span class="mono" style="font-size: 12px; font-weight: 600; color: #1a1a1a;">477</span><span style="font-size: 11px; color: #8a938e;">tok/s</span><span style="width: 1px; height: 14px; background: rgba(26,26,26,0.06);"></span><span style="font-size: 11px; color: #8a938e;">来源：各脑会话记录里的输出 token 与用时</span></div>
+  </div>
+</div>
+
+</body>
+</html>

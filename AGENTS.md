@@ -4,7 +4,7 @@
 
 - Work only inside the files your task brief in `docs/tasks/` assigns to you. If you need a change elsewhere, write the need into your report and message the lead; do not edit other modules.
 - Interfaces are defined in `src/types.js` and `docs/spec/`. Implement them exactly. If the spec is wrong or missing something, say so in your report with evidence; do not silently change a signature.
-- No new runtime dependencies in `src/`. Node 22.13+ built-ins only (`node:net`, `node:sqlite`, `node:child_process`, `util.parseArgs`, `node:test`).
+- No new runtime dependencies in the kernel (`src/transports`, `src/registry`, `src/policy`, `src/lifecycle`, `src/move`, `src/teams`). Node 22.13+ built-ins only. Exceptions: `src/ui/server.js` may use `ws`; the web console under `web/` is its own package with the dependencies listed in `docs/spec/web-console.md`.
 
 ## Code style
 

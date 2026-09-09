@@ -1,0 +1,36 @@
+{
+  "parent": "SSL-0045",
+  "objective": "翻译 /Users/steven/developer/sbb/README.md 成中文至 /Users/steven/developer/sbb/docs/README.zh.md",
+  "brains": [
+    {
+      "name": "ios",
+      "role": "sub",
+      "account": "default",
+      "cli": "codex",
+      "task": "翻译 README.md 全文为中文，保留代码块、链接和结构，输出到 docs/README.zh.md"
+    },
+    {
+      "name": "review",
+      "role": "sub",
+      "account": "c",
+      "cli": "codex",
+      "task": "校对 ios 的翻译，确保术语一致、表述自然，给出修改意见或确认"
+    }
+  ],
+  "workflow": [
+    {
+      "step": 1,
+      "brain": "ios",
+      "action": "translate",
+      "input": "/Users/steven/developer/sbb/README.md",
+      "output": "/Users/steven/developer/sbb/docs/README.zh.md"
+    },
+    {
+      "step": 2,
+      "brain": "review",
+      "action": "review",
+      "input": "/Users/steven/developer/sbb/docs/README.zh.md",
+      "approval_required": true
+    }
+  ]
+}

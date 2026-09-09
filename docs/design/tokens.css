@@ -1,0 +1,23 @@
+/* Mirror of the EagerStudy brand tokens used by the console (keep in sync by hand). */
+:root {
+  --es-red: #d94b4b;
+  --es-green: #2d6b4f;
+  --es-green-dark: #1e3a32;
+  --es-green-light: #e0eae8;
+  --es-yellow: #e5a835;
+  --es-black: #1a1a1a;
+  --es-white: #ffffff;
+  --es-glass-fill: rgba(255, 255, 255, 0.72);
+  --es-glass-stroke: rgba(26, 26, 26, 0.06);
+  --es-glass-blur: 12px;
+  --es-radius-card: 16px;
+  --es-radius-btn: 8px;
+  --es-radius-pill: 999px;
+  --es-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --es-dark-bg: #131715;
+  --es-dark-fill: rgba(255, 255, 255, 0.05);
+  --es-dark-stroke: rgba(255, 255, 255, 0.09);
+  --es-dark-text: #e8ece9;
+  --es-dark-muted: #a0aaa4;
+  --es-dark-green: #7fbf9f;
+}
