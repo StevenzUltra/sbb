@@ -1,8 +1,9 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-// The terminal is Ghostty's emulator compiled to WebAssembly (ghostty-web, MIT: xterm.js-compatible
-// API, Ghostty's VT parser, grapheme handling and renderer); see docs/spec/web-console.md.
-import { FitAddon, init as initGhostty, Terminal } from 'ghostty-web';
+// Terminal engine: xterm.js. Ghostty's engine (ghostty-web) is the intended replacement once its
+// npm build handles UTF-8 (0.4.0 counts every byte as a cell); see docs/spec/web-console.md.
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import { useSbb } from '../store/sbb.js';
 import { ScreenWidth } from '../lib/screen.js';
 import Icon from './Icon.vue';
@@ -15,6 +16,7 @@ let fitAddon = null;
 let socket = null;
 let observer = null;
 let requestTimer = null;
+let reopenTimer = null;
 let escapeAt = 0;
 // The pane's own geometry (canned in fixture mode, reported by the server when it knows it).
 let paneCols = 0;
@@ -22,6 +24,11 @@ let paneRows = 0;
 // Monotone lower bound on the pane's columns, measured from the output itself.
 const width = new ScreenWidth();
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
+/** Strings go through UTF-8 bytes so every engine sees the same input as the socket. */
+const writeText = (text) => terminal?.write(encoder.encode(text));
+/** reset() alone left old cells behind on one engine; clear screen and scrollback explicitly. */
+const clearScreen = () => terminal?.write(encoder.encode('\x1b[?25l\x1b[H\x1b[2J\x1b[3J\x1b[?25h'));
 
 const desktopShell = document.documentElement.dataset.shell === 'desktop';
 /** The pane frame paints the ground; in the desktop shell it is translucent glass. */
@@ -40,12 +47,13 @@ function openPane() {
   socket?.close();
   socket = null;
   terminal.reset();
+  clearScreen();
   width.reset();
   paneCols = 0;
   paneRows = 0;
   const id = paneId();
   if (!id) {
-    terminal.writeln('这个脑没有窗格（可能已经结束）。');
+    writeText('这个脑没有窗格（可能已经结束）。\r\n');
     syncSize({ request: false });
     return;
   }
@@ -62,7 +70,7 @@ function openPane() {
       terminal.write(bytes);
     },
     onClosed: (reason) => {
-      if (reason) terminal.write(`\r\n[连接关闭：${reason}]\r\n`);
+      if (reason) writeText(`\r\n[连接关闭：${reason}]\r\n`);
     },
     onRefused: (reason) => {
       // A resize is declined while someone has the pane open in a terminal (ui-server.md);
@@ -149,7 +157,15 @@ function syncSize({ request = true } = {}) {
   const want = proposed();
   const cols = Math.max(paneCols, want?.cols ?? 0, width.cols, 2);
   const rows = Math.max(paneRows, want?.rows ?? 0, 1);
-  if (cols !== terminal.cols || rows !== terminal.rows) terminal.resize(cols, rows);
+  if (cols !== terminal.cols || rows !== terminal.rows) {
+    terminal.resize(cols, rows);
+    // A resize after the first screen leaves ghosts of the old layout on the canvas: once the
+    // size settles, reopen the stream so the server sends the whole current screen again.
+    clearTimeout(reopenTimer);
+    reopenTimer = setTimeout(() => {
+      if (socket) openPane();
+    }, 250);
+  }
   // Observable size for tests and support: what the terminal is, and why.
   if (host.value) Object.assign(host.value.dataset, { cols: String(terminal.cols), rows: String(terminal.rows), pane: String(paneCols), seen: String(width.cols), panel: String(want?.cols ?? '') });
   if (!request) return;
@@ -160,12 +176,11 @@ function syncSize({ request = true } = {}) {
   }, 120);
 }
 
-onMounted(async () => {
-  await initGhostty();
-  if (!host.value) return; // unmounted while the emulator loaded
+onMounted(() => {
   terminal = new Terminal({
     convertEol: true,
     fontSize: 12,
+    lineHeight: 1.7,
     fontFamily: '"SF Mono", Menlo, Consolas, monospace',
     scrollback: 2000,
     allowTransparency: desktopShell,
@@ -187,6 +202,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  clearTimeout(reopenTimer);
   observer?.disconnect();
   clearTimeout(requestTimer);
   socket?.close();
