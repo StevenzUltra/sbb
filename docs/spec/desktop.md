@@ -34,3 +34,26 @@ Unsigned, not notarized: a locally built app opens without Gatekeeper prompts; a
 one needs a right-click Open the first time. The app icon is built by electron-builder from
 `desktop/build/icon.png` (the project mark on a dark rounded square; source in
 `docs/readme/logo-source.png`).
+
+## Updates
+
+The update feed is the project's GitHub Releases (`electron-builder.config.cjs`,
+`publish: github`), so every copy taken from the repo checks the same place. On launch, and
+from SBB > 检查更新…, the app compares its version with the latest release, downloads a newer
+one in the background, and offers a restart (`electron-updater`; a declined restart installs on
+quit). Nothing but the version check leaves the machine; there is no telemetry.
+
+macOS applies an update only to a signed app. Releases are therefore built on a maintainer's
+Mac with a **Developer ID Application** certificate in the keychain (the config signs only
+with that kind of certificate; Apple Development or Distribution certificates are never
+used) and, when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set in the
+environment, notarized. Nothing of that is in the repo: certificates live in the keychain,
+credentials in the environment, the GitHub token in `GH_TOKEN`.
+
+```
+cd desktop && npm run release      # build, sign, notarize, upload dmg + zip + latest-mac.yml
+npm run dist                       # local build only (ad-hoc signed without Developer ID)
+```
+
+An ad-hoc signed local build runs, but will not auto-update; a release built without the
+certificate would leave every installed copy on that version.
